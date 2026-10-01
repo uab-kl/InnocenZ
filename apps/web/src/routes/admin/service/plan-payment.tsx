@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { InvoicePaymentSheet } from "@/components/admin/invoice-payment-sheet";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { RefundsDueCard } from "@/components/admin/refunds-due-card";
 import { SourceToggle } from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,11 +53,16 @@ import { formatPrice, getErrorMessage } from "@/lib/utils";
 import {
 	fetchSubscriptionInvoiceGroups,
 	generateSubscriptionInvoices,
+	isInvoiceOwed,
 	type SubscriberType,
 	type SubscriptionInvoiceGroup,
 	type SubscriptionInvoiceQueryParams,
 	type SubscriptionInvoiceStatus,
 } from "@/services/subscription-invoice";
+import {
+	fetchRefundsDue,
+	REFUNDS_DUE_QUERY_KEY,
+} from "@/services/subscription-payment";
 
 export const Route = createFileRoute("/admin/service/plan-payment")({
 	component: PlanPaymentPage,
@@ -86,14 +92,20 @@ const PAGE_SIZE = 10;
 function summarise(group: SubscriptionInvoiceGroup) {
 	let owed = 0;
 	let paidCount = 0;
+	let unpaidCount = 0;
 	for (const invoice of group.invoices) {
 		if (invoice.status === "paid") paidCount += 1;
-		else owed += Number(invoice.amount);
+		// OWED means unpaid — a VOIDED bill (29 Sep 2026) is neither paid nor
+		// owed, and summing `!== "paid"` would have put it back on the debt.
+		else if (isInvoiceOwed(invoice)) {
+			unpaidCount += 1;
+			owed += Number(invoice.amount);
+		}
 	}
 	return {
 		periods: group.invoices.length,
 		paidCount,
-		unpaidCount: group.invoices.length - paidCount,
+		unpaidCount,
 		owed,
 		lanes: [...new Set(group.invoices.map((invoice) => invoice.planName))],
 	};
@@ -109,11 +121,14 @@ const statusLabels: Record<
 > = {
 	unpaid: (t) => t.subscription.statusUnpaid,
 	paid: (t) => t.subscription.statusPaid,
+	void: (t) => t.subscription.statusVoid,
 };
 
 const statusBadgeColors: Record<SubscriptionInvoiceStatus, string> = {
 	unpaid: "border-amber-400/40 bg-amber-400/10 text-amber-300",
 	paid: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
+	// Neither settled nor waiting: the colour rule's neutral grey.
+	void: "border-muted-foreground/30 bg-muted/30 text-muted-foreground",
 };
 
 const roleLabels: Record<SubscriberType, (t: PortalTranslations) => string> = {
@@ -182,6 +197,19 @@ function PlanPaymentPage() {
 	});
 
 	/**
+	 * Money owed BACK — payments that landed on a voided or already-paid bill.
+	 * Its own query, deliberately apart from the ledger's: a refund is owed
+	 * whatever page, filter or search the table below is on.
+	 */
+	const refundsQuery = useQuery({
+		// Shared with "Mark refunded", which refreshes it when a line is settled.
+		queryKey: REFUNDS_DUE_QUERY_KEY,
+		queryFn: () => fetchRefundsDue(logout),
+		staleTime: 30_000,
+		retry: 2,
+	});
+
+	/**
 	 * Which orgs are open. Ids, not indexes — a filter change reorders the page,
 	 * and an index would carry the open state onto whoever now sits in that slot.
 	 */
@@ -213,6 +241,15 @@ function PlanPaymentPage() {
 				icon={CreditCard}
 				title={t.admin.navPlanPayment}
 				description={t.adminService.planPaymentSubtitle}
+			/>
+
+			<RefundsDueCard
+				rows={refundsQuery.data}
+				failed={refundsQuery.isError}
+				onRetry={() => refundsQuery.refetch()}
+				// The same panel a ledger row opens — it lists the attempt the
+				// refund is owed on, beside the bill it landed on.
+				onOpenInvoice={setDetailId}
 			/>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
@@ -280,6 +317,7 @@ function PlanPaymentPage() {
 										{statusLabels.unpaid(t)}
 									</SelectItem>
 									<SelectItem value="paid">{statusLabels.paid(t)}</SelectItem>
+									<SelectItem value="void">{statusLabels.void(t)}</SelectItem>
 								</SelectContent>
 							</Select>
 
@@ -418,11 +456,20 @@ function PlanPaymentPage() {
 												</TableCell>
 												<TableCell>
 													{summary.unpaidCount === 0 ? (
+														// Nothing owed: "Paid" when something was paid, and
+														// "Void" when every bill on the card was voided —
+														// never "Paid" over bills nobody paid.
 														<Badge
 															variant="outline"
-															className={`${statusBadgeColors.paid} w-fit`}
+															className={`${
+																summary.paidCount > 0
+																	? statusBadgeColors.paid
+																	: statusBadgeColors.void
+															} w-fit`}
 														>
-															{statusLabels.paid(t)}
+															{summary.paidCount > 0
+																? statusLabels.paid(t)
+																: statusLabels.void(t)}
 														</Badge>
 													) : (
 														<Badge

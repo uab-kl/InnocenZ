@@ -1,7 +1,17 @@
+import type { AgencyPrApproveStatus } from "@/services/agency/types";
+
 export interface PrAgencyRef {
 	id: string;
 
 	name: string;
+
+	/**
+	 * The MEMBERSHIP's own state (`agency_pr.approve_status`) — whether she is
+	 * on that roster now. The admin PR sheet dropped it and called every link
+	 * "Linked", including the agency she had LEFT (28 Sep audit). Optional only
+	 * for a response that predates it; see `isCurrentAgencyLink`.
+	 */
+	approveStatus?: AgencyPrApproveStatus | null;
 
 	/** The agency’s member-id stem, INNATAGY — what the roster cell prints beside
 	    the name. Null until an id has been minted at that agency. */

@@ -72,10 +72,85 @@ import { storedPhone, toWhatsAppDigits } from '@/features/account-code/phone.js'
 import type { UserType } from '@/features/user/user.model.js';
 import type { PhoneVerification } from './phone-verification.model.js';
 import { env } from '@/env.js';
+import {
+  LOGIN_WRONG_EMAIL_OR_PASSWORD,
+  LOGIN_WRONG_PHONE_OR_PASSWORD,
+  SIGNUP_EMAIL_HAS_ACCOUNT,
+  SIGNUP_NOT_COMPLETED,
+  SIGNUP_PHONE_HAS_ACCOUNT,
+  lockedOutMessage,
+} from './account-answers.js';
+import { SignupEmailCodesClass, type SignupEmailCodeRedeemer } from './signup-email-code.js';
+import {
+  FAILED_LOGIN_MEMORY_MINUTES,
+  UnknownLoginLockout,
+  loginIdentifierKey,
+} from './unknown-login-lockout.js';
 
 /** Reset-link lifetime. Keep the label in step with the number. */
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const RESET_TOKEN_TTL_LABEL = '1 hour';
+
+/**
+ * The soonest a refused sign-in is answered, from the moment the request began.
+ *
+ * A wrong password on a real account costs one more database write than a
+ * guess at an identifier with no account (the failed-attempt count), and on
+ * this platform's remote database that write is tens of milliseconds — enough
+ * for the DELAY to say which accounts exist after the words stopped saying it.
+ * Every pre-password refusal (401 wrong credentials, 429 locked) waits out this
+ * floor instead. A floor, not a ceiling: a database slower than this shows
+ * through again, as the sign-up code's floor does (OTP_SIGNUP_ANSWER_FLOOR_MS).
+ */
+export const LOGIN_REFUSAL_FLOOR_MS = 500;
+
+/**
+ * A real bcrypt hash of a secret nobody holds, compared against whenever there
+ * is no hash to compare — an identifier with no account, an account with no
+ * password yet — so that refusal costs the same bcrypt work as a wrong
+ * password. Minted once by the same `hashPassword` every stored hash comes
+ * from, so it carries the same cost factor. Its answer is never used.
+ */
+let dummyHashPromise: Promise<string> | null = null;
+function dummyPasswordHash(): Promise<string> {
+  dummyHashPromise ??= hashPassword(crypto.randomBytes(32).toString('hex')).catch((error) => {
+    dummyHashPromise = null;
+    throw error;
+  });
+  return dummyHashPromise;
+}
+
+export type AuthControllerOptions = {
+  /** Failed sign-ins for identifiers with no account. One per controller unless a test brings its own. */
+  unknownLoginLockout?: UnknownLoginLockout;
+  /** LOGIN_REFUSAL_FLOOR_MS unless a test says otherwise. */
+  loginRefusalFloorMs?: number;
+  /** Injectable so tests do not really wait. */
+  sleep?: (ms: number) => Promise<void>;
+  /** The clock the refusal floor reads. */
+  now?: () => number;
+  /**
+   * How work that must not hold the answer is run — the emailed reset link's
+   * token and mail. Production starts it and walks away; a test collects the
+   * task and awaits it. The task never rejects.
+   */
+  runAfterAnswer?: (task: () => Promise<void>) => void;
+  /**
+   * Spends the emailed code a public outlet / agency sign-up must carry
+   * (`signup-email-code.ts`). Built on this controller's own code store unless
+   * the composition root or a test brings one.
+   */
+  signupEmailCodes?: SignupEmailCodeRedeemer;
+};
+
+const realSleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+function fireAndForget(task: () => Promise<void>): void {
+  void task();
+}
 
 export class AuthControllerClass {
   constructor(
@@ -93,7 +168,28 @@ export class AuthControllerClass {
     private outletMemberRepository: OutletMemberRepositoryClass,
     private subscriptionRepository: SubscriptionRepositoryClass,
     private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
-  ) {}
+    options: AuthControllerOptions = {},
+  ) {
+    this.unknownLoginLockout =
+      options.unknownLoginLockout ??
+      new UnknownLoginLockout({
+        maxAttempts: AuthControllerClass.MAX_FAILED_ATTEMPTS,
+        lockoutMinutes: AuthControllerClass.LOCKOUT_MINUTES,
+      });
+    this.loginRefusalFloorMs = options.loginRefusalFloorMs ?? LOGIN_REFUSAL_FLOOR_MS;
+    this.sleep = options.sleep ?? realSleep;
+    this.now = options.now ?? Date.now;
+    this.runAfterAnswer = options.runAfterAnswer ?? fireAndForget;
+    this.signupEmailCodes =
+      options.signupEmailCodes ?? new SignupEmailCodesClass({ codes: phoneVerificationRepository });
+  }
+
+  private readonly signupEmailCodes: SignupEmailCodeRedeemer;
+  private readonly unknownLoginLockout: UnknownLoginLockout;
+  private readonly loginRefusalFloorMs: number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly now: () => number;
+  private readonly runAfterAnswer: (task: () => Promise<void>) => void;
 
   /** Wrong attempts before the account locks. */
   private static readonly MAX_FAILED_ATTEMPTS = 5;
@@ -104,7 +200,27 @@ export class AuthControllerClass {
    */
   private static readonly LOCKOUT_MINUTES = 15;
 
+  /**
+   * SIGN IN — ONE ANSWER FOR EVERY WRONG GUESS (owner, 29 Sep 2026: "General
+   * message, both").
+   *
+   * An identifier with no account, an account with no password yet and a wrong
+   * password all get the same 401 ("Wrong email or password" / "Wrong phone
+   * number or password"), after the same bcrypt work, no sooner than
+   * LOGIN_REFUSAL_FLOOR_MS after the request began — and an identifier with no
+   * account locks after the same five failures as a real one
+   * (`UnknownLoginLockout`). This used to answer "This account is not
+   * registered yet." to anybody who typed an address or a number with no
+   * account behind it, which made sign-in a lookup of every account on the
+   * platform.
+   *
+   * What depends on the account itself — inactive, a suspended organisation,
+   * the second factor — is said only AFTER the password is right, to somebody
+   * who has proved they hold it.
+   */
   async login(req: Request, res: Response) {
+    // The refusal floor is measured from here.
+    const startedAt = this.now();
     try {
       logger.info('[AuthController.login] Login request received', {
         hasBody: Boolean(req.body && Object.keys(req.body).length > 0),
@@ -132,15 +248,80 @@ export class AuthControllerClass {
         loginCriteria = parsedBody.phoneNum!;
       }
 
-      const user = await this.userRepository.getUserByLoginMethod(loginMethod, loginCriteria);
+      const wrongCredentials =
+        loginMethod === 'email' ? LOGIN_WRONG_EMAIL_OR_PASSWORD : LOGIN_WRONG_PHONE_OR_PASSWORD;
+      // Every refusal made before the password is known to be right: the same
+      // body shape, never sooner than the floor.
+      const refuse = async (status: 401 | 429, message: string) => {
+        await this.padFrom(startedAt);
+        return res.status(status).json({ success: false, message });
+      };
+
+      // A failed READ throws (→ 500) instead of reading as "no account": a
+      // database blip must not turn somebody's right password into a strike.
+      const user = await this.userRepository.getUserByLoginMethod(loginMethod, loginCriteria, {
+        rethrow: true,
+      });
       if (!user) {
-        logger.warn('[AuthController.login] User not found');
-        return res.status(401).json({
-          success: false,
-          message: 'This account is not registered yet.',
-        });
+        // Counted, locked and answered exactly as a real account would be.
+        const key = loginIdentifierKey(loginMethod, loginCriteria);
+        const minutesLocked = this.unknownLoginLockout.minutesLeft(key);
+        if (minutesLocked !== null) {
+          logger.warn('[AuthController.login] Attempt on a locked identifier');
+          return refuse(429, lockedOutMessage(minutesLocked));
+        }
+        await comparePassword(parsedBody.password, await dummyPasswordHash());
+        this.unknownLoginLockout.recordFailure(key);
+        logger.warn('[AuthController.login] No account for that identifier');
+        return refuse(401, wrongCredentials);
       }
 
+      // Lockout, checked BEFORE the password compare. Checking after would let
+      // an attacker keep testing passwords against a locked account and read the
+      // answer from the response, which is the thing the lock exists to stop.
+      if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+        // Clamped: the lock was stamped by the DATABASE's clock, and a server
+        // clock a little behind it would say "16 minutes" where an identifier
+        // with no account (timed by this process) can only ever say 15.
+        const minutes = Math.min(
+          Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000),
+          AuthControllerClass.LOCKOUT_MINUTES,
+        );
+        logger.warn('[AuthController.login] Attempt on a locked account');
+        return refuse(429, lockedOutMessage(minutes));
+      }
+
+      // An account with no password yet (a roster stub waiting to be claimed)
+      // is compared against the dummy too, so it costs what a real compare
+      // costs — and it always fails, whatever the compare says.
+      let passwordMatches = false;
+      if (user.passwordHash) {
+        passwordMatches = await comparePassword(parsedBody.password, user.passwordHash);
+      } else {
+        await comparePassword(parsedBody.password, await dummyPasswordHash());
+      }
+      if (!passwordMatches) {
+        logger.warn('[AuthController.login] Invalid password');
+        // NOT awaited: the count is a database write an identifier with no
+        // account never makes, so waiting for it would put it in the timing.
+        // It never rejects (see recordFailedLogin), and the floor below gives
+        // it time to land before the next guess can arrive.
+        void this.recordFailedLogin(user);
+        return refuse(401, wrongCredentials);
+      }
+
+      /*
+       * ONLY NOW, to somebody who has proved the password: what is wrong with
+       * the ACCOUNT. Both of these used to be checked before the compare, on
+       * the reasoning that a refusal firing only once the password is right
+       * would confirm the password to whoever tried it. It did, instead, tell
+       * EVERYONE that the account exists and what state it is in, without a
+       * password at all (owner, 29 Sep 2026: "General message, both"). Here a
+       * guesser still meets the lockout and the one 401 above; the person told
+       * "inactive" or "suspended" is the one who knows the password, and is
+       * told why they cannot get in rather than led to reset a password that
+       * was right.
+       */
       if (user.status.toLowerCase() !== 'active') {
         logger.warn('[AuthController.login] User is not active');
         return res.status(401).json({
@@ -153,35 +334,10 @@ export class AuthControllerClass {
       // because `user.status` was the only status any auth path consulted — so
       // suspending an agency stopped nothing, and its owner and finance staff
       // kept full access, including raising payment vouchers.
-      //
-      // Checked after `user.status` and BEFORE the password compare, matching
-      // the lockout below: a refusal that only fires once the password is right
-      // would confirm the password to anyone who tried it.
       const orgBlock = await suspendedOrgBlock(user.id);
       if (orgBlock) {
         logger.warn(`[AuthController.login] Blocked by organisation status: ${user.id}`);
         return res.status(401).json({ success: false, message: orgBlock });
-      }
-
-      // Lockout, checked BEFORE the password compare. Checking after would let
-      // an attacker keep testing passwords against a locked account and read the
-      // answer from the response, which is the thing the lock exists to stop.
-      if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
-        const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
-        logger.warn('[AuthController.login] Attempt on a locked account');
-        return res.status(429).json({
-          success: false,
-          message: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
-        });
-      }
-
-      if (!user.passwordHash || !(await comparePassword(parsedBody.password, user.passwordHash))) {
-        logger.warn('[AuthController.login] Invalid password');
-        await this.recordFailedLogin(user);
-        return res.status(401).json({
-          success: false,
-          message: 'Wrong password',
-        });
       }
 
       // Second factor, only for an enrolment the user actually CONFIRMED. An
@@ -227,6 +383,14 @@ export class AuthControllerClass {
       const refreshToken = this.jwtController.generateRefreshToken(tokenPayload);
       const decodedToken = this.jwtController.verifyToken(accessToken);
 
+      // WHO signed in, for the audit row `platformAuditMiddleware` writes once
+      // this response is sent. A login carries no bearer token — it is the
+      // request that MINTS one — so the audit read nobody, and every sign-in
+      // was filed under no user and no portal (28 Sep audit). Set only here,
+      // after every gate has passed: a refused attempt stays anonymous, because
+      // whoever typed a wrong password has not proved they are this account.
+      req.user = user;
+
       logger.info('[AuthController.login] Login successful for user:', user.username);
 
       return res.status(200).json({
@@ -260,10 +424,12 @@ export class AuthControllerClass {
    * credentials" into a 500, which would tell an attacker they had found
    * something interesting.
    *
-   * The counter is NOT reset when the lock expires. It is reset only by a
-   * successful login, so someone grinding away gets locked again on their next
-   * wrong guess rather than being handed a fresh budget of five every
-   * fifteen minutes.
+   * The counter is NOT reset when the lock expires. It is reset by a successful
+   * login — and, since 30 Sep 2026 (migration 0170), by a DAY with no wrong
+   * guess (`FAILED_LOGIN_MEMORY_MINUTES`, the same day the counter for
+   * identifiers with no account forgets). Someone grinding away is locked again
+   * on their next wrong guess rather than handed a fresh five every fifteen
+   * minutes; only old typos stop counting.
    */
   private async recordFailedLogin(user: { id: string; username: string; failedLoginAttempts: number }): Promise<void> {
     try {
@@ -276,6 +442,7 @@ export class AuthControllerClass {
         user.id,
         AuthControllerClass.MAX_FAILED_ATTEMPTS,
         AuthControllerClass.LOCKOUT_MINUTES,
+        FAILED_LOGIN_MEMORY_MINUTES,
       );
       if (row && row.attempts >= AuthControllerClass.MAX_FAILED_ATTEMPTS) {
         logger.warn(
@@ -285,6 +452,12 @@ export class AuthControllerClass {
     } catch (error) {
       logger.error('[AuthController.recordFailedLogin] Error:', error);
     }
+  }
+
+  /** Wait out what is left of the sign-in refusal floor, measured from `startedAt`. */
+  private async padFrom(startedAt: number): Promise<void> {
+    const remaining = this.loginRefusalFloorMs - (this.now() - startedAt);
+    if (remaining > 0) await this.sleep(remaining);
   }
 
   /**
@@ -728,84 +901,36 @@ export class AuthControllerClass {
   }
 
   /**
-   * Public PR sign-up gate for step 1: refuse phones / ID numbers that already
-   * belong to an account so the wizard does not burn five steps on a duplicate.
+   * The PR app's step-1 "is this number free?" check — which NO LONGER SAYS
+   * (owner, 29 Sep 2026: "General message, both").
+   *
+   * It answered 409 "That phone number already has an account" / "That ID
+   * number already has an account" to anybody, for any number, before a code
+   * had been sent anywhere: a public lookup of which phones and ID numbers are
+   * on a PR platform. It now judges only the SHAPE of the request and answers
+   * the same 200 whoever the number belongs to. A collision is reported at the
+   * end, by `registerUser` — the phone by name once its code has proved it
+   * (`SIGNUP_PHONE_HAS_ACCOUNT`), anything else as one general refusal.
+   *
+   * Kept rather than removed because PR-app builds already on phones call it
+   * on step 1 and treat anything but a 2xx as a failure that stops sign-up.
+   * Current builds no longer call it.
    */
   async checkRegisterAvailability(req: Request, res: Response) {
-    try {
-      const parsed = z
-        .object({
-          phoneNum: z.string().min(8, 'Phone number is required'),
-          /*
-           * OPTIONAL since 10 Sep 2026: a PR may sign up without an ID at all,
-           * so this gate can only answer the half it was given. The phone is
-           * still checked, because that IS the PR's login.
-           */
-          idNo: z.string().trim().optional(),
-        })
-        .safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({
-          success: false,
-          message: parsed.error.issues[0]?.message ?? 'Invalid request',
-          data: null,
-        });
-      }
-
-      const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
-      const conflicts: { field: 'phone' | 'idNo'; message: string }[] = [];
-      // A never-activated roster stub on this number is the account this
-      // sign-up will CLAIM (registerUser), not a conflict — and neither is the
-      // IC the agency typed onto it.
-      let claimable: UserType | null = null;
-
-      if (phoneNum.length >= 8) {
-        const existingPhone = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
-        claimable = await this.claimablePrStub(existingPhone);
-        if (existingPhone && !claimable) {
-          conflicts.push({
-            field: 'phone',
-            message: 'That phone number already has an account. Sign in, or use another number.',
-          });
-        }
-      }
-
-      // Only ask when there is something to ask about. An absent id cannot
-      // collide with anything, and `findByNormalizedIdNo('')` would be a
-      // question about every blank profile on the platform.
-      if (parsed.data.idNo && parsed.data.idNo.length >= 4) {
-        const existingId = await this.userProfileRepository.findByNormalizedIdNo(
-          parsed.data.idNo,
-        );
-        if (existingId && existingId.userId !== claimable?.id) {
-          conflicts.push({
-            field: 'idNo',
-            message: 'That ID number already has an account. Sign in, or check the number.',
-          });
-        }
-      }
-
-      if (conflicts.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: conflicts.map((c) => c.message).join(' '),
-          data: { conflicts },
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'OK',
-        data: { available: true },
-      });
-    } catch (error) {
-      logger.error('[AuthController.checkRegisterAvailability] Error:', error);
-      return res.status(500).json({
+    const parsed = z
+      .object({
+        phoneNum: z.string().min(8, 'Phone number is required'),
+        idNo: z.string().trim().optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
         success: false,
-        message: 'Could not check registration details',
+        message: parsed.error.issues[0]?.message ?? 'Invalid request',
         data: null,
       });
     }
+    return res.status(200).json({ success: true, message: 'OK', data: null });
   }
 
   async registerUser(req: Request, res: Response) {
@@ -825,8 +950,10 @@ export class AuthControllerClass {
 
       // Public PR sign-up must present a verified WhatsApp OTP receipt. Admins
       // creating accounts (or outlet/agency web signup) are not on this path.
-      const isPublicPr =
-        parsedBody.accountType === 'pr' && !(await this.callerIsAdmin(req));
+      // An admin creating an account — which also decides what a collision
+      // below may say.
+      const callerIsAdmin = await this.callerIsAdmin(req);
+      const isPublicPr = parsedBody.accountType === 'pr' && !callerIsAdmin;
       // Kept for the stub claim below, which needs to know where the code went.
       let signupReceipt: PhoneVerification | null = null;
       if (isPublicPr) {
@@ -881,72 +1008,9 @@ export class AuthControllerClass {
         }
       }
 
-      // Name the offending field. Both of these used to return the same bare
-      // USER_ALREADY_EXISTS on the last step of a 6-step form, for a value typed
-      // back on step 1 — leaving no way to tell which field to change.
-
-      const existingPhone = parsedBody.phoneNum
-        ? await this.userRepository.getUserByLoginMethod('phone', parsedBody.phoneNum)
-        : null;
-      /*
-       * 🔴 A ROSTER STUB IS CLAIMED HERE — AND NOWHERE ELSE (Fix First,
-       * 28 Sep 2026; account-activation.ts).
-       *
-       * An agency adding a PR by phone creates an account with no password
-       * (`POST /pr`). That PR used to be told "already registered — sign in"
-       * here, could not sign in, and could only get in through Forgot password
-       * — a reset to contacts the AGENCY typed and may still change, which is
-       * why no reset activates an account any more. Instead, a public PR
-       * sign-up whose verified receipt proves the stub's own number takes the
-       * stub over: her password, her username, her email, the roster
-       * membership the agency already approved.
-       *
-       * Three conditions, all required: a PUBLIC PR sign-up (never an admin or
-       * an organisation form); a receipt whose code went to the PHONE ALONE
-       * (a code also emailed to a typed inbox proves that inbox instead); and a
-       * stub that is never-activated and PR-only. Anything else on this number
-       * is still the 409 below.
-       */
-      const claimTarget =
-        isPublicPr && signupReceipt && receiptProvesPhoneAlone(signupReceipt.channel)
-          ? await this.claimablePrStub(existingPhone)
-          : null;
-
-      if (parsedBody.email) {
-        const existingEmail = await this.userRepository.getUserByLoginMethod('email', parsedBody.email);
-        // The stub being claimed is not "somebody else" — its own address is the
-        // one this sign-up replaces.
-        if (existingEmail && existingEmail.id !== claimTarget?.id) {
-          return res.status(409).json({
-            success: false,
-            message: `That email (${parsedBody.email}) is already registered. Use another one, or leave the email blank.`,
-            data: null,
-          });
-        }
-      }
-
-      if (existingPhone && !claimTarget) {
-        return res.status(409).json({
-          success: false,
-          message: `That phone number (${parsedBody.phoneNum}) is already registered. Sign in instead, or use another number.`,
-          data: null,
-        });
-      }
-
-      if (parsedBody.idNo) {
-        const existingId = await this.userProfileRepository.findByNormalizedIdNo(parsedBody.idNo);
-        // Nor is the IC the agency typed onto the stub she is claiming.
-        if (existingId && existingId.userId !== claimTarget?.id) {
-          return res.status(409).json({
-            success: false,
-            message: 'An account with this ID number already exists',
-            data: null,
-          });
-        }
-      }
-
       /**
-       * The package is judged BEFORE anything is written.
+       * The package is judged BEFORE anything is written — and before anything
+       * is LOOKED UP.
        *
        * Registration is not transactional: the user, the org and the membership
        * are each committed as they are created, and enrolment runs last. A
@@ -954,6 +1018,13 @@ export class AuthControllerClass {
        * noticed — would leave a half-built account whose email and phone are
        * already taken, so the person could not even retry. Validating here costs
        * a 400 and creates nothing.
+       *
+       * ⚠️ And ahead of the lookups below (security review, 30 Sep 2026): while
+       * this and the role check ran AFTER the "is it taken" test, a request made
+       * invalid on purpose — no account type, a made-up package — answered 409
+       * when a value it carried was taken and 400 when none was, and created
+       * nothing either way: a free lookup of any email, phone or ID number.
+       * Every refusal that needs no account lookup now comes first.
        *
        * No outlet or agency may exist without a plan (owner's call, 2 Sep 2026),
        * and `ShiftController` now refuses to post for a venue holding none, so
@@ -981,6 +1052,183 @@ export class AuthControllerClass {
           message: resolved.error.message,
           data: null,
         });
+      }
+
+      /*
+       * 🔴 A PUBLIC VENUE OR AGENCY SIGN-UP PROVES ITS EMAIL FIRST (owner,
+       * 30 Sep 2026: "lets go with your pick for number 2").
+       *
+       * A fully valid form used to create an account whenever nothing was
+       * taken, so "created" against "couldn't complete" answered whether an
+       * address, a phone or an ID number had an account — and left a real
+       * pending venue in somebody else's name each time the answer was "free".
+       * The code went only to the address typed (signup-email-code.ts). It is
+       * spent HERE — after every lookup-free check, before any account lookup
+       * — so each try, however it is answered, costs a fresh code from the
+       * typist's own inbox. An admin creating the account is exempt, as from
+       * the PR code.
+       */
+      const isOrgSignup =
+        parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet';
+      /*
+       * The owner's IC and the gender ticked must agree (the owner's
+       * double-confirmation, 9 Sep 2026). Judged HERE, from the request alone
+       * (security review, 30 Sep 2026): it used to run after the account was
+       * created, so a mismatch left a half-built account behind — and, with the
+       * emailed code, a spent code and a retry told "that email already has an
+       * account".
+       */
+      if (isOrgSignup && parsedBody.personInCharge) {
+        const icGender = genderFromNric(parsedBody.idNo);
+        if (icGender && parsedBody.gender && icGender !== parsedBody.gender) {
+          return res.status(400).json({
+            success: false,
+            message: `The IC number says ${icGender} but ${parsedBody.gender} was selected — check the ID number`,
+            data: null,
+          });
+        }
+      }
+
+      const isPublicOrg = !callerIsAdmin && isOrgSignup;
+      if (isPublicOrg) {
+        if (!parsedBody.email) {
+          return res.status(400).json({ success: false, message: 'Email is required', data: null });
+        }
+        const proof = await this.signupEmailCodes.redeem({
+          codeId: parsedBody.emailCodeId,
+          code: parsedBody.emailCode,
+          email: parsedBody.email,
+          actor: SYSTEM_ACTOR,
+        });
+        if (!proof.ok) {
+          return res
+            .status(proof.status)
+            .json({ success: false, message: proof.message, data: null });
+        }
+      }
+
+      /*
+       * 🔴 A PUBLIC PR SIGN-UP SPENDS ITS PHONE RECEIPT HERE — after every
+       * lookup-free check, BEFORE the lookups, in one conditional statement
+       * (owner, 30 Sep 2026, and the security review that followed).
+       *
+       * It used to be spent only by the account it bought, and then by a
+       * refusal too — but always AFTER the lookups, so one proved phone could
+       * send the same receipt with address after address, and N sign-ups sent
+       * together on it each got their answer. `verified → consumed` lets
+       * exactly one request past this line; every try at the lookups costs a
+       * fresh code to that phone.
+       */
+      if (isPublicPr && parsedBody.verificationId) {
+        const spent = await this.phoneVerificationRepository.transition(
+          parsedBody.verificationId,
+          'verified',
+          { status: 'consumed', updatedBy: SYSTEM_ACTOR },
+        );
+        if (!spent) {
+          return res.status(400).json({
+            success: false,
+            message: 'Phone verification is missing or expired — verify again',
+            data: null,
+          });
+        }
+      }
+
+      // `rethrow`: a failed read is a 500 that creates nothing, never "free".
+      const existingPhone = parsedBody.phoneNum
+        ? await this.userRepository.getUserByLoginMethod('phone', parsedBody.phoneNum, {
+            rethrow: true,
+          })
+        : null;
+      /*
+       * 🔴 A ROSTER STUB IS CLAIMED HERE — AND NOWHERE ELSE (Fix First,
+       * 28 Sep 2026; account-activation.ts).
+       *
+       * An agency adding a PR by phone creates an account with no password
+       * (`POST /pr`). That PR used to be told "already registered — sign in"
+       * here, could not sign in, and could only get in through Forgot password
+       * — a reset to contacts the AGENCY typed and may still change, which is
+       * why no reset activates an account any more. Instead, a public PR
+       * sign-up whose verified receipt proves the stub's own number takes the
+       * stub over: her password, her username, her email, the roster
+       * membership the agency already approved.
+       *
+       * Three conditions, all required: a PUBLIC PR sign-up (never an admin or
+       * an organisation form); a receipt whose code went to the PHONE ALONE
+       * (a code also emailed to a typed inbox proves that inbox instead); and a
+       * stub that is never-activated and PR-only. Anything else on this number
+       * is still the 409 below.
+       */
+      const claimTarget =
+        isPublicPr && signupReceipt && receiptProvesPhoneAlone(signupReceipt.channel)
+          ? await this.claimablePrStub(existingPhone)
+          : null;
+
+      /*
+       * WHAT A COLLISION MAY SAY DEPENDS ON WHO IS ASKING (owner, 29 Sep 2026:
+       * "General message, both").
+       *
+       * These used to name the field — "That email (…) is already registered",
+       * "An account with this ID number already exists" — to anybody, which
+       * made this public route a way to test any address, number or ID number
+       * for an account. Now:
+       *   · an ADMIN creating an account is told which field, as before;
+       *   · a PR whose code reached the phone ALONE may be told the PHONE has an
+       *     account (SIGNUP_PHONE_HAS_ACCOUNT) — she has just proved it is hers;
+       *   · a venue or agency sign-up, whose emailed code has just proved the
+       *     ADDRESS (30 Sep 2026), may be told the EMAIL has an account
+       *     (SIGNUP_EMAIL_HAS_ACCOUNT);
+       *   · everyone else, and every other field, gets one sentence that names
+       *     none (SIGNUP_NOT_COMPLETED).
+       * All three lookups run before any answer, so which one hit is not in the
+       * timing either.
+       *
+       * ⚠️ AND THEY FAIL CLOSED (security review, 30 Sep 2026). The sign-in
+       * lookup answers null for a value on file TWICE — it refuses to pick one
+       * — and used to answer null for a read that failed; both read as "free",
+       * so a number already on two accounts could get a third, and a blip
+       * reached the unique index as a 500 only by luck. Each lookup now throws
+       * on a failed read (a 500 that creates nothing), and `isLoginValueTaken`
+       * — any match counts — decides "taken" whenever the sign-in lookup could
+       * not name one account. `/register-member` has always asked it that way.
+       */
+      const [existingEmail, existingId, emailOnFile, phoneOnFile] = await Promise.all([
+        parsedBody.email
+          ? this.userRepository.getUserByLoginMethod('email', parsedBody.email, { rethrow: true })
+          : Promise.resolve(null),
+        parsedBody.idNo
+          ? this.userProfileRepository.findByNormalizedIdNo(parsedBody.idNo)
+          : Promise.resolve(null),
+        parsedBody.email
+          ? this.userRepository.isLoginValueTaken('email', parsedBody.email)
+          : Promise.resolve(false),
+        parsedBody.phoneNum
+          ? this.userRepository.isLoginValueTaken('phone', parsedBody.phoneNum)
+          : Promise.resolve(false),
+      ]);
+      // The stub being claimed is not "somebody else" — its own address, and
+      // the IC the agency typed onto it, are the ones this sign-up replaces.
+      const emailTaken = existingEmail ? existingEmail.id !== claimTarget?.id : emailOnFile;
+      const phoneTaken = existingPhone ? !claimTarget : phoneOnFile;
+      const idTaken = Boolean(existingId && existingId.userId !== claimTarget?.id);
+      if (emailTaken || phoneTaken || idTaken) {
+        const phoneProven = Boolean(
+          signupReceipt && receiptProvesPhoneAlone(signupReceipt.channel),
+        );
+        let message = SIGNUP_NOT_COMPLETED;
+        if (callerIsAdmin) {
+          message = emailTaken
+            ? `That email (${parsedBody.email}) is already registered. Use another one, or leave the email blank.`
+            : phoneTaken
+              ? `That phone number (${parsedBody.phoneNum}) is already registered. Sign in instead, or use another number.`
+              : 'An account with this ID number already exists';
+        } else if (phoneTaken && phoneProven) {
+          message = SIGNUP_PHONE_HAS_ACCOUNT;
+        } else if (emailTaken && isPublicOrg) {
+          // Its code reached that inbox and was typed back: it is theirs.
+          message = SIGNUP_EMAIL_HAS_ACCOUNT;
+        }
+        return res.status(409).json({ success: false, message, data: null });
       }
 
       const passwordHash = parsedBody.password ? await hashPassword(parsedBody.password) : null;
@@ -1011,10 +1259,11 @@ export class AuthControllerClass {
           actor,
         });
         if (!claimed) {
-          // Claimed, activated or disabled since it was read: a taken number now.
+          // Claimed, activated or disabled since it was read: a taken number
+          // now. Said by name — every claim's code reached the phone alone.
           return res.status(409).json({
             success: false,
-            message: `That phone number (${parsedBody.phoneNum}) is already registered. Sign in instead, or use another number.`,
+            message: SIGNUP_PHONE_HAS_ACCOUNT,
             data: null,
           });
         }
@@ -1044,12 +1293,7 @@ export class AuthControllerClass {
       // raw-uuid folder while everyone else uses `user/pr/<name>-<id8>/`.
       await refreshUserFolder(user.id);
 
-      if (isPublicPr && parsedBody.verificationId) {
-        await this.phoneVerificationRepository.update(parsedBody.verificationId, {
-          status: 'consumed',
-          updatedBy: actor,
-        });
-      }
+      // A public PR's receipt was already spent before the lookups (above).
 
       // PR self-sign-up → agency membership request on agency_pr (user_id key).
       if (isPublicPr && parsedBody.agencyId) {
@@ -1181,14 +1425,9 @@ export class AuthControllerClass {
         // Gender is asked AND derived, and they must agree — the owner's
         // double-confirmation. Silently overwriting the person with the parity
         // digit is what this avoids: on this database that digit already
-        // contradicts two accounts whose names are not ambiguous.
-        if (icGender && parsedBody.gender && icGender !== parsedBody.gender) {
-          return res.status(400).json({
-            success: false,
-            message: `The IC number says ${icGender} but ${parsedBody.gender} was selected — check the ID number`,
-            data: null,
-          });
-        }
+        // contradicts two accounts whose names are not ambiguous. A mismatch is
+        // refused BEFORE anything is created (see the top of this handler), so
+        // here the two agree or one of them is absent.
         await this.userProfileRepository.update(user.id, {
           fullName: parsedBody.personInCharge,
           ...(parsedBody.idType ? { idType: parsedBody.idType } : {}),
@@ -1344,6 +1583,37 @@ export class AuthControllerClass {
         return res.status(200).json(neutral);
       }
 
+      /*
+       * THE ANSWER COMES FIRST (security review, 30 Sep 2026). The body was
+       * already neutral, but a real account was answered only after its token
+       * write and the mail send — about a second — and an unknown address
+       * straight after the lookup: the DELAY said which addresses have
+       * accounts. Every address is now answered after the same one lookup,
+       * and the link is minted and mailed afterwards (`sendResetLink`), the
+       * same shape as the phone reset's `answerReset`.
+       */
+      const answered = res.status(200).json(neutral);
+      this.runAfterAnswer(() => this.sendResetLink(user, email));
+      return answered;
+    } catch (error) {
+      logger.error('[AuthController.forgotPassword] Error:', safeErrorFields(error));
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * The emailed reset link, AFTER the answer. Never throws: the answer is
+   * already out, and the log is all that is left to tell.
+   */
+  private async sendResetLink(
+    user: { id: string; email: string | null; username: string | null },
+    email: string,
+  ): Promise<void> {
+    try {
       const token = crypto.randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
@@ -1384,21 +1654,16 @@ export class AuthControllerClass {
           }
         }
       } catch (mailError) {
-        // A dead mailbox must not tell the caller whether the account exists.
         // Fields only: an SMTP refusal quotes the recipient address.
         logger.error(
           '[AuthController.forgotPassword] Could not send reset email:',
           { userId: user.id, ...safeErrorFields(mailError) },
         );
       }
-
-      return res.status(200).json(neutral);
     } catch (error) {
-      logger.error('[AuthController.forgotPassword] Error:', safeErrorFields(error));
-      return res.status(500).json({
-        success: false,
-        message: Error.INTERNAL_SERVER_ERROR,
-        data: null,
+      logger.error('[AuthController.forgotPassword] reset link failed after the answer:', {
+        userId: user.id,
+        ...safeErrorFields(error),
       });
     }
   }
@@ -1479,6 +1744,9 @@ export class AuthControllerClass {
         loginCriteria: payload.loginCriteria,
       });
       const decoded = this.jwtController.verifyToken(accessToken);
+      // The audit row's actor, as on login: the refresh token rides in the BODY,
+      // so the audit middleware found no bearer and filed the renewal anonymously.
+      req.user = user;
       return res.status(200).json({
         success: true,
         message: 'Session refreshed',

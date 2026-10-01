@@ -59,11 +59,16 @@ import {
 	prPayClass,
 	totalPenaltyFineRm,
 } from "@agency-portal/lib/pr-penalties";
+import { prKpiScoreLabel } from "@agency-portal/lib/pr-personnel-map";
 import {
 	displayAverage,
 	formatStars,
 	summarizePrRatings,
 } from "@agency-portal/lib/pr-rating-summary";
+import {
+	raceFilterOptions,
+	raceMatches,
+} from "@agency-portal/lib/pr-roster-filters";
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
@@ -289,10 +294,9 @@ function AgencyManagePRs() {
 		() => collectAgencyPrLanguages(agencyPRs),
 		[agencyPRs],
 	);
-	const races = useMemo(
-		() => [...new Set(agencyPRs.map((p) => p.race).filter(Boolean))],
-		[agencyPRs],
-	);
+	// Folded, not raw: the column holds `Chinese` AND `chinese`, and a raw Set
+	// offered the same race twice. See `raceFilterOptions`.
+	const races = useMemo(() => raceFilterOptions(agencyPRs), [agencyPRs]);
 	const places = useMemo(
 		() => [...new Set(agencyPRs.map((p) => p.place).filter(Boolean))],
 		[agencyPRs],
@@ -320,7 +324,7 @@ function AgencyManagePRs() {
 						!langs.some((l) => l.toLowerCase() === lang.toLowerCase())
 					)
 						return false;
-					if (race && p.race !== race) return false;
+					if (!raceMatches(p.race, race)) return false;
 					if (place && p.place !== place) return false;
 					if (expMin && (p.yearsExp ?? 0) < Number(expMin)) return false;
 					return true;
@@ -780,8 +784,8 @@ function AgencyManagePRs() {
 						>
 							<option value="">{t.managePr.allRaces}</option>
 							{races.map((r) => (
-								<option key={r} value={r}>
-									{raceLabel(r, t)}
+								<option key={r.value} value={r.value}>
+									{raceLabel(r.label, t)}
 								</option>
 							))}
 						</IzSelect>
@@ -1298,8 +1302,10 @@ function AgencyPrDetail({
 								<Star className="h-3 w-3" /> {display.trainingLevel}
 							</span>
 						</div>
+						{/* The agency's own grade, under its own name. "KPI" is the
+						    server's score in the strip below — two facts, two labels. */}
 						<p className="iz-tiny iz-muted mt-0.5">
-							KPI {display.kpiTier || "—"} ·{" "}
+							{t.managePr.agencyGrade} {display.kpiTier || "—"} ·{" "}
 							{display.languages.map((l) => languageLabel(l, t)).join(", ") ||
 								t.managePr.noLanguages}
 						</p>
@@ -1323,8 +1329,10 @@ function AgencyPrDetail({
 					</div>
 				</div>
 				<div className="iz-outlet-stat-cell">
-					<IzKpiLabel>KPI</IzKpiLabel>
-					<div className="n">{detail.kpiScore}</div>
+					<IzKpiLabel>{t.managePr.metricKpi}</IzKpiLabel>
+					{/* The server's score, or an em-dash while there is none. The
+					    number alone — nothing on this screen says how it is made. */}
+					<div className="n">{prKpiScoreLabel(detail)}</div>
 				</div>
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>{t.managePr.paid}</IzKpiLabel>
@@ -1576,7 +1584,7 @@ function AgencyPrDetail({
 								/>
 								<div className="iz-field !mb-0">
 									<label htmlFor={`${fieldId}-kpi-tier`}>
-										{t.managePr.kpiTier}
+										{t.managePr.agencyGrade}
 									</label>
 									<IzSelect
 										id={`${fieldId}-kpi-tier`}
@@ -1651,7 +1659,7 @@ function AgencyPrDetail({
 									<b>{fill(t.managePr.yearsExp, { n: display.yearsExp })}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">{t.managePr.kpiTier}</span>
+									<span className="iz-muted">{t.managePr.agencyGrade}</span>
 									<b>{display.kpiTier || "—"}</b>
 								</div>
 								<div className="iz-v-sum">

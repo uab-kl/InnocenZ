@@ -25,39 +25,25 @@ import { hashPassword } from '@/util/password.js';
 import { saveProfileImageFile } from '@/util/profile-image.js';
 import { normalizeInviteEmail, hashOrgMemberInviteToken } from '@/util/org-member-invite.js';
 import { isUniqueViolation } from '@/features/account-code/account-code.repository.js';
+import { SIGNUP_EMAIL_HAS_ACCOUNT, SIGNUP_NOT_COMPLETED } from './account-answers.js';
+import { PhoneVerificationRepositoryClass } from './phone-verification.repository.js';
+import { SignupEmailCodesClass, type SignupEmailCodeRedeemer } from './signup-email-code.js';
 
 /**
- * The existing sentence, kept word for word because a client may match on it.
- *
- * The web member sign-up (`apps/web/src/routes/signup-member.tsx`) translates
- * it through `apps/web/src/lib/landing-i18n/member-signup-refusal.ts`, which
- * matches this exact sentence. Mobile `api-error-copy` does not carry it (no
- * PR-app screen calls register-member). Change it only together with that map.
+ * Whether a unique violation on `user` was about a SIGN-IN value — email or
+ * phone — rather than any other error. `user_email_unique` /
+ * `user_phone_num_unique` — the constraint names verified against the live
+ * table; drizzle 0.45 keeps the pg error in `.cause`. Which of the two it was
+ * is deliberately not returned: the caller may not say (SIGNUP_NOT_COMPLETED).
  */
-export const REGISTER_MEMBER_EMAIL_TAKEN = 'That email already has an account — sign in instead.';
-/**
- * Same sentence the contact-change and PR-editor refusals use, so it is in the
- * web `auth-server-copy` map and mobile `api-error-copy`. The web member sign-up
- * translates it through `landing-i18n/member-signup-refusal.ts`.
- */
-export const REGISTER_MEMBER_PHONE_TAKEN = 'That phone number is already used by another account';
-
-/**
- * Which sign-in value a unique violation on `user` was about, or null for any
- * other error. `user_email_unique` / `user_phone_num_unique` — the constraint
- * names verified against the live table; drizzle 0.45 keeps the pg error in
- * `.cause`.
- */
-function takenSignInValue(error: unknown): 'email' | 'phone' | null {
-  if (!isUniqueViolation(error)) return null;
+function isTakenSignInValue(error: unknown): boolean {
+  if (!isUniqueViolation(error)) return false;
   const constraint = String(
     (error as { constraint?: unknown } | null)?.constraint ??
       (error as { cause?: { constraint?: unknown } } | null)?.cause?.constraint ??
       '',
   );
-  if (constraint.includes('phone')) return 'phone';
-  if (constraint.includes('email')) return 'email';
-  return null;
+  return constraint.includes('phone') || constraint.includes('email');
 }
 
 /**
@@ -76,6 +62,10 @@ export class OrgMemberInviteControllerClass {
     private roleRepository: RoleRepositoryClass,
     private userRoleRepository: UserRoleRepositoryClass,
     private userProfileRepository: UserProfileRepositoryClass,
+    /** Spends the emailed code a member sign-up must carry (signup-email-code.ts). */
+    private signupEmailCodes: SignupEmailCodeRedeemer = new SignupEmailCodesClass({
+      codes: new PhoneVerificationRepositoryClass(),
+    }),
   ) {}
 
   async accept(req: Request, res: Response) {
@@ -314,43 +304,16 @@ export class OrgMemberInviteControllerClass {
       const email = normalizeInviteEmail(input.email);
 
       /*
-       * The email AND the phone must be free — both are sign-in values, and
-       * reusing either would hijack an existing account's login or create a
-       * second one for the same person.
-       *
-       * `isLoginValueTaken`, not `getUserByLoginMethod`: the login lookup
-       * answers null when TWO accounts already match (and when the read fails),
-       * so a number already on file twice looked free. The phone is compared the
-       * way sign-in compares it — digits, `0…` and `60…` as one line — so
-       * `012-345 6789` is refused against `+60123456789`.
-       *
-       * The phone check used not to exist at all: a taken number reached the
-       * INSERT, and `user_phone_num_unique` turned it into a 500 (or, spelled
-       * differently from the stored copy, into a second account for the line).
-       */
-      if (await this.userRepository.isLoginValueTaken('email', email)) {
-        return res.status(409).json({
-          success: false,
-          message: REGISTER_MEMBER_EMAIL_TAKEN,
-          data: null,
-        });
-      }
-      if (
-        input.phoneNum &&
-        (await this.userRepository.isLoginValueTaken('phone', input.phoneNum))
-      ) {
-        return res.status(409).json({
-          success: false,
-          message: REGISTER_MEMBER_PHONE_TAKEN,
-          data: null,
-        });
-      }
-
-      /*
        * The organisation is verified BEFORE the account is created, so a bad
        * id cannot leave a half-registered person behind with nothing to join.
        * It must also be ACTIVE: a request to join a switched-off organisation
        * has nobody who can approve it.
+       *
+       * ⚠️ And BEFORE the email and phone are looked up (security review,
+       * 30 Sep 2026): after them, a made-up organisation id answered 409 when
+       * the typed email or phone was taken and 404 when neither was, and
+       * created nothing — a free lookup. Organisations are public (the sign-up
+       * pickers list them), so this check gives nothing away.
        */
       let org: { id: string; name: string } | null = null;
       if (input.join) {
@@ -366,6 +329,63 @@ export class OrgMemberInviteControllerClass {
           });
         }
         org = { id: found.id, name: found.name };
+      }
+
+      /*
+       * 🔴 PROOF BEFORE THE ACCOUNT (owner, 30 Sep 2026: "lets go with your pick
+       * for number 2"). The code emailed to this address by
+       * POST /auth/signup-email-code, spent HERE — after the lookup-free checks,
+       * before any lookup — so every try costs a fresh code from the typist's
+       * own inbox, and nobody can test or take an address they cannot read.
+       */
+      const proof = await this.signupEmailCodes.redeem({
+        codeId: input.emailCodeId,
+        code: input.emailCode,
+        email,
+        actor: 'member-signup',
+      });
+      if (!proof.ok) {
+        return res
+          .status(proof.status)
+          .json({ success: false, message: proof.message, data: null });
+      }
+
+      /*
+       * The email AND the phone must be free — both are sign-in values, and
+       * reusing either would hijack an existing account's login or create a
+       * second one for the same person.
+       *
+       * `isLoginValueTaken`, not `getUserByLoginMethod`: the login lookup
+       * answers null when TWO accounts already match (and when the read fails),
+       * so a number already on file twice looked free. The phone is compared the
+       * way sign-in compares it — digits, `0…` and `60…` as one line — so
+       * `012-345 6789` is refused against `+60123456789`.
+       *
+       * The phone check used not to exist at all: a taken number reached the
+       * INSERT, and `user_phone_num_unique` turned it into a 500 (or, spelled
+       * differently from the stored copy, into a second account for the line).
+       *
+       * ⚠️ AND WHICH ONE IS NOT SAID (owner, 29 Sep 2026: "General message,
+       * both"). This is a public form with nothing proved — no code, no
+       * password — and it used to answer "That email already has an account"
+       * or "That phone number is already used by another account", a lookup
+       * of either for anybody. Both checks now run, and a hit on either gets
+       * the one sentence that names neither — except the EMAIL, since 30 Sep
+       * 2026: its code has just proved the address, so it may be named
+       * (SIGNUP_EMAIL_HAS_ACCOUNT). A taken phone is never proved here.
+       */
+      const [emailTaken, phoneTaken] = await Promise.all([
+        this.userRepository.isLoginValueTaken('email', email),
+        input.phoneNum
+          ? this.userRepository.isLoginValueTaken('phone', input.phoneNum)
+          : Promise.resolve(false),
+      ]);
+      if (emailTaken || phoneTaken) {
+        return res.status(409).json({
+          success: false,
+          message: emailTaken ? SIGNUP_EMAIL_HAS_ACCOUNT : SIGNUP_NOT_COMPLETED,
+          data: null,
+        });
       }
 
       const passwordHash = await hashPassword(input.password);
@@ -386,12 +406,10 @@ export class OrgMemberInviteControllerClass {
          * one address both pass them, and the unique index refuses the second.
          * That is still a duplicate, so it is still a 409 — never a 500.
          */
-        const taken = takenSignInValue(error);
-        if (taken) {
+        if (isTakenSignInValue(error)) {
           return res.status(409).json({
             success: false,
-            message:
-              taken === 'phone' ? REGISTER_MEMBER_PHONE_TAKEN : REGISTER_MEMBER_EMAIL_TAKEN,
+            message: SIGNUP_NOT_COMPLETED,
             data: null,
           });
         }
@@ -468,7 +486,7 @@ export class OrgMemberInviteControllerClass {
    *
    * Owner, 11 Sep 2026: "exist account user can join another org now works for
    * web like outlet, agency". Sign-up creates a PERSON and a request together
-   * and is refused for an address that already exists ("sign in instead"); an
+   * and is refused for an address that already exists (SIGNUP_NOT_COMPLETED); an
    * invite is the organisation reaching out. Somebody who already works
    * somewhere and wants a second job had no way to ASK — they could only wait
    * to be invited, which is the opposite of asking.

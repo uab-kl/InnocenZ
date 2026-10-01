@@ -24,7 +24,10 @@ import { useViewportSize } from '../lib/viewport';
 import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { Section } from '../components/Section';
 import { ImageLightbox, ZoomHint } from '../components/ImageLightbox';
-import { AgencySchedulePanel } from '../components/AgencySchedulePanel';
+import {
+  AgencySchedulePanel,
+  type ScheduleDayFocus,
+} from '../components/AgencySchedulePanel';
 import { OutletSwapRequests } from '../components/OutletSwapRequests';
 import { useOutletSwaps } from '../lib/outlet-swaps';
 import { Avatar, EmptyDashed, IzButton, LabelWithIcon } from '../components/ui';
@@ -44,9 +47,18 @@ import {
 import type { PrTab } from '../components/BottomNav';
 import { useActiveShift } from '../lib/active-shift';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
-import { usePrNav } from '../lib/pr-nav';
+import { type ShiftsFocus, usePrNav } from '../lib/pr-nav';
+import { eventKindLabel } from '../lib/special-event';
 
 type SectionKey = 'today' | 'todo' | 'agency';
+
+/**
+ * Focus objects already acted on. The route keeps its focus for as long as the
+ * PR stays on this tab, and the nav stack hands the SAME object back after a
+ * trip to a voucher — so acting on it again at remount would reopen a sheet
+ * she had already closed. Keyed by identity: every new navigation is new.
+ */
+const handledFocus = new WeakSet<ShiftsFocus>();
 
 function ymdFromIso(iso: string): Ymd {
   const [y, m, d] = iso.split('-').map((n) => Number(n));
@@ -81,6 +93,8 @@ function assignmentToShift(a: ShiftAssignmentRecord, t: AppTranslations): DemoSh
     // the generic word "Shift", which read as a real event name on the card.
     event: a.eventName?.trim() || t.shifts.noEventName,
     eventKind: a.eventKind === 'special' ? 'Special event' : 'Normal shift',
+    // WHICH special night — "Special event · VIP night" — not a bare kind.
+    kindLabel: eventKindLabel(a, t),
     // The venue's asks. Trimmed to null so the card can gate on truthiness —
     // an empty string would draw a labelled row with nothing after it.
     dressCode: a.dressCode?.trim() || null,
@@ -101,7 +115,7 @@ function assignmentToShift(a: ShiftAssignmentRecord, t: AppTranslations): DemoSh
 export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { t } = useLocale();
   const { me } = useSession();
-  const { openPv } = usePrNav();
+  const { openPv, route } = usePrNav();
 
   // Real shift assignments for this PR — shared with Check-In / timetable so
   // On duty / Complete badges flip as soon as attendance stamps change.
@@ -236,6 +250,58 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
       setOpen((prev) => ({ ...prev, todo: true }));
     }
   }, [outletSwaps.pending.length, swapAlerted]);
+
+  /*
+   * OPENED FROM A NOTIFICATION (TopBar → `notification-targets.ts`): land on
+   * its item. A swap request opens To-do, where it is answered; a shift — new,
+   * cancelled, MC/leave decided, released early — opens its day on the Agency
+   * Schedule. Keyed on the focus OBJECT, which every navigation makes new, so a
+   * second notification tapped while this tab is already open still opens.
+   *
+   * The lists are re-read FIRST: a notification is newer than what this phone
+   * last loaded by definition (a booking made a minute ago, a leave just
+   * decided). A failed read still opens the day with what is known. A focus
+   * counts as handled only once it has actually opened (`handledFocus`).
+   */
+  const shiftsFocus =
+    route.name === 'tabs' && route.tab === 'shifts' ? route.shiftsFocus : undefined;
+  const [scheduleDay, setScheduleDay] = useState<ScheduleDayFocus | null>(null);
+  /*
+   * The swap request a notice opened To-do FOR — set only once the requests
+   * have been re-read, then checked below. The bell already keeps a notice
+   * whose request it KNOWS is answered; this covers the one it could not know
+   * about (its read had not landed or failed), so To-do says the request is no
+   * longer open instead of a bare "Nothing to do".
+   */
+  const [swapFocusId, setSwapFocusId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!shiftsFocus || handledFocus.has(shiftsFocus)) return;
+    if (shiftsFocus.section === 'todo') {
+      handledFocus.add(shiftsFocus);
+      setOpen((prev) => ({ ...prev, todo: true }));
+      const swapId = shiftsFocus.swapId ?? null;
+      setSwapFocusId(null);
+      void outletSwaps.refresh().then(() => setSwapFocusId(swapId));
+      return;
+    }
+    setOpen((prev) => ({ ...prev, agency: true }));
+    let alive = true;
+    const focus = shiftsFocus;
+    void refresh().finally(() => {
+      if (!alive) return;
+      handledFocus.add(focus);
+      // The booking travels with the day, so the day's sheet can say when it
+      // is gone rather than opening on a bare month.
+      setScheduleDay({
+        dateIso: focus.dateIso,
+        ...(focus.assignmentId ? { assignmentId: focus.assignmentId } : {}),
+      });
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per navigation
+  }, [shiftsFocus]);
   // A forgotten check-out is a caution the PR must SEE — pop To-do open once
   // when it appears (same one-shot pattern as swap requests).
   const [overdueAlerted, setOverdueAlerted] = useState(false);
@@ -255,6 +321,12 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
       setOpen((prev) => ({ ...prev, todo: true }));
     }
   }, [overdueCheckout, overdueAlerted]);
+
+  // A failed re-read proves nothing about the request, so it claims nothing.
+  const swapNoLongerOpen =
+    swapFocusId !== null &&
+    !outletSwaps.error &&
+    !outletSwaps.pending.some((s) => s.id === swapFocusId);
 
   const firstName = me?.profile.firstName?.split(' ')[0] ?? me?.username ?? 'PR';
   // .iz-pr-page-header__title: clamp(1.4rem, 5.2vw, 1.75rem)
@@ -494,6 +566,11 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                   )}
                 </View>
               )}
+              {swapNoLongerOpen ? (
+                <Text style={styles.todoNotice} role="alert">
+                  {t.swaps.noLongerOpen}
+                </Text>
+              ) : null}
               <OutletSwapRequests swaps={outletSwaps} />
               {todoItems.length === 0 && outletSwaps.pending.length === 0 && !overdueCheckout ? (
                 <EmptyDashed>{t.shifts.nothingToDo}</EmptyDashed>
@@ -582,7 +659,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               open={open.agency}
               onToggle={(next) => toggleSection('agency', next)}
             >
-              <AgencySchedulePanel />
+              <AgencySchedulePanel focusDay={scheduleDay} />
             </Section>
           </View>
     </View>
@@ -639,10 +716,12 @@ function TonightCard({
   /*
    * `shift.eventKind` is the English discriminator DemoShift carries
    * ('Special event' | 'Normal shift'), which the badge style below still
-   * tests. It is never printed raw — this is the label that reaches the PR.
+   * tests. It is never printed raw — this is the label that reaches the PR,
+   * naming WHICH special night when the shift says ("Special event · VIP night").
    */
-  const eventKindLabel =
-    shift.eventKind === 'Special event' ? t.shifts.specialEvent : t.shifts.normalShift;
+  const kindLabel =
+    shift.kindLabel ??
+    (shift.eventKind === 'Special event' ? t.shifts.specialEvent : t.shifts.normalShift);
   return (
     <View style={[styles.shiftCard, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.08)')]}>
       <ImageLightbox uri={zoomUri} onClose={() => setZoomUri(null)} />
@@ -674,7 +753,7 @@ function TonightCard({
                   shift.eventKind === 'Special event' && styles.shiftHeroBadgeTextSpecial,
                 ]}
               >
-                {eventKindLabel}
+                {kindLabel}
               </Text>
             </View>
             <ZoomHint />
@@ -705,8 +784,10 @@ function TonightCard({
                 {t.shifts.agency}: {shift.agency}
               </Text>
             ) : null}
-            <Text style={styles.shiftEventLine} numberOfLines={1}>
-              {shift.event} · {eventKindLabel}
+            {/* Two lines, not one: "Launch party · Special event · VIP night"
+                would otherwise lose the very words that say which night. */}
+            <Text style={styles.shiftEventLine} numberOfLines={2}>
+              {shift.event} · {kindLabel}
             </Text>
             {open && shift.address ? (
               <View style={styles.shiftAddrRow}>
@@ -1027,6 +1108,19 @@ const styles = StyleSheet.create({
   },
   /** Stacks a todoCard's contents so its button gets the full width, not a gutter. */
   todoCardStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  /** "This swap request is no longer open" — informational, so no status colour. */
+  todoNotice: {
+    ...font(600),
+    fontSize: 13,
+    lineHeight: 19,
+    color: C.txt,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 10,
+  },
   overdueHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   overdueFacts: {
     marginTop: 10,

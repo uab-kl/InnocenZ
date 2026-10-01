@@ -10,6 +10,8 @@ import {
 } from "@agency-portal/components/agency/RosterShiftEarningsSheets";
 import { formatRM, IzPill } from "@agency-portal/components/iz/ui";
 import { PortalClickableTableRow } from "@agency-portal/components/portal/PortalClickableTableRow";
+import { useAgencyDayRoster } from "@agency-portal/hooks/use-agency-day-roster";
+import { useAgencyRecordedFloorSales } from "@agency-portal/hooks/use-agency-floor-sales";
 import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import type {
 	AgencyManagedPR,
@@ -17,11 +19,8 @@ import type {
 	LiveWorkforceEntry,
 } from "@agency-portal/lib/agency-demo";
 import {
-	agencyPortalLabel,
 	resolveRosterPrName,
 	rosterSlotAgencyName,
-	rosterSlotsForAgency,
-	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import { agencyPathPermission } from "@agency-portal/lib/agency-rbac";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
@@ -37,6 +36,7 @@ import {
 import { formatPrDisplayName } from "@agency-portal/lib/pr-demo";
 import { formatRosterShiftTime } from "@agency-portal/lib/pr-session";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
+import { liveSalesFromRecorded } from "@agency-portal/lib/roster-recorded-sales";
 import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Link } from "@tanstack/react-router";
@@ -247,17 +247,17 @@ export function LiveWorkforceTable({
 	const panelTitle = title ?? t.agencyHome.liveWorkforce;
 	// Agency portal — scope live workforce to PRs under the signed-in agency
 	// (ownership or dual-tied membership). Outlet live floor uses a separate component.
-	const activeAgencyId = useStore((s) => s.activeAgencyId);
-	const allAgencyRoster = useStore((s) => s.agencyRoster);
-	const allAgencyPRs = useStore((s) => s.agencyPRs);
-	const agencyPRs = useMemo(
-		() => scopeToAgency(allAgencyPRs, activeAgencyId),
-		[allAgencyPRs, activeAgencyId],
-	);
-	const agencyRoster = useMemo(
-		() => rosterSlotsForAgency(allAgencyRoster, allAgencyPRs, activeAgencyId),
-		[allAgencyRoster, allAgencyPRs, activeAgencyId],
-	);
+	//
+	// A REAL session reads the backend roster and PR records (the store's copy
+	// is blank on a real login — this table used to say "No PRs on the floor"
+	// beside a Roster full of checked-in PRs), and the day's floor sales as the
+	// server recorded them. A demo session keeps the store and its fixtures.
+	const {
+		slots: agencyRoster,
+		agencyPRs,
+		agencyLabel: viewingAgencyLabel,
+	} = useAgencyDayRoster({ dateIso });
+	const { recordedBySlotId } = useAgencyRecordedFloorSales({ dateIso });
 	const shifts = useStore((s) => s.shifts);
 	const drinkMenu = useStore((s) => s.outletWorkspace.drinkMenu ?? []);
 	const receiptScans = useStore((s) => s.prReceiptScans ?? []);
@@ -348,7 +348,6 @@ export function LiveWorkforceTable({
 		() => new Map(agencyPRs.map((p) => [p.id, p])),
 		[agencyPRs],
 	);
-	const viewingAgencyLabel = agencyPortalLabel(activeAgencyId);
 
 	const panelClass = ["iz-portal-panel", className].filter(Boolean).join(" ");
 	const wrapClass = embedded ? className : panelClass;
@@ -422,21 +421,18 @@ export function LiveWorkforceTable({
 					<tbody>
 						{filtered.map((w) => {
 							const slot = slotById.get(w.id);
-							const floor = slot
-								? rosterSlotLiveFloorSales({
-										slot,
-										outletShifts: shifts,
-										drinkMenu,
-										receiptScans,
-									})
-								: {
-										salesRm: 0,
-										drinkSalesRm: 0,
-										drinkUnits: 0,
-										tipRm: 0,
-										// No shift, so no receipts to measure an HH split from.
-										hhDrinkSalesRm: null,
-									};
+							// Real session: the server's recorded row, or "—". Demo: the
+							// fixture engine. No slot: nothing to price at all.
+							const floor = !slot
+								? liveSalesFromRecorded(undefined)
+								: recordedBySlotId
+									? liveSalesFromRecorded(recordedBySlotId.get(slot.id))
+									: rosterSlotLiveFloorSales({
+											slot,
+											outletShifts: shifts,
+											drinkMenu,
+											receiptScans,
+										});
 							const prId = linkPrProfiles ? prIdBySlotId.get(w.id) : undefined;
 							return (
 								<WorkforceRow
@@ -461,6 +457,7 @@ export function LiveWorkforceTable({
 					kind={earningsSheet?.kind ?? null}
 					anchorSlot={earningsSheet?.slot ?? null}
 					earningsContext={earningsContext}
+					recordedBySlotId={recordedBySlotId}
 					onClose={() => setEarningsSheet(null)}
 				/>
 			)}

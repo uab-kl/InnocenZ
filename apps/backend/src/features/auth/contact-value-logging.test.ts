@@ -505,9 +505,12 @@ describe('OtpController.send — WhatsApp not configured (local dev)', () => {
       update: vi.fn(async () => null),
     };
     const users = { getUserByLoginMethod: vi.fn(async () => null) };
-    // TWO arguments on purpose: the third is the injectable `deliver`, and
-    // leaving it out is what makes this test drive the REAL fan-out.
-    const controller = new OtpControllerClass(phoneVerifications as never, users as never);
+    // No `deliver` on purpose: leaving it out is what makes this test drive the
+    // REAL fan-out. No sign-up floor either, so it does not really wait
+    // (otp-send-timing.test.ts pins the floor).
+    const controller = new OtpControllerClass(phoneVerifications as never, users as never, {
+      signupAnswerFloorMs: 0,
+    });
     const res = fakeRes();
     await controller.send(fakeReq({ phoneNum: PHONE, purpose: 'signup' }), res);
 
@@ -540,7 +543,9 @@ describe('OtpController.send — WhatsApp not configured (local dev)', () => {
       update: vi.fn(async () => null),
     };
     const users = { getUserByLoginMethod: vi.fn(async () => null) };
-    const controller = new OtpControllerClass(phoneVerifications as never, users as never);
+    const controller = new OtpControllerClass(phoneVerifications as never, users as never, {
+      signupAnswerFloorMs: 0,
+    });
     const res = fakeRes();
     await controller.send(fakeReq({ phoneNum: PHONE, purpose: 'signup', email: EMAIL }), res);
 

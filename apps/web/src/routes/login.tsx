@@ -91,10 +91,17 @@ type LoginError =
  */
 const SERVER_MESSAGE_LABELS: Record<string, (t: PortalTranslations) => string> =
 	{
-		"This account is not registered yet.": (t) =>
-			t.authPages.errorAccountNotRegistered,
+		/*
+		 * One answer for an unknown account, an account with no password and a
+		 * wrong password (owner, 29 Sep 2026: "General message, both") —
+		 * `account-answers.ts` in the backend. "This account is not registered
+		 * yet." and "Wrong password" are no longer sent.
+		 */
+		"Wrong email or password": (t) => t.authPages.errorWrongEmailOrPassword,
+		"Wrong phone number or password": (t) =>
+			t.authPages.errorWrongPhoneOrPassword,
+		// Said only once the password is right.
 		"This account is inactive.": (t) => t.authPages.errorAccountInactive,
-		"Wrong password": (t) => t.authPages.errorWrongPassword,
 	};
 
 function loginErrorText(error: LoginError, t: PortalTranslations): string {

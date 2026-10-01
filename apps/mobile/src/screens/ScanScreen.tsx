@@ -56,6 +56,8 @@ import {
 } from '../components/icons';
 import { pickProofPhotos } from '../lib/proof-photo';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
+import { EventPriceCard } from '../components/EventPriceCard';
+import { eventPriceRows, specialEventName } from '../lib/special-event';
 import { useLocale, formatMessage } from '../i18n';
 
 type Phase = 'idle' | 'scanning' | 'review' | 'manual' | 'logged';
@@ -174,6 +176,27 @@ export function ScanScreen({
     () => menuForScanCategory(drinkMenu, category),
     [drinkMenu, category],
   );
+  /*
+   * A special night's OWN prices (0167), for this page — SHOWN beside the list
+   * above. `categoryMenu` prices every line this screen logs, and on such a
+   * night the server sends it AS the event's list (owner, 29 Sep 2026: "Use
+   * event prices"), so the card names the prices in force. Null = nothing to
+   * show (not special, no list of its own, or not known).
+   */
+  const eventPrices = useMemo(
+    () => eventPriceRows(active, category),
+    [active, category],
+  );
+  const eventPricesCard =
+    eventPrices && active ? (
+      <EventPriceCard
+        title={formatMessage(t.scan.eventPricesTitle, {
+          event: specialEventName(active, t),
+        })}
+        rows={eventPrices}
+        note={t.scan.eventPricesNote}
+      />
+    ) : null;
   // Rendered nouns only — `category` itself stays the English 'tips' / 'drinks'
   // value the menu slice and the wire payload are keyed on. Chinese has no
   // plural, so the two forms are spelled out and picked by count rather than
@@ -863,6 +886,8 @@ export function ScanScreen({
                   </Text>
                 </View>
 
+                {eventPricesCard}
+
                 {/* A pure OCR scan is untouchable: what the receipt says is what
                     logs — no quantity edits, no manual additions. Wrong read?
                     The PR uses Self-log from Check-In instead. */}
@@ -970,6 +995,8 @@ export function ScanScreen({
                         </Text>
                       </View>
                     </View>
+
+                    {eventPricesCard}
 
                     {!editId && manualScanAttempted && (
                       <View style={[styles.ocrBlock, { marginTop: 10 }]}>

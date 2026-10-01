@@ -20,7 +20,12 @@ import {
 	updatePaymentVoucher,
 } from "@/services/payment-voucher";
 
-const PV_KEY = ["agency", "payment-vouchers"] as const;
+/**
+ * The agency voucher list's cache key. Exported so a read DERIVED from these
+ * vouchers can nest under it (`[...PV_KEY, …]`) and be refreshed by every
+ * invalidation of the list — History's take-home extras do exactly that.
+ */
+export const PV_KEY = ["agency", "payment-vouchers"] as const;
 
 /** Backend ids are uuids; the demo store uses short slugs like "pv1". */
 const UUID_RE =

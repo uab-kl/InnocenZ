@@ -1,5 +1,8 @@
 import { Router } from 'express';
-import { paymentVoucherController } from '@/composition-root.js';
+import {
+  historyExtrasController,
+  paymentVoucherController,
+} from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
 import { requirePermission } from '@/middlewares/require-permission.js';
 import { agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
@@ -126,6 +129,10 @@ router.use(requireRole('admin', 'agency'));
 const canDelete = requireRole('admin');
 
 router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
+
+// The agency History's take-home extras for one window (history-extras.ts) —
+// the list's own guard, and one segment, so it MUST precede '/:id' below.
+router.get('/history-extras', historyExtrasController.get.bind(historyExtrasController));
 
 // Day-by-day review, BEFORE the voucher goes to the PR. The READ rides on
 // GET '/:id' alongside the receipts rather than living on its own path, so the

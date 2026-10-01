@@ -107,8 +107,41 @@ export function fmtClock(date: Date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+/** U+2212 MINUS SIGN — the same glyph the Payment grid's `formatCell` prints. */
+const MINUS = '−';
+
+/**
+ * Ringgit as the app prints it: "RM 1,234.50" — and a NEGATIVE as "−RM 4.50",
+ * the sign in front of the currency.
+ *
+ * Formatting the signed number put the sign INSIDE the amount, so a week whose
+ * deductions outran its earnings read "RM -4.50" (seen on a PR's take-home,
+ * 30 Sep 2026). The magnitude is formatted and the minus placed before it.
+ *
+ * Signed on what is PRINTED: a value that rounds to 0.00 (−0, float dust like
+ * −0.001) prints unsigned, never "−RM 0.00".
+ *
+ * ONE sign per figure: a caller showing a deduction passes the negative
+ * (`formatRM(-fee)`), never a minus of its own in front of this.
+ */
 export function formatRM(n: number) {
-  return `RM ${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const amount = Math.abs(n).toLocaleString('en-MY', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const negative = n < 0 && /[1-9]/.test(amount);
+  return `${negative ? MINUS : ''}RM ${amount}`;
+}
+
+/**
+ * A bare amount, for a cell whose column already says RM: "20.00", and a
+ * NEGATIVE "−20.00" — the same minus `formatRM` puts before the currency. The
+ * Payment grid's cells and the evidence sheet's item table both print this, so
+ * a fee reads the same in the cell and in the proof behind it.
+ */
+export function formatAmount(n: number) {
+  const amount = Math.abs(n).toFixed(2);
+  return `${n < 0 && /[1-9]/.test(amount) ? MINUS : ''}${amount}`;
 }
 
 export function ymdToIso(y: number, m: number, d: number) {
@@ -159,6 +192,13 @@ export type DemoShift = {
    * it; callers fall back to 'Normal shift', which is also the column default.
    */
   eventKind?: string;
+  /**
+   * The kind IN WORDS, already localized — "Special event · VIP night", a bare
+   * "Special event", "Normal shift" (`eventKindLabel`, special-event.ts). Set
+   * for real assignments; the fixtures below have none, and the card then
+   * falls back to the bare kind from `eventKind`.
+   */
+  kindLabel?: string;
   /**
    * What the venue asked people to WEAR (0132), and the languages it would
    * like. Optional: the fixtures below predate both, and a shift posted before

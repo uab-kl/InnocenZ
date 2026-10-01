@@ -5,7 +5,6 @@ import { AgencyOutletRepository } from '@/features/agency/agency-outlet.reposito
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
-import { notifyMany } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -13,119 +12,72 @@ import { shiftTemplateBelongsToOutlet } from '@/features/shift-template/shift-te
 // Widens a named-PR pick across every invited agency that holds her (0131).
 import { listMembershipPairs } from '@/features/pr-personnel/pr.repository';
 import { logger } from '@/util/logger';
-import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
+import {
+  CreateShiftBatchSchema,
+  UpdateShiftSchema,
+  normaliseSpecialEvent,
+} from '@/schema/shift.schema';
 import { ShiftFilter, ShiftStatus, ShiftEventKind } from './shift.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
+import { shiftDayKey, shiftWindowInstants } from '@/util/slot-window';
 import {
-  shiftsOverlap,
-  shiftDayKey,
-  slotsAreSameWindow,
-  shiftWindowInstants,
-} from '@/util/slot-window';
+  batchItemShiftDate,
+  checkShiftPost,
+  createShiftPostContext,
+  shiftPostGuard,
+  type PreparedShiftPost,
+  type ShiftPostContext,
+} from './shift-post-check';
+import { demandExceedsQuantity, UNKNOWN_TEMPLATE_REFUSAL } from './shift-venue-rules';
+import { moveRefusal, shiftEditRules } from './shift-edit-rules';
+import { writeUnlessRefused } from './shift-write-guard';
 import {
-  outletDailyPrUsage,
-  resolveActivePlanLimit,
-} from '@/features/subscription/plan-limit';
+  notifyPostedAfterCommit,
+  notifyShiftWithdrawn,
+  type ShiftNotificationDeps,
+} from './shift-notifications';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
+
+/**
+ * `PUT /shift/:id`'s success sentence when the edit SEALS the night. The web
+ * Calendar shows it (translated by exact match — change both together).
+ */
+export const SHIFT_SEALED_MESSAGE = 'Shift sealed — no one else can be added to it';
+
+/**
+ * `POST /shift/batch`'s success sentence. Post Job shows it as its toast,
+ * translated by pattern in the web's `outlet-write-refusal.ts` — change both
+ * together.
+ */
+export function shiftsPostedMessage(count: number): string {
+  return `Posted ${count} shift${count === 1 ? '' : 's'}`;
+}
+
+/**
+ * A refusal in the one shape every shift write answers with — whether the check
+ * refused it or the write's guard did (shift-write-guard.ts), so the two can
+ * never drift apart.
+ */
+function refuse(
+  res: Response,
+  refusal: { status: number; message: string | undefined },
+  data: { index: number; shiftDate: string | null } | null = null,
+) {
+  return res.status(refusal.status).json({ success: false, message: refusal.message, data });
+}
+
+/** WHICH shift stopped a batch, so the screen can name its date. */
+function batchItem(items: readonly unknown[], index: number) {
+  return { index, shiftDate: batchItemShiftDate(items[index]) };
+}
 
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(req.query.pageSize) || DEFAULT_PAGE_SIZE));
   return { page, pageSize };
-}
-
-/**
- * `shift.quantity` governs: the per-tier rows PARTITION the headcount, they never
- * add to it. Returns the refusal message, or null when the shift is consistent.
- *
- * Enforced at AUTHORING time because assignment reads these rows as a hard cap —
- * demand that exceeds the headcount is a shift no one can ever staff correctly,
- * and it is far cheaper to refuse the save than to explain the stalemate later.
- *
- * Skipped when the quantity is unknown (omitted on create, where the column
- * default applies): there is nothing to compare against, and the assign-side
- * total-headcount guard still holds.
- */
-function demandExceedsQuantity(
-  payTiers: { prCount?: number }[] | undefined,
-  quantity: number | undefined,
-): string | null {
-  if (!payTiers?.length || quantity === undefined || quantity === null) return null;
-  const asked = payTiers.reduce((n, row) => n + (row.prCount ?? 0), 0);
-  return asked > quantity
-    ? `The pay tiers ask for ${asked} PRs but this shift only has ${quantity} slot${quantity === 1 ? '' : 's'} — lower a tier's count or raise the headcount.`
-    : null;
-}
-
-/**
- * The venue's PLAN capacity, as a refusal message or null.
- *
- * The plan governs how many PRs a venue may REQUEST in a calendar day, so the
- * day's usage is the sum of `quantity` across its shifts that date — a shift
- * posted for 8 consumes 8 whether or not anyone is rostered onto it yet.
- *
- * NO ACTIVE PLAN REFUSES OUTRIGHT (owner's call, 2 Sep 2026). This used to wave
- * such a venue through on the reasoning that "no subscription is a billing
- * problem, not a posting problem" — but the effect was the opposite of what that
- * sentence implies: because `resolveActivePlanLimit` returned nothing and the
- * check below was skipped, a venue with NO plan could request UNLIMITED PRs a
- * day, while a venue paying for the cheapest one was capped. The failure ran in
- * the permissive direction, so holding the cheapest plan was strictly worse than
- * holding none. The rule is now that no outlet may exist without a plan, and
- * this is where a venue that somehow does is stopped.
- *
- * It is checked BEFORE the `asking <= 0` return, unlike the capacity rule below:
- * "you have no plan" does not depend on the headcount, and a shift created
- * without an explicit quantity would otherwise slip past the gate entirely.
- *
- * Two cases still do NOT refuse:
- *   • `limitAmount` null on a real plan — Premier and the open-ended bands are a
- *     floor with no ceiling, and the POS add-on is not a capacity product.
- *   • the lookup or the usage count FAILED — a gate must not refuse on a fact it
- *     does not have, and must not read a failed count as "nothing used" either.
- *     This is why `PlanLookup` separates `none` from `unknown`: a database blip
- *     must not read as "no plan" and take every venue offline at once.
- */
-const NO_PLAN_REFUSAL =
-  'This venue has no active subscription plan, so it cannot post shifts. ' +
-  'Choose a plan under Settings → Subscription, or contact InnocenZ.';
-
-async function planCapacityRefusal(params: {
-  outletId: string;
-  shiftDate: string;
-  adding: number | undefined;
-  excludeShiftId?: string;
-}): Promise<string | null> {
-  const plan = await resolveActivePlanLimit({
-    subscriberType: 'outlet',
-    subscriberId: params.outletId,
-  });
-  if (plan.kind === 'unknown') return null;
-  if (plan.kind === 'none') return NO_PLAN_REFUSAL;
-
-  const asking = params.adding ?? 0;
-  if (asking <= 0) return null;
-  if (plan.limitAmount === null) return null;
-
-  const used = await outletDailyPrUsage({
-    outletId: params.outletId,
-    shiftDate: params.shiftDate,
-    excludeShiftId: params.excludeShiftId,
-  });
-  if (used < 0) return null;
-
-  const total = used + asking;
-  if (total <= plan.limitAmount) return null;
-
-  const left = Math.max(0, plan.limitAmount - used);
-  return (
-    `Your ${plan.planName} plan covers ${plan.limitAmount} PR${plan.limitAmount === 1 ? '' : 's'} a day. ` +
-    `${used} already requested on ${params.shiftDate}, so this shift can ask for at most ${left} more — ` +
-    `lower the headcount or upgrade the plan.`
-  );
 }
 
 export class ShiftControllerClass {
@@ -147,106 +99,6 @@ export class ShiftControllerClass {
   /** True when the caller is an outlet operator (no admin/agency scope, ≥1 outlet). */
   private isOutletCaller(scope: OrgScope): boolean {
     return isOutletCaller(scope);
-  }
-
-  /**
-   * Is this venue live enough to post work — as a refusal message, or null.
-   *
-   * ONLY `active` MAY POST. A `pending_review` venue has not been let in yet, a
-   * `suspended` one has been shut out, and an `inactive` one cannot even sign
-   * in. All three are already refused by the portal's own routing
-   * (`isOrgProfileOnly` → no nav at all), but that lives in apps/web, and a
-   * client-side gate is a UI convenience rather than a rule.
-   *
-   * ⚠️ A LOOKUP FAILURE DOES NOT REFUSE. `getById` returns null both for "no
-   * such venue" and for a query that threw, and a database blip must not take
-   * every venue offline at once — the same rule `planCapacityRefusal` follows
-   * for its own `unknown` case, and the reason `PlanLookup` distinguishes the
-   * two at all. A missing outlet id is caught by the scope checks above this,
-   * which run first.
-   *
-   * The message names the state, because the venue's own status is something
-   * its own people can already see, and "contact InnocenZ" with no reason is
-   * what sends someone to reset a password that was never the problem.
-   */
-  private async venueNotLiveRefusal(outletId: string): Promise<string | null> {
-    const outlet = await this.outletRepository.getById(outletId);
-    if (!outlet) return null;
-    if (outlet.status === 'active') return null;
-    if (outlet.status === 'pending_review') {
-      return (
-        'This venue is still awaiting InnocenZ approval, so it cannot post shifts yet. ' +
-        'You will be notified as soon as it is approved.'
-      );
-    }
-    return `This venue is ${outlet.status} and cannot post shifts. Contact InnocenZ to restore access.`;
-  }
-
-  /**
-   * A venue's own shifts must not collide in time — as a refusal message, or null.
-   *
-   * OWNER'S RULE (17 Aug 2026): "I don't want an outlet to have clashing time for
-   * their shifts." ANY overlap is refused, not merely an exact repeat.
-   *
-   * ⚠️ BACK-TO-BACK IS DELIBERATELY ALLOWED — it was blocked here for one revision and
-   * that was the wrong place for the rule. A venue running 11:00–12:00 and 12:00–13:00
-   * is posting two shifts it may well staff with two different people, which is its
-   * business and harms nobody. The real constraint is on the PERSON who would have to
-   * be in two places, and that is the assign-time travel gap; enforcing it here would
-   * have stopped a legitimate roster while still not stopping what actually goes wrong.
-   *
-   * Nothing before this looked at the clock at all. `create` checked the tier mix
-   * and the plan's daily headcount, and both of those measure a DAY — a day's demand
-   * is ADDITIVE, so 2 + 3 reads as a legitimate 5 whether that is two shifts or one
-   * shift said twice.
-   *
-   * Two tests, because they carry different advice and because `shiftsOverlap` needs
-   * a parseable window at both ends — two label-only slots ("Late night" twice on one
-   * date) are invisible to it and are caught by name instead.
-   *
-   * Returns null when the shift carries no slot: with no time given there is
-   * nothing to compare, and refusing on that would block a venue that posts
-   * untimed shifts on purpose.
-   */
-  private async shiftClashRefusal(params: {
-    outletId: string;
-    shiftDate: string;
-    slot: string | null | undefined;
-    excludeShiftId?: string;
-  }): Promise<string | null> {
-    if (!params.slot?.trim()) return null;
-
-    const nearby = await this.shiftRepository.listByOutletAroundDate({
-      outletId: params.outletId,
-      shiftDate: params.shiftDate,
-      excludeShiftId: params.excludeShiftId,
-    });
-
-    const sameDayAs = (other: string) =>
-      shiftDayKey(other) === shiftDayKey(params.shiftDate);
-    const clash = nearby.find(
-      (s) =>
-        shiftsOverlap(params.shiftDate, params.slot, s.shiftDate, s.slot) ||
-        (sameDayAs(s.shiftDate) && slotsAreSameWindow(s.slot, params.slot)),
-    );
-    if (!clash) return null;
-
-    const named = clash.eventName ? ` ("${clash.eventName}")` : '';
-    const where = `${clash.slot} on ${String(clash.shiftDate).slice(0, 10)}${named}`;
-
-    // Two shapes, two remedies — and a refusal that names the wrong one is barely
-    // better than no message: the same time twice wants a bigger headcount, an
-    // overlap wants a different clock.
-    if (slotsAreSameWindow(clash.slot, params.slot) && sameDayAs(clash.shiftDate)) {
-      return (
-        `You already have a shift at ${where}. Raise that shift's headcount instead of ` +
-        `posting a second one for the same time.`
-      );
-    }
-    return (
-      `This clashes with your shift at ${where} — an outlet's shifts cannot overlap. ` +
-      `Change this shift's time, or move the other one first.`
-    );
   }
 
   private resolveScope(req: Request): Promise<OrgScope> {
@@ -300,6 +152,19 @@ export class ShiftControllerClass {
         shifts.map((s) => s.id),
         !scope.isAdmin && !isOutletCaller ? (scope.agencyId ?? undefined) : undefined,
       );
+      // WHICH AGENCIES each shift was sent to (0124). The venue chose them, so it
+      // reads them back — its screens used to guess the agency from whoever was
+      // rostered, and named nobody (or the wrong one) on a shared shift. An agency
+      // caller gets nothing: who else a venue asked is never an agency's business.
+      const invitedByShift =
+        scope.isAdmin || isOutletCaller
+          ? await this.shiftRepository.listAgencyIdsForShifts(shifts.map((s) => s.id))
+          : null;
+      // A special event's OWN prices (0167), batched like the pay tiers. Only a
+      // special shift can hold any, so only those ids are asked about.
+      const eventMenuByShift = await this.shiftRepository.listEventDrinkMenuForShifts(
+        shifts.filter((s) => s.eventKind === 'special').map((s) => s.id),
+      );
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
@@ -310,6 +175,9 @@ export class ShiftControllerClass {
           staffedCount: staffedByShift.get(s.id)?.total ?? 0,
           staffedBuckets: staffedByShift.get(s.id)?.byBucket ?? {},
           requestedPrs: requestedByShift.get(s.id) ?? [],
+          ...(invitedByShift ? { agencyIds: invitedByShift.get(s.id) ?? [s.agencyId] } : {}),
+          // Empty = priced from the venue's Workspace list.
+          eventDrinkMenu: eventMenuByShift.get(s.id) ?? [],
         })),
         pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
       });
@@ -359,6 +227,18 @@ export class ShiftControllerClass {
             : undefined,
         )
       ).get(shift.id);
+      // Same rule as the list: the venue and admin read who it was sent to.
+      const invited =
+        scope.isAdmin || this.isOutletCaller(scope)
+          ? ((await this.shiftRepository.listAgencyIdsForShifts([shift.id])).get(shift.id) ?? [
+              shift.agencyId,
+            ])
+          : null;
+      // The special event's own prices (0167) — as the list serves them.
+      const eventDrinkMenu =
+        shift.eventKind === 'special'
+          ? await this.shiftRepository.listEventDrinkMenuForShift(shift.id)
+          : [];
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -368,6 +248,8 @@ export class ShiftControllerClass {
           staffedCount: staffed?.total ?? 0,
           staffedBuckets: staffed?.byBucket ?? {},
           requestedPrs: requested ?? [],
+          ...(invited ? { agencyIds: invited } : {}),
+          eventDrinkMenu,
         },
       });
     } catch (error) {
@@ -376,218 +258,143 @@ export class ShiftControllerClass {
     }
   }
 
+  /**
+   * What this request knows while it checks posts (`createShiftPostContext`):
+   * the caller, and each venue's standing facts — read once per venue, however
+   * many items of a batch name it.
+   */
+  private postContext(req: Request): ShiftPostContext {
+    return createShiftPostContext({
+      resolveScope: () => this.resolveScope(req),
+      actor: getActor(req),
+      shiftRepository: this.shiftRepository,
+      outletRepository: this.outletRepository,
+      agencyOutletRepository: this.agencyOutletRepository,
+    });
+  }
+
+  /** The repositories every announcement reads (shift-notifications.ts). */
+  private notificationDeps(): ShiftNotificationDeps {
+    return {
+      agencyMemberRepository: this.agencyMemberRepository,
+      outletRepository: this.outletRepository,
+      shiftRepository: this.shiftRepository,
+    };
+  }
+
   async create(req: Request, res: Response) {
     try {
-      const parsed = CreateShiftSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
-      }
+      const ctx = this.postContext(req);
+      const { actor } = ctx;
+      const check = await checkShiftPost(req.body, ctx, []);
+      if (!check.ok) return refuse(res, check.refusal);
 
-      const scope = await this.resolveScope(req);
-      let agencyId: string;
-      // Every agency invited to staff this shift (0124). Defaults to just the
-      // resolved `agencyId` so the admin path, which posts to one agency, keeps
-      // producing exactly the fan-out it always implied.
-      let selectedAgencyIds: string[] = [];
-      let outletId = parsed.data.outletId;
-      // An outlet posting a job is committing to run it, so it goes straight to
-      // `confirmed` — it shows up immediately as tonight's live shift (Today) and
-      // as a confirmed event (Calendar). Admin creates keep the table default
-      // (`draft`). The client cannot set status; this is authoritative.
-      let postedStatus: 'confirmed' | undefined;
-      if (scope.isAdmin) {
-        if (!parsed.data.agencyId) {
-          return res.status(400).json({ success: false, message: 'agencyId is required', data: null });
-        }
-        agencyId = parsed.data.agencyId;
-      } else if (scope.agencyId) {
-        // POSTING A SHIFT IS THE OUTLET'S ACT, and only the outlet's. The venue
-        // decides it needs staff and posts the job TO its onboarding agency;
-        // `outlet.onboarded_by_agency_id` is the routing address for that post,
-        // not a licence for the agency to author demand on the venue's behalf.
-        //
-        // The router already blocks plain agency tokens (`canCreate =
-        // requireRole('admin','outlet')`), so this branch was only ever reachable
-        // by someone holding the OUTLET role AND an agency membership:
-        // `isOutletCaller` requires `!agencyId`, so such a hybrid fell past the
-        // outlet branch into this one and created a shift for their agency at any
-        // outlet id they liked — no `scope.outletIds` check runs on this path.
-        return res.status(403).json({
-          success: false,
-          message: 'Only an outlet can post a shift. The outlet posts the job to its agency.',
-          data: null,
-        });
-      } else if (this.isOutletCaller(scope)) {
-        // Outlet posts a job at one of its own venues; the PR request is routed
-        // to the agency that onboarded that outlet. Any client-supplied agencyId
-        // is ignored — the routing is authoritative and cannot be forged.
-        if (!scope.outletIds.includes(outletId)) {
-          return res.status(403).json({ success: false, message: 'You can only create shifts for your own outlet', data: null });
-        }
-        // WHICH AGENCIES THIS JOB GOES TO (0123 + 0124).
-        //
-        // Resolved from the outlet's APPROVED links, never from
-        // `onboarded_by_agency_id` — that column is provenance now, and reading
-        // it here is exactly what limited a venue to a single agency. It also
-        // meant a self-signed-up outlet (null column) could never post at all.
-        //
-        // The client's selection is FILTERED against the approved set rather
-        // than trusted: a forged agencyId must not become an invitation.
-        const approved = await this.agencyOutletRepository.listApprovedAgencyIdsForOutlet(outletId);
-        if (approved.length === 0) {
-          return res.status(400).json({
-            success: false,
-            message: 'No approved agency to request PR from — link an agency in Settings first',
-            data: null,
-          });
-        }
-
-        const requested = parsed.data.agencyIds?.length ? parsed.data.agencyIds : approved;
-        selectedAgencyIds = requested.filter((id) => approved.includes(id));
-        if (selectedAgencyIds.length === 0) {
-          return res.status(403).json({
-            success: false,
-            message: 'None of the selected agencies are approved for this outlet',
-            data: null,
-          });
-        }
-        // The anchor is the first SELECTED agency, so `shift.agency_id` always
-        // names an agency that was genuinely invited. Scoping still goes via
-        // `shift_agency` — see the column comment in shift.model.ts.
-        agencyId = selectedAgencyIds[0];
-        postedStatus = 'confirmed';
-      } else {
-        return res.status(403).json({ success: false, message: 'No organization associated with this account', data: null });
-      }
-
-      // A template link must name one of the VENUE'S OWN cards — a forged id
-      // would hang another outlet's picture on this shift (0128).
-      if (parsed.data.templateId) {
-        const owns = await shiftTemplateBelongsToOutlet(parsed.data.templateId, outletId);
-        if (!owns) {
-          return res.status(400).json({ success: false, message: 'Unknown event template for this outlet', data: null });
-        }
-      }
-      const actor = getActor(req);
-      // payTiers is a child-table override, not a shift column — keep it out of
-      // the shift insert and persist it alongside in one transaction.
-      const { payTiers, requestedPrs, ...shiftData } = parsed.data;
-      // A NAMED PICK IS A PERSON, NOT A MEMBERSHIP (owner, 3 Sep 2026: "ask all
-      // their related agencies that got posted the job and have that PR").
-      //
-      // The picker draws ONE card per person, so the client could only ever name
-      // one membership — whichever `selectDistinctOn` left standing in the PR
-      // list, which is the NEWEST among the ticked agencies. Trusting it wrote a
-      // single row: Emhub posted to Atlas AND Why We Met, and only Why We Met
-      // (membership 12 Aug, vs Atlas 20 Jul) ever saw the ask. Measured on the
-      // live rows by scripts/_probe-request-pr-cross-agency.ts.
-      //
-      // So the pairs are RE-RESOLVED from the roster rather than trusted, and
-      // the client's `agencyId` is now advisory. Both halves of the owner's rule
-      // fall out of one expression: the invited set is the ONLY source of
-      // agencies, so an agency the venue did not post to never appears — not
-      // even when the PR is on its roster (Vicky's third agency, Delta) — and
-      // every invited agency that does hold her gets a row.
-      //
-      // Unknown or stale picks still DROP rather than refuse: the picker pool
-      // and the agency links can drift between page load and post, and losing
-      // one name must not sink the whole job.
-      const invitedForRequests =
-        selectedAgencyIds.length > 0 ? selectedAgencyIds : [agencyId];
-      const requestRows = await listMembershipPairs(
-        [...new Set((requestedPrs ?? []).map((r) => r.userId))],
-        invitedForRequests,
+      const { post } = check;
+      const written = await writeUnlessRefused(
+        this.shiftRepository.createWithPayTiers(
+          post.row,
+          post.payTiers,
+          actor,
+          // Server-resolved and already filtered against the outlet's approved
+          // links — never the raw client list.
+          post.selectedAgencyIds,
+          post.requestRows,
+          post.eventDrinkMenu,
+          // The clash and plan rules again, under the venue's lock, for a post
+          // that landed after the check above (shift-write-guard.ts).
+          shiftPostGuard(ctx, [post]),
+        ),
       );
-
-      const overAsked = demandExceedsQuantity(payTiers, shiftData.quantity);
-      if (overAsked) {
-        return res.status(400).json({ success: false, message: overAsked, data: null });
-      }
-
-      // A VENUE'S SHIFTS MUST NOT COLLIDE. Checked before the plan gate on purpose:
-      // a clash usually also pushes the day's total up, and answering it with "you
-      // are over your plan" sends the venue to upgrade a plan that is not the
-      // problem. The more specific cause wins.
-      const clash = await this.shiftClashRefusal({
-        outletId: shiftData.outletId,
-        shiftDate: shiftData.shiftDate,
-        slot: shiftData.slot,
-      });
-      if (clash) {
-        return res.status(409).json({ success: false, message: clash, data: null });
-      }
-
-      /**
-       * THE VENUE IS ACTUALLY LIVE — checked on the SERVER, which it never was.
-       *
-       * The portal has always confined a `pending_review` or `suspended` venue
-       * to Settings/Profile, but that is `canAccessOutletPath()` in apps/web:
-       * client RBAC. Nothing on this path ever read `outlet.status` — the only
-       * `outletRepository.getById` calls in this file fetch a venue NAME for a
-       * notification — so the API accepted a post from a venue the UI had locked
-       * out. That was survivable while billing ran from sign-up; now that the
-       * meter starts at approval (0157), it would be work done for free.
-       *
-       * Verified against the live database before shipping: all 8 outlets are
-       * `active` and all 4 venues that have ever posted are `active`, so this
-       * takes nobody offline today.
-       */
-      const notLive = await this.venueNotLiveRefusal(shiftData.outletId);
-      if (notLive) {
-        return res.status(403).json({ success: false, message: notLive, data: null });
-      }
-
-      // THE VENUE'S PLAN, enforced. Until now this cap lived only in the Post
-      // Job screen's own state, so anything that was not that screen — the API,
-      // a script, a second UI — could post past it silently.
-      const overPlan = await planCapacityRefusal({
-        outletId: shiftData.outletId,
-        shiftDate: shiftData.shiftDate,
-        adding: shiftData.quantity,
-      });
-      if (overPlan) {
-        return res.status(409).json({ success: false, message: overPlan, data: null });
-      }
-
-      const shift = await this.shiftRepository.createWithPayTiers(
-        {
-          ...shiftData,
-          agencyId, // authoritative — overrides any client-supplied value
-          ...(postedStatus ? { status: postedStatus } : {}),
-          createdBy: actor,
-          updatedBy: actor,
-        },
-        payTiers,
-        actor,
-        // Server-resolved and already filtered against the outlet's approved
-        // links — never the raw client list.
-        selectedAgencyIds,
-        requestRows,
-      );
+      // Refused inside the write: the check's own sentence, nothing written, no bell.
+      if (!written.ok) return refuse(res, written.refused);
+      const shift = written.written;
       res.status(201).json({ success: true, message: 'Shift created', data: shift });
 
-      // AFTER the response on purpose: the shift is already written, the venue
-      // must not wait on a notification fan-out, and a bell that fails must not
-      // read as a post that failed.
-      void this.notifyShiftPosted({
-        shift: {
-          id: shift.id,
-          shiftDate: shift.shiftDate,
-          slot: shift.slot ?? null,
-          eventName: shift.eventName ?? null,
-          quantity: shift.quantity,
-        },
-        outletId: shiftData.outletId,
-        // Every invited agency, not just the anchor — the same fan-out the
-        // withdrawal path learned to use (0124). Falls back to the anchor for the
-        // admin path, which posts to exactly one agency.
-        agencyIds: selectedAgencyIds.length > 0 ? selectedAgencyIds : [agencyId],
-        actor,
-      }).catch((error) => {
-        logger.error('[ShiftController.create] notify Error:', error);
-      });
+      notifyPostedAfterCommit(this.notificationDeps(), [{ post, shift }], actor, 'create');
     } catch (error) {
       logger.error('[ShiftController.create] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * `POST /shift/batch` — the shifts Post Job composes together, posted ALL OR
+   * NOTHING.
+   *
+   * The screen used to send them one `POST /shift` at a time. A refusal halfway
+   * (the plan's daily cap, a clash) left the earlier shifts posted while the form
+   * still held every one of them, so a retry double-posted or was refused as a
+   * clash with the very shifts it had just written — and the success handler
+   * never ran, so the venue could not even see which ones had gone.
+   *
+   * Every item runs `checkShiftPost` — the single post's own checks, in the same
+   * order — with the items before it counted as though already posted. The first
+   * refusal answers with that check's own sentence and status, names the item it
+   * stopped on (`data: { index, shiftDate }`), and NOTHING is written. Otherwise
+   * every shift is written in ONE transaction, and each is announced after the
+   * commit exactly as a single post announces itself.
+   *
+   * THE CHECK-THEN-INSERT RACE, CLOSED (30 Sep 2026). The checks READ and the
+   * transaction WRITES afterwards, so two posts landing together (two tabs, or a
+   * batch beside a single post) could each pass the clash and plan checks
+   * against a database holding neither, and both commit. The write's own
+   * transaction now locks every venue the batch touches before its first insert
+   * and re-runs those two rules through itself (`shiftPostGuard`,
+   * shift-write-guard.ts): the later post waits, reads the earlier one, and is
+   * refused just as the check would refuse it — item named, nothing written.
+   */
+  async createBatch(req: Request, res: Response) {
+    try {
+      const envelope = CreateShiftBatchSchema.safeParse(req.body);
+      if (!envelope.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: envelope.error.issues[0]?.message, data: null });
+      }
+
+      // ONE context for the whole batch: the caller's scope and each venue's
+      // standing facts are read once, however many items name them.
+      const ctx = this.postContext(req);
+      const { actor } = ctx;
+      const { items } = envelope.data;
+      let posts: readonly PreparedShiftPost[] = [];
+      for (let index = 0; index < items.length; index += 1) {
+        const check = await checkShiftPost(items[index], ctx, posts);
+        if (!check.ok) return refuse(res, check.refusal, batchItem(items, index));
+        posts = [...posts, check.post];
+      }
+
+      const written = await writeUnlessRefused(
+        this.shiftRepository.createManyWithPayTiers(
+          posts.map((post) => ({
+            data: post.row,
+            payTiers: post.payTiers,
+            agencyIds: post.selectedAgencyIds,
+            requestedPrs: post.requestRows,
+            eventDrinkMenu: post.eventDrinkMenu,
+          })),
+          actor,
+          shiftPostGuard(ctx, posts),
+        ),
+      );
+      if (!written.ok) {
+        return refuse(res, written.refused, batchItem(items, written.refused.index));
+      }
+      const shifts = written.written;
+      res.status(201).json({
+        success: true,
+        message: shiftsPostedMessage(shifts.length),
+        data: shifts,
+      });
+
+      notifyPostedAfterCommit(
+        this.notificationDeps(),
+        posts.map((post, index) => ({ post, shift: shifts[index] })),
+        actor,
+        'createBatch',
+      );
+    } catch (error) {
+      logger.error('[ShiftController.createBatch] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
@@ -620,7 +427,93 @@ export class ShiftControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const { payTiers, ...data } = parsed.data;
+      // `requestedPrs` and `agencyIds` are not shift columns, so leaving them in
+      // `data` meant the update silently dropped them: an edit that renamed the
+      // venue's picks answered "Shift updated" and changed nothing.
+      const {
+        payTiers,
+        requestedPrs,
+        agencyIds,
+        specialEventType,
+        customSpecialEventName,
+        eventDrinkMenu,
+        ...data
+      } = parsed.data;
+      // The special night's type, name and prices (0167), resolved against what
+      // the row already holds: an omitted field keeps it, an edit that makes the
+      // shift normal clears all three, and an edit naming none of them — a
+      // status change — writes none of them.
+      const special = normaliseSpecialEvent(
+        { eventKind: data.eventKind, specialEventType, customSpecialEventName, eventDrinkMenu },
+        {
+          eventKind: existing.eventKind,
+          specialEventType: existing.specialEventType ?? null,
+          customSpecialEventName: existing.customSpecialEventName ?? null,
+        },
+      );
+
+      // WHO a shift was sent to is fixed at posting — invitations, notifications
+      // and the other agencies' rosters all hang off it. Refused out loud rather
+      // than ignored, so a caller is never told a change landed that did not.
+      if (agencyIds !== undefined) {
+        return res.status(400).json({
+          success: false,
+          message: 'The agencies a shift was sent to cannot be changed — withdraw it and post it again.',
+          data: null,
+        });
+      }
+
+      // WHERE THE SHIFT ENDS UP. Outlets cannot move a shift to a different venue —
+      // their `outletId` is dropped below; an admin's is a move, and the shift then
+      // answers to the TARGET's rules (shift-edit-rules.ts).
+      const toOutletId = isOutlet ? existing.outletId : (data.outletId ?? existing.outletId);
+
+      if (toOutletId.toLowerCase() !== existing.outletId.toLowerCase()) {
+        // A move: its agencies must be approved at the target, and its template —
+        // named here or already linked — must be the target's own card.
+        const moveRefused = await moveRefusal(
+          {
+            approvedAgencyIds: (outletId) =>
+              this.agencyOutletRepository.listApprovedAgencyIdsForOutlet(outletId),
+            templateBelongsToOutlet: shiftTemplateBelongsToOutlet,
+          },
+          {
+            toOutletId,
+            // `existing.id`, never the URL's `id`: the map comes back keyed in the
+            // database's lower case, and a URL in capitals missed it — the move
+            // was then checked against the anchor alone (1 Oct 2026).
+            agencyIds: [
+              ...((await this.shiftRepository.listAgencyIdsForShifts([existing.id])).get(
+                existing.id,
+              ) ?? []),
+              data.agencyId ?? existing.agencyId,
+            ],
+            templateId: data.templateId ?? existing.templateId ?? null,
+          },
+        );
+        if (moveRefused) return refuse(res, moveRefused);
+      } else if (
+        // The same check create makes: a template must be one of THIS venue's own
+        // cards, or an edit could hang another outlet's picture on the shift.
+        data.templateId &&
+        !(await shiftTemplateBelongsToOutlet(data.templateId, existing.outletId))
+      ) {
+        return res.status(400).json({ success: false, message: UNKNOWN_TEMPLATE_REFUSAL, data: null });
+      }
+
+      // The venue's named picks, re-resolved exactly as create does: one row per
+      // INVITED agency that holds the person, never the client's pairing.
+      // Undefined leaves the existing picks untouched; an empty list clears them.
+      let requestRows: { userId: string; agencyId: string }[] | undefined;
+      if (requestedPrs !== undefined) {
+        const invited =
+          (await this.shiftRepository.listAgencyIdsForShifts([existing.id])).get(existing.id) ??
+          [existing.agencyId];
+        requestRows = await listMembershipPairs(
+          [...new Set(requestedPrs.map((r) => r.userId))],
+          invited,
+        );
+      }
 
       // SEALING: the venue declaring the night closed. Only legal on a shift
       // that has actually FINISHED.
@@ -666,10 +559,10 @@ export class ShiftControllerClass {
         return res.status(400).json({ success: false, message: overAsked, data: null });
       }
 
-      // What this edit makes the shift's timing. Computed here rather than beside
-      // the double-booking loop below because BOTH timing guards need it, and the
-      // duplicate check has to run before the plan gate for the same reason it does
-      // on create — the specific cause beats the incidental one.
+      // What this edit makes the shift's timing — read by BOTH timing rules (the
+      // venue clash and the PR double-booking, shift-edit-rules.ts), and the clash
+      // runs before the plan gate for the same reason it does on create: the
+      // specific cause beats the incidental one.
       const nextSlot = data.slot === undefined ? existing.slot : data.slot;
       const nextDate = data.shiftDate === undefined ? existing.shiftDate : data.shiftDate;
       const timingChanged =
@@ -677,263 +570,67 @@ export class ShiftControllerClass {
         (data.shiftDate !== undefined &&
           shiftDayKey(nextDate) !== shiftDayKey(existing.shiftDate));
 
-      // An edit is the other way two shifts end up on top of each other: post 11:00
-      // and 15:00, then drag the second onto 12:00. Refusing that on create alone
-      // would leave the hole open through the back door.
-      //
-      // Gated on `timingChanged` deliberately. A row that already clashed before this
-      // guard existed must stay editable — otherwise the venue can neither change its
-      // headcount nor move it out of the way, which is the only fix available.
-      if (timingChanged) {
-        // Named apart from the `clash` inside the PR double-booking loop below —
-        // that one is about one PERSON's other shifts, this one about this VENUE's.
-        const venueClash = await this.shiftClashRefusal({
-          outletId: existing.outletId,
-          shiftDate: String(nextDate).slice(0, 10),
+      // An edit is the other way two shifts end up on top of each other (post 11:00
+      // and 15:00, then drag the second onto 12:00), and the other way a PR gets
+      // double-booked (drag a shift onto another one its PR works). Both rules, the
+      // plan gate, and — when an ADMIN moves the shift to another venue — that
+      // venue's own rules, live in shift-edit-rules.ts. They run here as the check,
+      // and again inside the write as its guard, under the venues' locks, this
+      // shift's seat lock and its PRs' booking locks (30 Sep 2026).
+      const editRules = shiftEditRules(
+        {
+          shiftRepository: this.shiftRepository,
+          outletRepository: this.outletRepository,
+          assignments: this.shiftAssignmentRepository,
+        },
+        {
+          // The stored id: the PR rule compares it in code with the ids her
+          // bookings carry, and a URL in capitals never matched her booking on
+          // THIS shift — re-timing it then clashed with itself.
+          shiftId: existing.id,
+          fromOutletId: existing.outletId,
+          toOutletId,
+          shiftDate: nextDate,
           slot: nextSlot,
-          excludeShiftId: id,
-        });
-        if (venueClash) {
-          return res.status(409).json({ success: false, message: venueClash, data: null });
-        }
-      }
-
-      // The same plan gate as create, measured against the day WITHOUT this
-      // shift's current headcount — otherwise raising a shift from 4 to 5 would
-      // be checked as 9 and refused for a day that has room.
-      const overPlanOnEdit = await planCapacityRefusal({
-        outletId: existing.outletId,
-        shiftDate: data.shiftDate === undefined ? existing.shiftDate : data.shiftDate,
-        adding: data.quantity ?? existing.quantity,
-        excludeShiftId: id,
-      });
-      if (overPlanOnEdit) {
-        return res.status(409).json({ success: false, message: overPlanOnEdit, data: null });
-      }
+          timingChanged,
+          adding: data.quantity ?? existing.quantity,
+        },
+      );
+      const editRefused = await editRules.check();
+      if (editRefused) return refuse(res, editRefused);
 
       // Agency users cannot move a shift to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
       // Outlets cannot move a shift to a different venue.
       if (isOutlet) delete data.outletId;
 
-      // Moving a shift's time is the OTHER way a PR gets double-booked.
-      // Assigning already refuses a clash (shift-assignment create), but nothing
-      // stopped an edit from dragging this shift on top of another one the same
-      // PR already works — same outcome, opposite direction, and it lands
-      // silently because nobody is assigning anything at that moment.
-      // `nextSlot` / `nextDate` / `timingChanged` are computed above, alongside the
-      // duplicate-slot guard that reads the same three values.
-      if (timingChanged) {
-        const assigned = await this.shiftAssignmentRepository.listByShift(id);
-        const live = assigned.filter(
-          (a) => !['cancelled', 'no_show', 'leave_approved'].includes(a.status),
-        );
-        for (const a of live) {
-          const others = await this.shiftAssignmentRepository.listForPr(a.prId);
-          const clash = others.find(
-            (o) =>
-              o.shiftId !== id &&
-              !['cancelled', 'no_show', 'leave_approved'].includes(o.status) &&
-              shiftsOverlap(nextDate, nextSlot, o.shiftDate, o.slot),
-          );
-          if (clash) {
-            /*
-             * ⚠️ WHOSE shift it collides with decides what may be SAID about it —
-             * and on THIS route the caller is the VENUE, so "own" means this
-             * venue's other shift, not this agency's.
-             *
-             * `listForPr` above carries no agency filter, and cannot: a person is
-             * in one place at a time whoever booked them. So on a shared shift the
-             * row it finds is routinely ANOTHER agency's booking at a THIRD venue,
-             * and the old message named it outright — "they already work
-             * 21:00 - 03:00 at JK House". That hands a venue a competitor's name,
-             * its trading hours, and by elimination the fact that a rival agency
-             * booked this PR: the exact disclosure the assign-side refusals were
-             * rewritten to prevent. The pointer was already in the codebase — the
-             * overlap helper's note says this guard "tests overlap the same way" —
-             * and the fix simply never crossed over.
-             *
-             * The foreign branch says only that the PR is not free then, and it
-             * must stay ONE string for every non-own cause: two distinguishable
-             * refusals let a caller walk the clock and read off where the other
-             * venue is.
-             */
-            const sameVenue = clash.outletId === existing.outletId;
-            return res.status(400).json({
-              success: false,
-              message: sameVenue
-                ? `That time clashes with another shift this PR works here (${clash.slot ?? 'a shift'}) — move that one first, or unassign them here.`
-                : 'A PR on this shift is not available at that time — pick another time, or unassign them here.',
-              data: null,
-            });
-          }
-        }
-      }
-
       const actor = getActor(req);
-      const shift = await this.shiftRepository.updateWithPayTiers(
-        id,
-        { ...data, updatedBy: actor },
-        payTiers,
-        actor,
+      const written = await writeUnlessRefused(
+        this.shiftRepository.updateWithPayTiers(
+          id,
+          { ...data, ...special.columns, updatedBy: actor },
+          payTiers,
+          actor,
+          requestRows,
+          special.eventDrinkMenu,
+          editRules.guard,
+        ),
       );
+      if (!written.ok) return refuse(res, written.refused);
+      const shift = written.written;
       if (!shift) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Shift updated', data: shift });
+      // Closing a night says what closing DID (confirm-every-action rule): the
+      // Calendar used to shut its sheet on a bare "Shift updated" nobody saw.
+      const sealedNow = data.status === 'sealed' && existing.status !== 'sealed';
+      res.status(200).json({
+        success: true,
+        message: sealedNow ? SHIFT_SEALED_MESSAGE : 'Shift updated',
+        data: shift,
+      });
     } catch (error) {
       logger.error('[ShiftController.update] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
-  }
-
-  /**
-   * Tell the invited agencies that a venue has just asked for staff.
-   *
-   * Posting used to be SILENT on the agency's end. The shift reached them only
-   * when somebody happened to open the roster and a 30-second-stale query
-   * refetched, so the venue pressed Post and then had no way to know whether
-   * anyone had seen it. Withdrawal notified; creation did not — the half that
-   * takes work off the table was announced and the half that puts work on it was
-   * not.
-   *
-   * Reuses `shift_cover_needed` rather than adding a `shift_posted` kind. That
-   * kind is already AGENCY-addressed and already means "seats need filling",
-   * which is exactly true here — only the cause differs (a new post rather than
-   * a dropout). Same reasoning `notifyShiftWithdrawn` gives just below for
-   * reusing `shift_cancelled`, and it avoids a `notification_kind` enum
-   * migration on a shared database. If the two ever need filtering apart, a
-   * dedicated kind is the fix and it costs one hand-authored migration.
-   *
-   * ⚠️ Names the VENUE but never another agency. On a shared shift several
-   * agencies are invited at once, and each one is told only that the venue is
-   * asking — never who else was asked. Same rule as the busy flag: an agency
-   * learns WHAT it can act on, never who it is competing with.
-   *
-   * Never throws: the shift IS created, and a failed notification must not be
-   * reported to the outlet as a failed post.
-   */
-  private async notifyShiftPosted(input: {
-    shift: { id: string; shiftDate: string; slot: string | null; eventName: string | null; quantity: number };
-    outletId: string;
-    agencyIds: string[];
-    actor: string;
-  }): Promise<void> {
-    const { shift, outletId, agencyIds, actor } = input;
-    if (agencyIds.length === 0) return;
-
-    const outlet = await this.outletRepository.getById(outletId);
-    const where = outlet?.name ?? 'A venue';
-    const when = `${shift.shiftDate}${shift.slot ? ` · ${shift.slot}` : ''}`;
-
-    const memberLists = await Promise.all(
-      agencyIds.map((agencyId) => this.agencyMemberRepository.listByAgency(agencyId)),
-    );
-    // Deduped: one person can hold a membership at more than one invited agency
-    // and must not be told twice about a single shift.
-    const recipients = [
-      ...new Set(
-        memberLists
-          .flat()
-          .filter((m) => m.status === 'active')
-          .map((m) => m.userId),
-      ),
-    ];
-    if (recipients.length === 0) return;
-
-    await notifyMany(recipients, {
-      kind: 'shift_cover_needed',
-      title: `New shift — ${where}`,
-      body: `${where} posted a shift on ${when}${
-        shift.eventName ? ` (${shift.eventName})` : ''
-      } and needs ${shift.quantity} PR${shift.quantity === 1 ? '' : 's'}.`,
-      payload: {
-        shiftId: shift.id,
-        shiftDate: shift.shiftDate,
-        outletName: outlet?.name ?? null,
-        posted: true,
-      },
-      actor,
-    });
-  }
-
-  /**
-   * Tell everyone a withdrawn shift mattered to: the PRs who were booked on it,
-   * and the agency that staffed it.
-   *
-   * Both use the existing `shift_cancelled` kind. That kind names the EVENT — a
-   * shift that was on is now off — which is exactly true for both audiences, and
-   * it avoids a `notification_kind` enum migration on a shared database for a
-   * message that reads identically. If these two ever need to be filtered apart
-   * (a PR-only inbox, say), a dedicated `shift_withdrawn` kind is the fix, and it
-   * costs one hand-authored migration.
-   *
-   * Never throws: the shift is already gone, and a failed notification must not
-   * be reported to the outlet as a failed withdrawal.
-   */
-  private async notifyShiftWithdrawn(input: {
-    shift: { id: string; agencyId: string; shiftDate: string; slot: string | null; eventName: string | null };
-    outletName: string | null;
-    affected: { prId: string; userId: string | null }[];
-    actor: string;
-  }): Promise<void> {
-    const { shift, outletName, affected, actor } = input;
-    const where = outletName ?? 'the venue';
-    const when = `${shift.shiftDate}${shift.slot ? ` · ${shift.slot}` : ''}`;
-    const payload = {
-      shiftId: shift.id,
-      shiftDate: shift.shiftDate,
-      outletName,
-      withdrawn: true,
-    };
-
-    // `shift_assignment.pr_id` IS the user id after 0089, so `userId` and `prId`
-    // are the same value; prefer the explicit column and fall back.
-    const prRecipients = [
-      ...new Set(affected.map((a) => a.userId ?? a.prId).filter(Boolean)),
-    ] as string[];
-    if (prRecipients.length > 0) {
-      await notifyMany(prRecipients, {
-        kind: 'shift_cancelled',
-        title: 'A shift was withdrawn',
-        body: `${where} withdrew the shift on ${when}. You are no longer booked for it.`,
-        payload,
-        actor,
-      });
-    }
-
-    // EVERY invited agency, not just the anchor (0124).
-    //
-    // The PRs above are notified from `shift_assignment`, so they already hear
-    // about this correctly. Reading `shift.agencyId` here meant that on a shared
-    // shift the other agencies' PRs were told their booking had gone while the
-    // agencies that rostered them were told nothing — the worst possible split,
-    // because the first the agency learns of it is a PR asking why.
-    const invited =
-      (await this.shiftRepository.listAgencyIdsForShifts([shift.id])).get(shift.id) ??
-      [shift.agencyId];
-    const memberLists = await Promise.all(
-      invited.map((agencyId) => this.agencyMemberRepository.listByAgency(agencyId)),
-    );
-    // Deduped: one person can hold a membership at more than one of the invited
-    // agencies, and they should not get the same withdrawal twice.
-    const agencyRecipients = [
-      ...new Set(
-        memberLists
-          .flat()
-          .filter((m) => m.status === 'active')
-          .map((m) => m.userId),
-      ),
-    ];
-    if (agencyRecipients.length === 0) return;
-    await notifyMany(agencyRecipients, {
-      kind: 'shift_cancelled',
-      title: `Shift withdrawn — ${where}`,
-      body:
-        affected.length > 0
-          ? `${where} withdrew the shift on ${when}. ${affected.length} booked PR${affected.length === 1 ? ' was' : 's were'} released and notified.`
-          : `${where} withdrew the shift on ${when}. Nobody was booked on it.`,
-      payload: { ...payload, releasedCount: affected.length },
-      actor,
-    });
   }
 
   async remove(req: Request, res: Response) {
@@ -996,7 +693,7 @@ export class ShiftControllerClass {
       // and a failed notification must not be reported as a failed delete. Both
       // sides are told — the PRs because their booking vanished, the agency
       // because it staffed a night that no longer exists.
-      void this.notifyShiftWithdrawn({
+      void notifyShiftWithdrawn(this.notificationDeps(), {
         shift: existing,
         outletName: outlet?.name ?? null,
         affected,

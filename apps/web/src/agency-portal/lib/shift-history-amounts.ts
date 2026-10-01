@@ -24,6 +24,12 @@ export type ShiftHistoryMoneyBreakdown = {
 	otRm: number;
 	drinkCommissionRm: number;
 	tipCommissionRm: number;
+	/**
+	 * Taken OFF the payout — voucher deductions and penalty lines, positive RM.
+	 * Only a PR-level total on the agency History carries one (a deduction
+	 * belongs to a voucher week, never to a night); absent everywhere else.
+	 */
+	deductionsRm?: number;
 	totalPayout: number;
 };
 
@@ -202,8 +208,12 @@ export function resolveShiftHistoryBreakdown(
 	const tipSalesRm = roundRm(row.totalTips);
 	const serviceSalesRm = resolveShiftServiceSalesRm(row);
 	const totalReceived = roundRm(drinkSalesRm + tipSalesRm + serviceSalesRm);
+	// A server-sealed row is never "repaired": its tip commission is the
+	// voucher's own line, and a venue paying 100% of tips is a real rate, not
+	// the legacy bug the heuristic below was written for.
 	const useStored =
-		hasStoredPayoutBreakdown(row) && !tipCommissionIgnoresWorkspacePct(row);
+		hasStoredPayoutBreakdown(row) &&
+		(row.serverSealed === true || !tipCommissionIgnoresWorkspacePct(row));
 
 	if (useStored) {
 		const wagesRm = roundRm(row.wagesRm ?? 0);

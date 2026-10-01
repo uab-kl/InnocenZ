@@ -284,6 +284,12 @@ export type SignupFieldCopy = {
   toastOtpExpired: string;
   toastRegisterFailed: string;
   toastOtpWrong: string;
+  /**
+   * The account was created but the sign-in right after it failed — shown on
+   * the sign-in screen she is sent to (30 Sep 2026). Retrying sign-up could
+   * only answer "that phone number already has an account".
+   */
+  accountReadySignIn: string;
 };
 
 const en: SignupFieldCopy = {
@@ -593,6 +599,7 @@ const en: SignupFieldCopy = {
   toastRegisterFailed:
     'Could not finish creating your account. Tap Verify & submit again.',
   toastOtpWrong: 'That code is not right. Check and try again.',
+  accountReadySignIn: 'Your account is ready. Sign in with your phone number and password.',
 };
 
 const zh: SignupFieldCopy = {
@@ -886,6 +893,7 @@ const zh: SignupFieldCopy = {
   toastOtpExpired: '验证码已过期。请点重发获取新码。',
   toastRegisterFailed: '无法完成注册。请再点「验证并提交」。',
   toastOtpWrong: '验证码不正确。请核对后重试。',
+  accountReadySignIn: '您的账户已创建。请用手机号码和密码登录。',
 };
 
 const zhHant: SignupFieldCopy = {
@@ -1176,6 +1184,7 @@ const zhHant: SignupFieldCopy = {
   toastOtpExpired: '驗證碼已過期。請點重發取得新碼。',
   toastRegisterFailed: '無法完成註冊。請再點「驗證並提交」。',
   toastOtpWrong: '驗證碼不正確。請核對後重試。',
+  accountReadySignIn: '您的帳戶已建立。請用手機號碼和密碼登入。',
 };
 
 export const signupFieldCopy: Record<AppLocale, SignupFieldCopy> = {

@@ -20,6 +20,7 @@ import {
 	outletShiftSourceLabel,
 	summarizeOutletDemandTodayFuture,
 } from "@agency-portal/lib/agency-outlet-shifts";
+import { outletHeadlineRates } from "@agency-portal/lib/outlet-card-rates";
 import { outletShiftActivePrIds } from "@agency-portal/lib/outlet-demo";
 import {
 	formatPayTierRowsCompact,
@@ -108,8 +109,15 @@ export function AgencyOutletDetailView({
 	const futureOverview = demandOverview.find((day) => day.dateIso === "future");
 	// Same query as the rate table below (react-query dedupes it), so the
 	// subtitle can't quote demo money while the table shows the outlet's real
-	// rates — `summary.rule` is a demo fixture on a backed session.
-	const backendWorkspace = useAgencyOutletWorkspace(summary.outlet).workspace;
+	// rates — `summary.rule` is a demo fixture on a backed session. The same
+	// rule as the grid card: no saved workspace means no subtitle, never the
+	// demo rule standing in for it.
+	const workspaceRead = useAgencyOutletWorkspace(summary.outlet);
+	const headRates = outletHeadlineRates({
+		backed: workspaceRead.backed,
+		workspace: workspaceRead.workspace,
+		demoRule: summary.rule,
+	});
 	// The venue's real address, from the agency's own outlet registry — the
 	// same directory the workspace lookup resolves through.
 	const { outlets: registryOutlets } = useAgencyOutlets();
@@ -125,9 +133,6 @@ export function AgencyOutletDetailView({
 		.map((x) => x?.trim())
 		.filter(Boolean)
 		.join(", ");
-	const headWage = backendWorkspace?.basePayPerHour ?? summary.rule.wagePerHour;
-	const headDrinkPct = backendWorkspace?.drinkPct ?? summary.rule.drinkPct;
-	const headTipPct = backendWorkspace?.tipPct ?? summary.rule.tipPct;
 
 	return (
 		<div className="iz-screen iz-outlet-detail-page">
@@ -178,13 +183,15 @@ export function AgencyOutletDetailView({
 				)}
 				<div className="min-w-0">
 					<h1 className="iz-outlet-detail-head__title">{summary.outlet}</h1>
-					<p className="iz-outlet-detail-head__meta">
-						{fill(t.outletDetail.headMeta, {
-							wage: headWage.toLocaleString("en-MY"),
-							drinks: headDrinkPct,
-							tips: headTipPct,
-						})}
-					</p>
+					{headRates && (
+						<p className="iz-outlet-detail-head__meta">
+							{fill(t.outletDetail.headMeta, {
+								wage: headRates.wage.toLocaleString("en-MY"),
+								drinks: headRates.drinkPct,
+								tips: headRates.tipPct,
+							})}
+						</p>
+					)}
 					{outletAddress ? (
 						<p className="iz-outlet-detail-head__addr">
 							<MapPin className="h-3.5 w-3.5" aria-hidden />

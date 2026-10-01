@@ -3,6 +3,7 @@ import { ASSIGNABLE_SHIFT_STATUSES } from '@/features/shift/shift.model';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
+import { ShiftWriteRefused, type ShiftWriteGuard } from '@/features/shift/shift-write-guard';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
@@ -199,15 +200,22 @@ export class OutletSwapRepositoryClass {
    * from the shift; updating only shift_id leaves the row claiming an agency
    * that does not run the shift it now points at, which silently corrupts every
    * agency-scoped query the PV generator and roster depend on.
+   *
+   * `guard` runs FIRST, before any row lock (30 Sep 2026): the destination's
+   * seat lock and the PR's booking lock, then the PR's other bookings re-read
+   * through this transaction (pr-seating-rules.ts) — so a booking of the same
+   * PR elsewhere cannot pass this move between the check and the write.
    */
   async approve(params: {
     id: string;
     prNote?: string | null;
     respondedBy: string;
+    guard?: ShiftWriteGuard;
   }): Promise<OutletSwapApprovalResult> {
     const { id, prNote, respondedBy } = params;
     try {
       return await db.transaction(async (tx): Promise<OutletSwapApprovalResult> => {
+        await params.guard?.(tx);
         // Lock the request first so a concurrent approve/decline/cancel of the
         // SAME row queues behind us rather than both resolving it.
         const [request] = await tx
@@ -434,6 +442,8 @@ export class OutletSwapRepositoryClass {
         return { ok: true, request: approved };
       });
     } catch (error) {
+      // A guard's refusal is the caller's answer, not a fault.
+      if (error instanceof ShiftWriteRefused) throw error;
       logger.error('[OutletSwapRepository.approve] Error:', error);
       throw error;
     }

@@ -44,7 +44,25 @@ export interface ShiftHistoryRow {
 	otRm?: number;
 	drinkCommissionRm?: number;
 	tipCommissionRm?: number;
+	/**
+	 * Every money part on this row is a STORED server figure (a real session's
+	 * ledger — see history-take-home.ts), never to be re-derived from a rate
+	 * card. Without it the legacy "tip commission == tip sales" repair in
+	 * `resolveShiftHistoryBreakdown` would re-price a venue that pays PRs 100%
+	 * of tips off the DEMO rules.
+	 */
+	serverSealed?: boolean;
 	durationHours: number;
+	/**
+	 * What KIND of night it was, and a special night's sub-type ("vip", or
+	 * "other" with its typed name) — so outlet History can say "VIP night" the
+	 * way the Calendar and Today do. Set by the outlet History hook; absent on
+	 * rows that never knew (demo seed, the agency's History), which then show
+	 * no pill.
+	 */
+	eventKind?: "normal" | "special";
+	specialEventType?: string;
+	customSpecialEventName?: string;
 }
 
 /**

@@ -51,20 +51,30 @@ const DIAL_PICKER_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
   meta: c.dialCode,
 }));
 
-export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void } = {}) {
+/**
+ * `notice` — a sentence handed over by the screen that sent her here, shown
+ * above the form (today: "your account is ready, sign in", when the sign-in
+ * straight after a sign-up failed). Not an error, so not in red.
+ */
+export function LoginScreen({
+  onCreateAccount,
+  notice,
+}: { onCreateAccount?: () => void; notice?: string | null } = {}) {
   const scroller = useRef<ScrollView | null>(null);
   return (
     <KeyboardScrollProvider scrollRef={scroller} footerReserve={24}>
-      <LoginScreenInner onCreateAccount={onCreateAccount} scroller={scroller} />
+      <LoginScreenInner onCreateAccount={onCreateAccount} notice={notice ?? null} scroller={scroller} />
     </KeyboardScrollProvider>
   );
 }
 
 function LoginScreenInner({
   onCreateAccount,
+  notice,
   scroller,
 }: {
   onCreateAccount?: () => void;
+  notice: string | null;
   scroller: React.RefObject<ScrollView | null>;
 }) {
   const { signIn } = useSession();
@@ -292,6 +302,11 @@ function LoginScreenInner({
               </View>
             </View>
 
+            {notice && !error ? (
+              <Text style={styles.notice} accessibilityRole="alert">
+                {notice}
+              </Text>
+            ) : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Pressable
@@ -491,6 +506,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: C.red,
+    marginBottom: 12,
+  },
+  // Good news, so green — the status colours' "settled", never the error red.
+  notice: {
+    ...font(),
+    fontSize: 14,
+    lineHeight: 20,
+    color: C.green,
     marginBottom: 12,
   },
   forgotLink: {

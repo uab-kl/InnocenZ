@@ -94,7 +94,12 @@ const PAGE_SIZE = 10;
 // Plan-change lifecycle:
 //   • agency  → switched automatically by PR count, logged as 'direct'
 //   • outlet  → 'pending' until the admin approves or declines
-type PlanChangeStatus = "direct" | "pending" | "approved" | "declined";
+type PlanChangeStatus =
+	| "direct"
+	| "pending"
+	| "approved"
+	| "declined"
+	| "withdrawn";
 type StatusFilter = "all" | PlanChangeStatus;
 type RoleFilter = "all" | SubscriberType;
 
@@ -108,6 +113,7 @@ const statusLabels: Record<
 	pending: (t) => t.admin.statusPending,
 	approved: (t) => t.adminRequests.statusApproved,
 	declined: (t) => t.adminRequests.statusDeclined,
+	withdrawn: (t) => t.adminRequests.statusWithdrawn,
 };
 
 const statusBadgeColors: Record<PlanChangeStatus, string> = {
@@ -117,6 +123,7 @@ const statusBadgeColors: Record<PlanChangeStatus, string> = {
 	approved:
 		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 	declined: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
+	withdrawn: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
 const roleBadgeColors: Record<SubscriberType, string> = {
@@ -134,6 +141,9 @@ const roleLabels: Record<SubscriberType, (t: PortalTranslations) => string> = {
  * (auto-applied); legacy 'resolved' outlet rows read as Approved.
  */
 function planChangeStatus(request: AdminRequest): PlanChangeStatus {
+	// Before anything else: a withdrawn switch fell through to "pending" and
+	// was offered for approval, which the server refuses.
+	if (request.status === "withdrawn") return "withdrawn";
 	if (request.subscriberType === "agency") return "direct";
 	if (request.status === "resolved" || request.status === "approved") {
 		return "approved";
@@ -257,7 +267,7 @@ function priceOf(
 		note:
 			fromPrice == null
 				? null
-				: status === "declined"
+				: status === "declined" || status === "withdrawn"
 					? t.adminRequests.priceNoteFromPlanStays
 					: t.adminRequests.priceNoteFromPlanUntilApproved,
 	};
@@ -501,6 +511,9 @@ function PlanChangesPage() {
 									</SelectItem>
 									<SelectItem value="declined">
 										{t.adminRequests.statusDeclined}
+									</SelectItem>
+									<SelectItem value="withdrawn">
+										{t.adminRequests.statusWithdrawn}
 									</SelectItem>
 								</SelectContent>
 							</Select>
@@ -882,7 +895,9 @@ function PlanChangeEditForm({
 								? t.adminRequests.notePendingApproval
 								: status === "approved"
 									? t.adminRequests.noteApproved
-									: t.adminRequests.noteDeclinedPlanChange}
+									: status === "withdrawn"
+										? t.adminRequests.noteWithdrawnPlanChange
+										: t.adminRequests.noteDeclinedPlanChange}
 					</p>
 				</div>
 

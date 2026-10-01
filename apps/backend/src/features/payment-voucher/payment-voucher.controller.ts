@@ -26,6 +26,12 @@ import {
 } from './payment-voucher-export-ticket.js';
 import { buildVoucherPdf } from './payment-voucher-pdf.js';
 import { archiveVoucherPdf } from './payment-voucher-archive.js';
+import {
+  issueStamps,
+  voucherPayeeUserId,
+  voucherStatusNotice,
+} from './payment-voucher-issue.js';
+import { addedLineDate, planLineRewrite } from './payment-voucher-line-edit.js';
 
 /**
  * The line rows as the printed PV document shows them. Shared by the
@@ -679,6 +685,25 @@ function voucherWeekStillOpen(weekEnd: string | null | undefined): boolean {
 const WEEK_STILL_OPEN_MESSAGE =
   'This week has not closed yet — a voucher can only be signed and sent once its ' +
   'cycle is over, because its figures can still change until then.';
+
+/**
+ * BOTH HALVES OF THE DUAL SIGNATURE, and the payee, for the PR's own screens.
+ *
+ * The /mine reads never carried the agency's half — its signer, the capacity
+ * they signed in, or when — so the phone's voucher could only draw the PR's own
+ * signature under a caption announcing "Dual-signed". These are facts the
+ * printed PDF already hands the same person; the ink is not sent, because the
+ * phone does not draw it. `prName` is the payee as the voucher names her.
+ */
+function voucherSignatures(v: PaymentVoucherType) {
+  return {
+    prName: v.prName,
+    prSignedAt: v.prSignedAt,
+    financeHeadName: v.financeHeadName,
+    financeHeadRole: v.financeHeadRole,
+    financeHeadSignedAt: v.financeHeadSignedAt,
+  };
+}
 
 function sumWages(lines: PaymentVoucherLineType[]): string {
   const total = lines.reduce((sum, line) => {
@@ -1911,10 +1936,23 @@ export class PaymentVoucherControllerClass {
         }
       }
 
+      // …and the rules the receipt editor keeps: a line stays on its day, a
+      // renamed drink or tip must be on its outlet's list. See `checkLineRewrite`.
+      let rewrittenLines = lines;
+      if (lines) {
+        const checked = await this.checkLineRewrite(existing, lines);
+        if (!checked.ok) {
+          return res
+            .status(400)
+            .json({ success: false, message: checked.reason, data: null });
+        }
+        rewrittenLines = checked.lines;
+      }
+
       // Replacing the lines invalidates client-omitted totals — recompute them.
-      const totals = lines
+      const totals = rewrittenLines
         ? resolveTotals({
-            lines,
+            lines: rewrittenLines,
             subtotal: data.subtotal,
             deduction: data.deduction,
             net: data.net,
@@ -1936,11 +1974,25 @@ export class PaymentVoucherControllerClass {
       const cleared = isOverride(existing.status, data.status)
         ? OVERRIDE_CLEARS
         : {};
+      // Leaving review stamps what the Sunday issue pass stamps — only the dates
+      // this voucher lacks, so a re-send never re-dates it. Spread BEFORE `data`:
+      // a date the caller typed in the same request is an edit and wins.
+      const issued =
+        data.status === 'sent' && existing.status !== 'sent'
+          ? issueStamps(existing, klToday())
+          : {};
 
       const voucher = await this.paymentVoucherRepository.update(
         id,
-        { ...data, ...totals, ...stamps, ...cleared, updatedBy: getActor(req) },
-        lines ? toLineRows(lines) : undefined,
+        {
+          ...issued,
+          ...data,
+          ...totals,
+          ...stamps,
+          ...cleared,
+          updatedBy: getActor(req),
+        },
+        rewrittenLines ? toLineRows(rewrittenLines) : undefined,
         expectedUpdatedAt,
         // Every rule above judged THIS status. Re-checked under the row lock,
         // so a PR signing in the same instant cannot slip a rewrite past it.
@@ -1950,6 +2002,16 @@ export class PaymentVoucherControllerClass {
         return res
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Tell the PR — the Sunday job always did, this door never had. After the
+      // write, and judged on the status the gates above judged: a notice for a
+      // transition that did not commit would be a lie. `notify` never throws.
+      const notice = voucherStatusNotice(existing.status, data.status, voucher);
+      const payee = voucherPayeeUserId(voucher);
+      if (notice && payee) {
+        await notify({ userId: payee, ...notice, actor: getActor(req) });
+      }
+
       res.status(200).json({
         success: true,
         message: 'Payment voucher updated',
@@ -2247,6 +2309,7 @@ export class PaymentVoucherControllerClass {
         agencyLogo: p.voucher.agencyLogo,
         net: p.voucher.net,
         status: p.voucher.status,
+        ...voucherSignatures(p.voucher),
       })),
     };
   }
@@ -2623,8 +2686,8 @@ export class PaymentVoucherControllerClass {
           outlet: v.outlet,
           bankRef: v.bankRef,
           issuedDate: v.issuedDate,
-          prSignedAt: v.prSignedAt,
           paidAt: v.paidAt,
+          ...voucherSignatures(v),
           lines: v.lines.map((l) => toReceiptLineDTO(l, statuses)),
         });
       }
@@ -3815,19 +3878,95 @@ export class PaymentVoucherControllerClass {
       await this.shiftAssignmentRepository.getOutletForAssignment(assignmentId);
     if (!outlet) return null;
 
-    // The same reader the PR's phone already gets its self-log menu from, so the
-    // list the agency is held to is the list the outlet published — an outlet
-    // with no workspace or an empty menu simply has no entry, which is the
-    // "nothing configured" signal the caller must report honestly.
-    const menus =
-      await this.shiftAssignmentRepository.resolveDrinkMenusForOutlets([
-        outlet.outletId,
-      ]);
+    // The same resolver the PR's phone gets its self-log list from, so the list
+    // the agency is held to is the list the line was logged against: a special
+    // night's OWN prices when it has them (owner, 29 Sep 2026: "Use event
+    // prices"), otherwise the venue's Workspace list — an outlet with no
+    // workspace or an empty menu simply has no items, which is the "nothing
+    // configured" signal the caller must report honestly.
+    const menus = await this.shiftAssignmentRepository.resolveDrinkMenusForShifts([
+      {
+        shiftId: outlet.shiftId,
+        outletId: outlet.outletId,
+        eventKind: outlet.eventKind,
+      },
+    ]);
     return {
       outletId: outlet.outletId,
       outlet: outlet.outletName,
-      items: menus.get(outlet.outletId) ?? [],
+      items: menus.get(outlet.shiftId)?.items ?? [],
     };
+  }
+
+  /**
+   * THE AGENCY'S LINE REWRITE, HELD TO THE RULES ITS RECEIPT EDITOR KEEPS.
+   *
+   * `PUT /:id` with `lines` replaces every line, and it took any name and any
+   * day in the week — the one agency door with no price-list check and no hold
+   * on a receipt's day. `planLineRewrite` decides what may change; this resolves
+   * each renamed drink or tip against the outlet its receipt was earned at, by
+   * the same `catalogueForReceipt` and with the same refusals as
+   * `addReceiptLine`, and stores the catalogue's own spelling.
+   */
+  private async checkLineRewrite(
+    voucher: PaymentVoucherWithLines,
+    lines: PaymentVoucherLineInput[],
+  ): Promise<
+    | { ok: true; lines: PaymentVoucherLineInput[] }
+    | { ok: false; reason: string }
+  > {
+    const receipts = await this.paymentVoucherRepository.listReceipts(
+      voucher.id,
+    );
+    const plan = planLineRewrite({
+      previous: voucher.lines,
+      incoming: lines,
+      voucherReceiptIds: new Set(receipts.map((r) => r.id)),
+    });
+    if (!plan.ok) return plan;
+
+    const next = [...lines];
+    for (const check of plan.outletChecks) {
+      const receipt = receipts.find((r) => r.id === check.receiptId);
+      if (!receipt) {
+        return {
+          ok: false,
+          reason: `"${check.description}" names a receipt that is not on this voucher.`,
+        };
+      }
+      const listName = catalogueListName(check.kind);
+      const catalogue = await this.catalogueForReceipt(
+        receipt,
+        voucher.lines.filter((l) => l.receiptId === receipt.id),
+      );
+      if (!catalogue) {
+        return {
+          ok: false,
+          reason: `${receipt.receiptNo} is not linked to a shift, so the outlet that sold the item cannot be established — no line can be verified against a price list.`,
+        };
+      }
+      const offered = catalogue.items.filter((i) =>
+        catalogueMatchesKind(i.category, check.kind),
+      );
+      if (offered.length === 0) {
+        return {
+          ok: false,
+          reason: `${catalogue.outlet} has no ${listName} configured, so a line cannot be verified — ask the outlet to set its ${listName} up first.`,
+        };
+      }
+      const listed = offered.find(
+        (i) =>
+          i.name.trim().toLowerCase() === check.description.toLowerCase(),
+      );
+      if (!listed) {
+        return {
+          ok: false,
+          reason: `${check.description} is not on ${catalogue.outlet}'s ${listName} — ask the outlet to add it, or pick an item from the list.`,
+        };
+      }
+      next[check.index] = { ...next[check.index]!, description: listed.name };
+    }
+    return { ok: true, lines: next };
   }
 
   /**
@@ -3971,14 +4110,21 @@ export class PaymentVoucherControllerClass {
         (l) => l.receiptId === receiptId,
       );
 
-      const lineDate =
-        parsed.data.lineDate ??
-        siblings.find((l) => l.lineDate)?.lineDate ??
-        // The paper's printed date only as a last resort: it is deliberately free
-        // to differ from the day the money belongs to (a receipt printed at 01:00
-        // belongs to the shift that just ended).
-        owned.receipt.receiptDate ??
-        todayIso();
+      // The receipt's own day wins over any day the caller names — see
+      // `addedLineDate`. The paper's printed date is only the last resort: it is
+      // deliberately free to differ from the day the money belongs to (a receipt
+      // printed at 01:00 belongs to the shift that just ended).
+      const dated = addedLineDate(
+        siblings.map((l) => l.lineDate),
+        parsed.data.lineDate,
+        owned.receipt.receiptDate ?? todayIso(),
+      );
+      if (!dated.ok) {
+        return res
+          .status(400)
+          .json({ success: false, message: dated.reason, data: null });
+      }
+      const lineDate = dated.date;
       // The same week guard the PR's own write paths carry, judged against THIS
       // voucher's week rather than the current one — an old draft is still
       // correctable while it is pending_review, and judging it against today

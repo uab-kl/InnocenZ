@@ -52,6 +52,14 @@ export const UserTable = MainSchema.table('user', {
     // hottest auth path is not worth the normalisation.
     failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    /**
+     * When the latest wrong password was typed (migration 0170, owner 30 Sep
+     * 2026). A wrong password a day after the previous one counts from 1 again,
+     * so old typos no longer lock an account before an address with no account
+     * would lock — which told a stranger the account exists. NULL = none in the
+     * last day. Written only by `recordFailedLoginAttempt`.
+     */
+    lastFailedLoginAt: timestamp('last_failed_login_at', { withTimezone: true }),
     blockedReason: varchar('blocked_reason'),
     /**
      * SESSIONS ISSUED BEFORE THIS MOMENT ARE DEAD (migration 0165).

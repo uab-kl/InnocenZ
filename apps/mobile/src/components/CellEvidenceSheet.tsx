@@ -13,15 +13,18 @@
  * shift-session's stamps) so the same fact is never formatted two ways.
  */
 import React, { useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
+import { formatAmount, formatRM } from '../lib/demo-shifts';
+import { eventKindLabel } from '../lib/special-event';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
 import type { PrWeekShift } from '../lib/api';
 import { resolveProofPhotoUri } from '../lib/proof-photo';
 import { ImageLightbox, ZoomHint } from './ImageLightbox';
+import { PhoneSheet } from './PhoneSheet';
 import type { ReceiptClaimState } from '../lib/receipt-review';
 import { formatMessage, useLocale } from '../i18n';
 import type { AppTranslations } from '../i18n';
@@ -53,10 +56,6 @@ const SOURCE_LABEL: Record<string, (t: AppTranslations) => string> = {
 const COL_ITEM = 150;
 const COL_QTY = 44;
 const COL_COMM = 82;
-
-function money(n: number) {
-  return `RM ${n.toFixed(2)}`;
-}
 
 /*
  * The calendar's OWN weekday and month words, addressed by index.
@@ -217,11 +216,13 @@ function ShiftHead({
    * a deduction — and printing "Normal shift" above a fee reads as though nothing
    * happened. One tag, the one that matters here.
    */
-  const eventKindLabel = isCancelled(shift)
+  /*
+   * WHICH special night — "Special event · VIP night" — by the one rule every
+   * other shift card uses (special-event.ts), not a bare "Special event".
+   */
+  const kindLabel = isCancelled(shift)
     ? t.schedule.outcomeCancelled
-    : shift.eventKind === 'special'
-      ? t.shifts.specialEvent
-      : t.shifts.normalShift;
+    : eventKindLabel(shift, t);
   const collapsible = typeof expanded === 'boolean' && !!onToggle;
   if (collapsible && !expanded) {
     /*
@@ -241,7 +242,7 @@ function ShiftHead({
         <View style={s.shiftHeadText}>
           <View style={s.shiftTitleRow}>
             <Text style={s.shiftTitle}>{shiftTitle}</Text>
-            <Text style={s.eventTag}>{eventKindLabel}</Text>
+            <Text style={s.eventTag}>{kindLabel}</Text>
           </View>
           <Text style={s.shiftSlot}>
             {shiftVenue ? `${shiftVenue} · ` : ''}
@@ -252,7 +253,7 @@ function ShiftHead({
           <Text style={s.shiftMore}>{t.evidence.tapForDetails}</Text>
         </View>
         <View style={s.shiftHeadRight}>
-          <Text style={s.shiftSubtotal}>{money(group.subtotal)}</Text>
+          <Text style={s.shiftSubtotal}>{formatRM(group.subtotal)}</Text>
           <Text style={s.chevron}>⌄</Text>
         </View>
       </Pressable>
@@ -278,7 +279,7 @@ function ShiftHead({
           <View style={s.shiftHeadText}>
             <View style={s.shiftTitleRow}>
               <Text style={s.shiftTitle}>{shiftTitle}</Text>
-              <Text style={s.eventTag}>{eventKindLabel}</Text>
+              <Text style={s.eventTag}>{kindLabel}</Text>
             </View>
             {(shiftVenue || shift.slot) && (
               <Text style={s.shiftSlot}>
@@ -294,7 +295,7 @@ function ShiftHead({
         <>
           <View style={s.shiftTitleRow}>
             <Text style={s.shiftTitle}>{shiftTitle}</Text>
-            <Text style={s.eventTag}>{eventKindLabel}</Text>
+            <Text style={s.eventTag}>{kindLabel}</Text>
           </View>
           {(shiftVenue || shift.slot) && (
             <Text style={s.shiftSlot}>
@@ -511,7 +512,9 @@ export function CellEvidenceSheet({
   const cellWide: 'open' | null = claims?.openAll ? 'open' : null;
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+    // PhoneSheet, not a bare Modal: on the web build a Modal covers the browser
+    // window outside the phone frame. A phone still gets the same Modal.
+    <PhoneSheet visible animationType="slide" onRequestClose={onClose}>
       {/*
         * The sheet is NOT inside a Pressable, and that is the whole fix.
         *
@@ -531,7 +534,7 @@ export function CellEvidenceSheet({
           <Text style={s.title}>
             {KIND_LABEL[evidence.kind](t)} · {dayLabel(evidence.dateIso, t)}
           </Text>
-          <Text style={s.total}>{money(evidence.total)}</Text>
+          <Text style={s.total}>{formatRM(evidence.total)}</Text>
           <Text style={s.hint}>{t.evidence.hint}</Text>
 
           {/*
@@ -543,8 +546,8 @@ export function CellEvidenceSheet({
             <View style={s.warn}>
               <Text style={s.warnText}>
                 {formatMessage(t.evidence.mismatch, {
-                  listed: money(evidence.total),
-                  grid: money(cellAmount),
+                  listed: formatRM(evidence.total),
+                  grid: formatRM(cellAmount),
                 })}
               </Text>
             </View>
@@ -670,7 +673,7 @@ export function CellEvidenceSheet({
                             <Text
                               style={[s.td, s.tdMoney, { width: COL_COMM, textAlign: 'right' }]}
                             >
-                              {line.commission.toFixed(2)}
+                              {formatAmount(line.commission)}
                             </Text>
                           </View>
                         ))}
@@ -711,7 +714,7 @@ export function CellEvidenceSheet({
                 {expanded && (
                   <Text style={s.groupTotal}>
                     {formatMessage(t.evidence.shiftSubtotal, {
-                      amount: money(group.subtotal),
+                      amount: formatRM(group.subtotal),
                     })}
                   </Text>
                 )}
@@ -754,7 +757,7 @@ export function CellEvidenceSheet({
           )}
         </View>
       </View>
-    </Modal>
+    </PhoneSheet>
   );
 }
 

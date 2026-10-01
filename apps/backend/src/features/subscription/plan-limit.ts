@@ -65,13 +65,22 @@ export type PlanLookup =
  * `{ kind: 'none' }` means "no plan" and a `limitAmount: null` on a real plan
  * means "unlimited" — two different facts, and callers must not collapse them.
  * Nothing here decides what to do about either; that is the caller's rule.
+ *
+ * `client` is the pool unless the shift WRITE GUARD hands in its transaction
+ * (1 Oct 2026): the venue's plan is then read again under the venue's lock, on
+ * the connection that holds it — see `planCapacityRefusal`. ⚠️ As with
+ * `outletDailyPrUsage`, a failed read inside a transaction also aborts it, so
+ * `unknown` skips the gate but the write after it fails too: nothing is written.
  */
-export async function resolveActivePlanLimit(params: {
-  subscriberType: 'agency' | 'outlet';
-  subscriberId: string;
-}): Promise<PlanLookup> {
+export async function resolveActivePlanLimit(
+  params: {
+    subscriberType: 'agency' | 'outlet';
+    subscriberId: string;
+  },
+  client: DbTransaction | typeof db = db,
+): Promise<PlanLookup> {
   try {
-    const [row] = await db
+    const [row] = await client
       .select({
         planName: MemberSubscriptionTable.planName,
         limitAmount: SubscriptionTable.limitAmount,
@@ -296,12 +305,18 @@ export async function readCloseLaneFacts(
  * the day's allowance whether or not anyone has been rostered onto it yet.
  * `excludeShiftId` lets an edit measure the day without its own current value,
  * so raising a shift from 4 to 5 is checked as 5, not 9.
+ *
+ * `client` is the pool unless the shift WRITE GUARD hands in its transaction
+ * (shift-write-guard.ts, 30 Sep 2026): the re-count under the venue's lock runs
+ * on the connection that holds it, rather than a second pooled one that could
+ * starve the pool while the lock is held. ⚠️ Inside a transaction a failed count
+ * also aborts the transaction, so the -1 below skips the gate but the write
+ * after it fails too: nothing is written.
  */
-export async function outletDailyPrUsage(params: {
-  outletId: string;
-  shiftDate: string;
-  excludeShiftId?: string;
-}): Promise<number> {
+export async function outletDailyPrUsage(
+  params: { outletId: string; shiftDate: string; excludeShiftId?: string },
+  client: DbTransaction | typeof db = db,
+): Promise<number> {
   try {
     // Built with the query builder, not a raw template. The first cut spliced
     // `${excludeShiftId ? sql`...` : sql``}` into `db.execute`, and the EMPTY
@@ -321,7 +336,7 @@ export async function outletDailyPrUsage(params: {
     ];
     if (params.excludeShiftId) conditions.push(ne(ShiftTable.id, params.excludeShiftId));
 
-    const [row] = await db
+    const [row] = await client
       .select({ used: sql<number>`coalesce(sum(${ShiftTable.quantity}), 0)::int` })
       .from(ShiftTable)
       .where(and(...conditions));

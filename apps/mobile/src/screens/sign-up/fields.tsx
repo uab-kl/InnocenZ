@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-	Modal,
 	Pressable,
 	ScrollView,
 	StyleSheet,
@@ -13,6 +12,7 @@ import { formatMessage, useLocale } from '../../i18n';
 import { C, F } from '../../theme/theme';
 import { font } from '../../theme/fonts';
 import { Calendar, Check, ChevronDown } from '../../components/icons';
+import { PhoneSheet } from '../../components/PhoneSheet';
 import { useKeyboardHeight } from '../../lib/keyboard';
 import { reportFocusFromView, useKeyboardScroll } from './keyboard-scroll';
 
@@ -69,7 +69,14 @@ export function Input(props: React.ComponentProps<typeof TextInput>) {
 	);
 }
 
-/** Modal dropdown — clearer than an inline expand on small phone screens. */
+/**
+ * Sheet dropdown — clearer than an inline expand on small phone screens.
+ *
+ * All three pickers in this file open in PhoneSheet, not a bare Modal: on the
+ * web build a Modal covers the browser window outside the phone frame — and
+ * the dial-code Picker is opened from INSIDE other sheets (Forgot password,
+ * Security), where a bare Modal and an in-frame sheet would stack wrongly.
+ */
 export type PickerOption = {
 	value: string;
 	label: string;
@@ -158,7 +165,7 @@ export function Picker({
 				<ChevronDown size={16} color={C.muted2} strokeWidth={2.2} />
 			</Pressable>
 
-			<Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+			<PhoneSheet visible={open} animationType="fade" onRequestClose={close}>
 				<Pressable style={styles.pickerBackdrop} onPress={close}>
 					<Pressable
 						style={[
@@ -228,7 +235,7 @@ export function Picker({
 						</Pressable>
 					</Pressable>
 				</Pressable>
-			</Modal>
+			</PhoneSheet>
 		</>
 	);
 }
@@ -353,7 +360,7 @@ export function DatePicker({
 				<Calendar size={16} color={C.muted2} strokeWidth={2.2} />
 			</Pressable>
 
-			<Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+			<PhoneSheet visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
 				<Pressable style={styles.pickerBackdrop} onPress={() => setOpen(false)}>
 					<Pressable
 						style={[
@@ -394,7 +401,7 @@ export function DatePicker({
 						</Pressable>
 					</Pressable>
 				</Pressable>
-			</Modal>
+			</PhoneSheet>
 		</>
 	);
 }
@@ -559,7 +566,7 @@ export function LanguageMultiPicker({
 				</View>
 			) : null}
 
-			<Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+			<PhoneSheet visible={open} animationType="fade" onRequestClose={close}>
 				<Pressable style={styles.pickerBackdrop} onPress={close}>
 					<Pressable
 						style={[
@@ -665,7 +672,7 @@ export function LanguageMultiPicker({
 						</Pressable>
 					</Pressable>
 				</Pressable>
-			</Modal>
+			</PhoneSheet>
 		</>
 	);
 }

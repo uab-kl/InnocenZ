@@ -4,6 +4,7 @@ import { orgMemberIdStem } from "@/lib/member-code";
 import type { BackendUser } from "@/services/admin/mappers";
 import { fetchPrAgencyLinks } from "@/services/agency";
 import { getRoleIdByName } from "@/services/rbac/roles";
+import { currentAgencyLinks } from "./agency-links";
 import type {
 	PrAgencyRef,
 	PrUser,
@@ -81,7 +82,8 @@ function matchesSearch(user: PrUser, search: string): boolean {
 		(user.idNo?.toLowerCase().includes(q) ?? false) ||
 		user.email.toLowerCase().includes(q) ||
 		user.phoneNum.toLowerCase().includes(q) ||
-		user.agencies.some(
+		// Agencies she works for NOW: searching "Delta" must not find a PR who left it.
+		currentAgencyLinks(user.agencies).some(
 			(agency) =>
 				agency.name.toLowerCase().includes(q) ||
 				(agency.code?.toLowerCase().includes(q) ?? false),
@@ -144,6 +146,8 @@ export async function fetchPrUsers(
 			name: link.agencyName,
 			code: orgMemberIdStem("agency", link.memberCodePrefix),
 			status: link.agencyStatus ?? null,
+			// Dropped here until 29 Sep, which is how a departed PR read as "Linked".
+			approveStatus: link.approveStatus ?? null,
 		});
 		agenciesByUser.set(link.userId, list);
 	}
@@ -153,8 +157,11 @@ export async function fetchPrUsers(
 	);
 
 	if (params.agencyId) {
+		// "PRs of this agency" means its roster today, not everyone it ever had.
 		mapped = mapped.filter((user) =>
-			user.agencies.some((agency) => agency.id === params.agencyId),
+			currentAgencyLinks(user.agencies).some(
+				(agency) => agency.id === params.agencyId,
+			),
 		);
 	}
 	if (params.search?.trim()) {

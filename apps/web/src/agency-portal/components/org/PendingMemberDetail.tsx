@@ -8,6 +8,8 @@ import {
 	serverMessage,
 	useOrgMembers,
 } from "@agency-portal/hooks/use-org-members";
+import { reactivationLane } from "@agency-portal/lib/member-queue-state";
+import { useStore } from "@agency-portal/lib/store";
 import {
 	Clock,
 	IdCard,
@@ -117,6 +119,13 @@ export function PendingMemberDetail({
 	const { t, locale } = usePortalLocale();
 	const { data: me } = useProfile();
 	/*
+	 * EVERY DECISION HERE CONFIRMS, in the server's own sentence (owner's rule:
+	 * "if the agency click approve or edit, need show the successful message").
+	 * Approve, decline, deactivate, reactivate and role changes all used to
+	 * repaint in silence, which reads as a click that did not register.
+	 */
+	const toast = useStore((s) => s.toast);
+	/*
 	 * MAY THIS PERSON DECIDE, OR ONLY LOOK?
 	 *
 	 * Owner, 12 Sep 2026: "other orgs member cannot … approve the new member".
@@ -210,22 +219,24 @@ export function PendingMemberDetail({
 	// Belongs to THIS person, or it does not count — see the note above.
 	const picked = choice?.id === member.id ? choice.value : member.subRole;
 	/*
-	 * The lane the REACTIVATE picker opens on.
+	 * The lane the REACTIVATE picker opens on, and the one the button writes.
 	 *
 	 * ⚠️ It cannot simply be `picked`. That falls back to `member.subRole` — the
 	 * lane they held when they were switched off — and `APPROVABLE` withholds
 	 * `owner` and `guarantor`, so a deactivated OWNER would hand the select a
-	 * value none of its options carry. A browser then displays the first option
-	 * while the state still says `owner`, and the button would post a lane the
-	 * screen never showed. Falling back to the first approvable title keeps what
-	 * is submitted identical to what is displayed.
+	 * value none of its options carry, and the button would post a lane the
+	 * screen never showed.
 	 *
-	 * Today no such row exists — every owner-level membership in the database is
-	 * active — which is exactly why this would have gone unnoticed.
+	 * ⚠️ Nor may it fall to the first approvable title, as it used to: that
+	 * wrote Finance over a former Guarantor's role on a click that never showed
+	 * the change. When the held lane cannot be restored from here the lane is
+	 * null, the picker asks, and the button waits (`reactivationLane`).
 	 */
-	const restoreLane = APPROVABLE[kind].includes(picked)
-		? picked
-		: APPROVABLE[kind][0];
+	const reactivation = reactivationLane({
+		heldLane: member.subRole,
+		picked: choice?.id === member.id ? choice.value : null,
+		approvable: APPROVABLE[kind],
+	});
 	const shownError = error?.id === member.id ? error.message : "";
 	// Armed for THIS person, or armed for nobody — see the note on the state.
 	const confirming = confirmingId === member.id;
@@ -436,12 +447,19 @@ export function PendingMemberDetail({
 						<p className="mb-3 text-muted-foreground text-sm">
 							{t.portalUi.reactivateHint}
 						</p>
+						{/* What the row still remembers (0160) — so the pick below is a
+						    decision made knowing what they held, never a silent swap. */}
+						<p className="mb-3 text-foreground text-sm">
+							{fill(t.portalUi.reactivatePreviousRole, {
+								role: portalRoleLabel(member.subRole, t),
+							})}
+						</p>
 						<label className="flex flex-col gap-1.5">
 							<span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
 								{t.portalUi.roleToGrant}
 							</span>
 							<select
-								value={restoreLane}
+								value={reactivation.lane ?? ""}
 								disabled={busy || !canDecide}
 								onChange={(e) =>
 									setChoice({ id: member.id, value: e.target.value })
@@ -451,6 +469,13 @@ export function PendingMemberDetail({
 								style={{ colorScheme: "dark" }}
 								className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
 							>
+								{/* Only while nothing restorable is chosen: the held lane is
+								    Owner or Guarantor, which this queue may not grant. */}
+								{reactivation.lane === null && (
+									<option value="" disabled>
+										{t.portalUi.reactivatePickRole}
+									</option>
+								)}
 								{APPROVABLE[kind].map((r) => (
 									<option key={r} value={r}>
 										{portalRoleLabel(r, t)}
@@ -460,16 +485,23 @@ export function PendingMemberDetail({
 						</label>
 						<button
 							type="button"
-							disabled={busy || !canDecide}
+							disabled={busy || !canDecide || reactivation.lane === null}
 							onClick={() => {
+								const lane = reactivation.lane;
+								if (!lane) return;
 								setError(null);
 								changeMember.mutate(
 									{
 										memberId: member.id,
 										status: "active",
-										subRole: restoreLane,
+										subRole: lane,
 									},
 									{
+										onSuccess: (res) =>
+											toast(
+												res.message || t.portalUi.memberReactivated,
+												"success",
+											),
 										onError: (e) =>
 											setError({
 												id: member.id,
@@ -541,6 +573,11 @@ export function PendingMemberDetail({
 											changeMember.mutate(
 												{ memberId: member.id, subRole: picked },
 												{
+													onSuccess: (res) =>
+														toast(
+															res.message || t.portalUi.roleSaved,
+															"success",
+														),
 													onError: (e) =>
 														setError({
 															id: member.id,
@@ -580,7 +617,13 @@ export function PendingMemberDetail({
 										onClick={() => {
 											setError(null);
 											removeMember.mutate(member.id, {
-												onSuccess: onDecided,
+												onSuccess: (res) => {
+													toast(
+														res?.message || t.portalUi.memberDeactivated,
+														"success",
+													);
+													onDecided();
+												},
 												onError: (e) =>
 													setError({
 														id: member.id,
@@ -678,7 +721,13 @@ export function PendingMemberDetail({
 									changeMember.mutate(
 										{ memberId: member.id, status: "active", subRole: picked },
 										{
-											onSuccess: onDecided,
+											onSuccess: (res) => {
+												toast(
+													res.message || t.portalUi.memberApproved,
+													"success",
+												);
+												onDecided();
+											},
 											onError: (e) =>
 												setError({
 													id: member.id,
@@ -698,7 +747,13 @@ export function PendingMemberDetail({
 								onClick={() => {
 									setError(null);
 									removeMember.mutate(member.id, {
-										onSuccess: onDecided,
+										onSuccess: (res) => {
+											toast(
+												res?.message || t.portalUi.memberDeclined,
+												"success",
+											);
+											onDecided();
+										},
 										onError: (e) =>
 											setError({
 												id: member.id,

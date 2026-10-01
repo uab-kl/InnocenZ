@@ -25,6 +25,7 @@ import { getBusinessSectionByKey } from "@/constants/business-sections";
 import { sidebarSections } from "@/constants/links";
 import { getRbacSectionByKey } from "@/constants/rbac-sections";
 import { getUserTypeByKey } from "@/constants/user-types";
+import { adminConsoleRoleName } from "@/lib/auth/console-role";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
@@ -178,8 +179,11 @@ export function Header() {
 	 * rather than beside it: treat "Admin" as the stand-in role NAME, not as a
 	 * finished label, or the two branches would disagree in Chinese — a real
 	 * role rendering "Admin" while the empty case rendered 管理员.
+	 *
+	 * ⚠️ The ADMIN role, not `roles[0]` — the list has no order, and an admin
+	 * who also holds a Finance lane was titled "Finance" here (28 Sep audit).
 	 */
-	const roleLabel = portalRoleLabel(user?.roles?.[0] ?? "Admin", t);
+	const roleLabel = portalRoleLabel(adminConsoleRoleName(user?.roles), t);
 	const avatarSrc = apiAssetUrl(user?.profileImage);
 
 	return (

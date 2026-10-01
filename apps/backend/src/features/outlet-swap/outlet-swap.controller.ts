@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
+import { travelWarningFor } from '@/features/shift-assignment/travel-gap';
 import {
-  foreignTravelBlock,
-  PR_UNAVAILABLE_THEN,
-  travelWarningFor,
-} from '@/features/shift-assignment/travel-gap';
-import { NON_STAFFING_STATUSES } from '@/features/shift-assignment/shift-assignment.model';
+  seatingRules,
+  swapApproveAnswer,
+  swapRequestAnswer,
+  type SeatFacts,
+} from '@/features/shift-assignment/pr-seating-rules';
+import { writeUnlessRefused, type RuleRefusal } from '@/features/shift/shift-write-guard';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
@@ -66,44 +68,34 @@ export class OutletSwapControllerClass {
   ) {}
 
   /**
-   * Can this PR physically take `toShift`, given the shifts OTHER agencies hold
-   * on them? The swap is the third lane that seats a person somewhere —
-   * travel-gap.ts's own contract says a cross-agency turnaround "is refused
-   * outright by `foreignTravelBlock` before the write", and the assign and
-   * re-staff lanes both do. This lane only ever WARNED, after the move: a swap
-   * could seat a PR exactly where POST /shift-assignment would have refused her.
+   * Can this PR physically take the destination, given her other shifts? The
+   * swap is the third lane that seats a person somewhere — travel-gap.ts's own
+   * contract says a cross-agency turnaround "is refused outright by
+   * `foreignTravelBlock` before the write", and the assign and re-staff lanes
+   * both do. This lane only ever WARNED, after the move: a swap could seat a PR
+   * exactly where POST /shift-assignment would have refused her — and it never
+   * asked about an OVERLAP at all (30 Sep 2026: it does now).
    *
-   * Same neighbour rules as the assign lane: the vacated shift is excluded (the
-   * swap empties it), the destination is excluded (not its own neighbour), and
-   * non-staffing rows don't count. Fails open on a missing venue pin, exactly
-   * like the assign lane's `shiftPin &&` guard — a venue with no pin cannot
-   * price the trip, and physics that cannot be computed must not block a move.
+   * The shared seating rules (pr-seating-rules.ts): the vacated shift is not a
+   * neighbour (the swap empties it), nor is the destination itself, and a venue
+   * with no pin cannot price the trip, so it does not block. `check` screens
+   * before the write; `guard` re-runs it inside approval's transaction under the
+   * destination's and the PR's locks.
    */
-  private async foreignTravelBlocked(params: {
-    toShift: { shiftDate: string; slot: string | null; outletId: string };
-    prId: string;
-    actingAgencyId: string;
-    excludeShiftIds: string[];
-  }): Promise<boolean> {
-    const pin = await this.shiftAssignmentRepository.getOutletPin(params.toShift.outletId);
-    if (!pin) return false;
-    const held = await this.shiftAssignmentRepository.listForPr(params.prId);
-    const others = held.filter(
-      (a) =>
-        !params.excludeShiftIds.includes(a.shiftId) &&
-        !NON_STAFFING_STATUSES.includes(a.status as (typeof NON_STAFFING_STATUSES)[number]),
-    );
-    return foreignTravelBlock({
-      shift: {
-        shiftDate: params.toShift.shiftDate,
-        slot: params.toShift.slot,
-        outletId: params.toShift.outletId,
-        lat: pin.lat,
-        lng: pin.lng,
+  private swapSeating(
+    move: { toShiftId: string; prId: string; agencyId: string; fromShiftId: string },
+    answer: (facts: SeatFacts, actingAgencyId: string) => RuleRefusal | null,
+  ) {
+    return seatingRules(
+      { shiftRepository: this.shiftRepository, assignments: this.shiftAssignmentRepository },
+      {
+        shiftId: move.toShiftId,
+        prId: move.prId,
+        actingAgencyId: move.agencyId,
+        vacating: move.fromShiftId,
       },
-      others,
-      actingAgencyId: params.actingAgencyId,
-    });
+      answer,
+    );
   }
 
   private resolveScope(req: Request): Promise<OrgScope> {
@@ -306,15 +298,17 @@ export class OutletSwapControllerClass {
       // an agency that cannot see the other booking, and the assign lane's
       // refusal for the identical situation uses the same string so the two
       // cannot be told apart and probed.
-      if (
-        await this.foreignTravelBlocked({
-          toShift,
+      const tooFar = await this.swapSeating(
+        {
+          toShiftId,
           prId: assignment.userId ?? assignment.prId,
-          actingAgencyId: assignment.agencyId,
-          excludeShiftIds: [assignment.shiftId, toShiftId],
-        })
-      ) {
-        return res.status(409).json({ success: false, message: PR_UNAVAILABLE_THEN, data: null });
+          agencyId: assignment.agencyId,
+          fromShiftId: assignment.shiftId,
+        },
+        swapRequestAnswer,
+      ).check(toShift);
+      if (tooFar) {
+        return res.status(tooFar.status).json({ success: false, message: tooFar.message, data: null });
       }
 
       const actor = getActor(req);
@@ -434,29 +428,37 @@ export class OutletSwapControllerClass {
       // anonymous agency-facing sentence.
       const beingMoved = await this.shiftAssignmentRepository.getById(owned.assignmentId);
       const destination = await this.shiftRepository.getById(owned.toShiftId);
-      if (
-        beingMoved &&
-        destination &&
-        (await this.foreignTravelBlocked({
-          toShift: destination,
-          prId: beingMoved.userId ?? beingMoved.prId,
-          actingAgencyId: beingMoved.agencyId,
-          excludeShiftIds: [beingMoved.shiftId, owned.toShiftId],
-        }))
-      ) {
-        return res.status(409).json({
-          success: false,
-          message:
-            'Another of your shifts is too close to this one — there is not enough time to travel between the venues, so this swap can no longer be approved.',
-          data: null,
-        });
+      const seating = beingMoved
+        ? this.swapSeating(
+            {
+              toShiftId: owned.toShiftId,
+              prId: beingMoved.userId ?? beingMoved.prId,
+              agencyId: beingMoved.agencyId,
+              fromShiftId: beingMoved.shiftId,
+            },
+            swapApproveAnswer,
+          )
+        : null;
+      const tooFar = seating && destination ? await seating.check(destination) : null;
+      if (tooFar) {
+        return res.status(tooFar.status).json({ success: false, message: tooFar.message, data: null });
       }
 
-      const result = await this.outletSwapRepository.approve({
-        id: owned.id,
-        prNote: parsed.data.note ?? null,
-        respondedBy: getActor(req),
-      });
+      // The same rule again inside the move, under the destination's and the
+      // PR's locks — a booking of her elsewhere can no longer pass it.
+      const approval = await writeUnlessRefused(
+        this.outletSwapRepository.approve({
+          id: owned.id,
+          prNote: parsed.data.note ?? null,
+          respondedBy: getActor(req),
+          guard: seating?.guard,
+        }),
+      );
+      if (!approval.ok) {
+        const { refused } = approval;
+        return res.status(refused.status).json({ success: false, message: refused.message, data: null });
+      }
+      const result = approval.written;
       if (!result.ok) {
         const status = result.reason === 'not_found' ? 404 : 409;
         return res.status(status).json({ success: false, message: REJECTION_MESSAGES[result.reason], data: null });

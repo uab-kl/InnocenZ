@@ -5,10 +5,20 @@ import { LiveEarningsLabel } from "@agency-portal/components/outlet/outlet-live-
 import type { AgencyRosterSlot } from "@agency-portal/lib/agency-demo";
 import {
 	type OutletPrLiveEarningsBreakdown,
+	type RecordedFloorSales,
 	type RosterShiftEarningsContext,
 	rosterShiftEarningsRows,
 	roundRm,
 } from "@agency-portal/lib/outlet-financial-sync";
+import {
+	type RosterWageRow,
+	rosterServerWageRows,
+	slotHasServerWage,
+} from "@agency-portal/lib/roster-payout-breakdown";
+import {
+	type RosterRecordedSalesRow,
+	rosterRecordedSalesRows,
+} from "@agency-portal/lib/roster-recorded-sales";
 import { useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -161,6 +171,185 @@ function TipsBreakdownTable({
 }
 
 /**
+ * The Est. payout breakdown on a REAL session: each booking's server wage, the
+ * very figures the column shows — see `roster-payout-breakdown.ts` for why the
+ * demo table below cannot answer this on a real login.
+ */
+function ServerWageBreakdownTable({
+	rows,
+	totalRm,
+}: {
+	rows: RosterWageRow[];
+	totalRm: number;
+}) {
+	const { t } = usePortalLocale();
+	return (
+		<>
+			<p className="iz-tiny iz-muted mt-3">
+				{t.agencyRoster.estPayoutServerHint}
+			</p>
+			<div className="iz-outlet-live-earnings-table-wrap iz-outlet-live-earnings-table-wrap--sheet">
+				<table className="iz-outlet-live-earnings-table iz-outlet-live-earnings-table--sheet">
+					<thead>
+						<tr>
+							<th>
+								<LiveEarningsLabel label={t.today.colPrName} />
+							</th>
+							<th>
+								<LiveEarningsLabel label={t.outletDetail.colTier} />
+							</th>
+							<th>
+								<LiveEarningsLabel label={t.today.colDailyWages} />
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{rows.length === 0 ? (
+							<tr>
+								<td
+									colSpan={3}
+									className="iz-outlet-live-earnings-table__empty"
+								>
+									{t.agencyRoster.noBookingsThisShift}
+								</td>
+							</tr>
+						) : (
+							rows.map((row) => (
+								<tr key={row.slotId}>
+									<td className="iz-outlet-live-earnings-table__name">
+										{row.prName}
+									</td>
+									<td>{row.tier ?? "—"}</td>
+									<td className="iz-outlet-live-earnings-table__amount">
+										{formatRM(row.wageRm)}
+									</td>
+								</tr>
+							))
+						)}
+					</tbody>
+					{rows.length > 0 && (
+						<tfoot>
+							<tr className="iz-outlet-live-earnings-table__foot">
+								<th scope="row" colSpan={2}>
+									<LiveEarningsLabel label={t.agencyRoster.shiftTotal} />
+								</th>
+								<td>{formatRM(totalRm)}</td>
+							</tr>
+						</tfoot>
+					)}
+				</table>
+			</div>
+		</>
+	);
+}
+
+/**
+ * The Drinks or Tips breakdown on a REAL session: each PR booked on the shift
+ * with the floor sales the server recorded — the very figures the column shows.
+ * No happy-hour split and no commission %: the recorded row carries no receipt
+ * times, and the PR's commission is sealed on their voucher, not re-priced here
+ * off a rate card.
+ */
+function RecordedSalesBreakdownTable({
+	kind,
+	rows,
+	totalRm,
+	totalUnits,
+}: {
+	kind: "drinks" | "tips";
+	rows: RosterRecordedSalesRow[];
+	totalRm: number;
+	totalUnits: number;
+}) {
+	const { t } = usePortalLocale();
+	const amountOf = (row: RosterRecordedSalesRow) =>
+		kind === "drinks" ? row.drinkSalesRm : row.tipRm;
+	const anyRecorded = rows.some((row) => amountOf(row) > 0);
+	return (
+		<>
+			<p className="iz-tiny iz-muted mt-3">
+				{t.agencyRoster.recordedSalesHint}
+			</p>
+			<div className="iz-outlet-live-earnings-table-wrap iz-outlet-live-earnings-table-wrap--sheet">
+				<table className="iz-outlet-live-earnings-table iz-outlet-live-earnings-table--sheet">
+					<thead>
+						<tr>
+							<th>
+								<LiveEarningsLabel label={t.today.colPrName} />
+							</th>
+							<th>
+								<LiveEarningsLabel
+									label={
+										kind === "drinks" ? t.today.drinkSales : t.reports.colTips
+									}
+								/>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{!anyRecorded ? (
+							<tr>
+								<td
+									colSpan={2}
+									className="iz-outlet-live-earnings-table__empty"
+								>
+									{kind === "drinks"
+										? t.agencyRoster.noDrinkSalesThisShift
+										: t.agencyRoster.noTipsThisShift}
+								</td>
+							</tr>
+						) : (
+							rows.map((row) => (
+								<tr key={row.slotId}>
+									<td className="iz-outlet-live-earnings-table__name">
+										{row.prName}
+									</td>
+									<td className="iz-outlet-live-earnings-table__amount">
+										{amountOf(row) > 0 ? formatRM(amountOf(row)) : "—"}
+										{kind === "drinks" && row.drinkUnits > 0 ? (
+											<span className="iz-tiny iz-muted2 block">
+												{fill(
+													row.drinkUnits === 1
+														? t.today.unitCountOne
+														: t.today.unitCountMany,
+													{ n: row.drinkUnits },
+												)}
+											</span>
+										) : null}
+									</td>
+								</tr>
+							))
+						)}
+					</tbody>
+					{anyRecorded && (
+						<tfoot>
+							<tr className="iz-outlet-live-earnings-table__foot">
+								<th scope="row">
+									<LiveEarningsLabel label={t.agencyRoster.shiftTotal} />
+								</th>
+								<td>
+									{formatRM(totalRm)}
+									{kind === "drinks" && totalUnits > 0 ? (
+										<span className="iz-tiny iz-muted2 block">
+											{fill(
+												totalUnits === 1
+													? t.today.unitCountOne
+													: t.today.unitCountMany,
+												{ n: totalUnits },
+											)}
+										</span>
+									) : null}
+								</td>
+							</tr>
+						</tfoot>
+					)}
+				</table>
+			</div>
+		</>
+	);
+}
+
+/**
  * RESOLVERS, not dictionary keys.
  *
  * A key is itself a `string`, so storing one here would type-check and then put
@@ -180,20 +369,59 @@ export function RosterShiftEarningsSheets({
 	kind,
 	anchorSlot,
 	earningsContext,
+	recordedBySlotId,
 	onClose,
 }: {
 	kind: RosterEarningsSheetKind | null;
 	anchorSlot: AgencyRosterSlot | null;
 	earningsContext: RosterShiftEarningsContext;
+	/**
+	 * A real session's recorded floor sales per slot — the Drinks and Tips
+	 * columns' own figures. Null / omitted = a demo session: fixture tables.
+	 */
+	recordedBySlotId?: Map<string, RecordedFloorSales> | null;
 	onClose: () => void;
 }) {
 	const { t } = usePortalLocale();
+	/*
+	 * Drinks / Tips on a real session break down the SERVER's recorded sales —
+	 * the figures the columns show — not the demo engine, which a real login
+	 * leaves nothing to price and so answered "No drink sales logged" beneath a
+	 * column holding the night.
+	 */
+	const recordedSales = useMemo(
+		() =>
+			(kind === "drinks" || kind === "tips") && anchorSlot && recordedBySlotId
+				? rosterRecordedSalesRows(
+						anchorSlot,
+						earningsContext.rosterScope,
+						recordedBySlotId,
+					)
+				: null,
+		[anchorSlot, kind, earningsContext, recordedBySlotId],
+	);
+	/*
+	 * A slot the SERVER priced (a real session) is broken down by the server's
+	 * figures; a demo slot keeps the fixture engine below. Decided per anchor, by
+	 * the same test the Est. payout column itself uses.
+	 */
+	const serverWages = useMemo(
+		() =>
+			kind === "payout" && anchorSlot && slotHasServerWage(anchorSlot)
+				? rosterServerWageRows(
+						anchorSlot,
+						earningsContext.rosterScope,
+						earningsContext.agencyPRs,
+					)
+				: null,
+		[anchorSlot, kind, earningsContext],
+	);
 	const rows = useMemo(
 		() =>
-			anchorSlot && kind
+			anchorSlot && kind && !serverWages && !recordedSales
 				? rosterShiftEarningsRows(anchorSlot, earningsContext)
 				: [],
-		[anchorSlot, kind, earningsContext],
+		[anchorSlot, kind, earningsContext, serverWages, recordedSales],
 	);
 
 	if (!kind || !anchorSlot) return null;
@@ -205,11 +433,32 @@ export function RosterShiftEarningsSheets({
 			<IzCardTitle>{SHEET_TITLE[kind](t)}</IzCardTitle>
 			<p className="iz-sm iz-muted mt-1.5">{shiftLabel}</p>
 
-			{kind === "drinks" && <DrinksBreakdownTable rows={rows} />}
-			{kind === "tips" && <TipsBreakdownTable rows={rows} />}
-			{kind === "payout" && (
-				<OutletPrLiveSalesFloorTable rows={rows} className="mt-4" />
-			)}
+			{(kind === "drinks" || kind === "tips") &&
+				(recordedSales ? (
+					<RecordedSalesBreakdownTable
+						kind={kind}
+						rows={recordedSales.rows}
+						totalRm={
+							kind === "drinks"
+								? recordedSales.drinkSalesRm
+								: recordedSales.tipRm
+						}
+						totalUnits={recordedSales.drinkUnits}
+					/>
+				) : kind === "drinks" ? (
+					<DrinksBreakdownTable rows={rows} />
+				) : (
+					<TipsBreakdownTable rows={rows} />
+				))}
+			{kind === "payout" &&
+				(serverWages ? (
+					<ServerWageBreakdownTable
+						rows={serverWages.rows}
+						totalRm={serverWages.totalRm}
+					/>
+				) : (
+					<OutletPrLiveSalesFloorTable rows={rows} className="mt-4" />
+				))}
 
 			<button
 				type="button"

@@ -674,6 +674,12 @@ export class AgencyPrRepository {
    * and the old "null it unless rejected" rule would have erased that note in
    * the same write that was meant to record it. Omit the param and the old
    * behaviour holds exactly.
+   *
+   * `opts.from` makes it a TRANSITION: the row moves only while it is still in
+   * that status, in the same statement — so of two clicks that both read
+   * `pending`, exactly one decides it and the other comes back null (29 Sep
+   * 2026: a double-click approved, and notified, twice). Null therefore means
+   * "no such row, or it has moved on"; the caller re-reads to tell which.
    */
   async setApproveStatus(
     agencyId: string,
@@ -681,6 +687,7 @@ export class AgencyPrRepository {
     approveStatus: AgencyPrApproveStatus,
     actor: string,
     rejectReason?: string | null,
+    opts: { from?: AgencyPrApproveStatus } = {},
   ): Promise<AgencyPrType | null> {
     try {
       const [row] = await db
@@ -692,7 +699,13 @@ export class AgencyPrRepository {
           updatedAt: new Date(),
           updatedBy: actor,
         })
-        .where(and(eq(AgencyPrTable.agencyId, agencyId), eq(AgencyPrTable.userId, userId)))
+        .where(
+          and(
+            eq(AgencyPrTable.agencyId, agencyId),
+            eq(AgencyPrTable.userId, userId),
+            opts.from ? eq(AgencyPrTable.approveStatus, opts.from) : undefined,
+          ),
+        )
         .returning();
       return row ?? null;
     } catch (error) {

@@ -73,6 +73,35 @@ export class NotificationControllerClass {
     }
   }
 
+  /**
+   * POST /notification/read-all — every unread row of the caller, in one write.
+   *
+   * The bells can only SEE the page they loaded, so a per-row fan-out cleared
+   * that page and left everything older unread and out of reach — the PR app's
+   * badge sat at 50 because of it. Idempotent: nothing unread answers 0.
+   */
+  async markAllRead(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const updated = await this.repository.markAllRead(userId);
+      if (updated === null) {
+        return res
+          .status(500)
+          .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+      return res.status(200).json({ success: true, message: 'OK', data: { updated } });
+    } catch (error) {
+      logger.error('[NotificationController.markAllRead] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   /** POST /notification/:id/read — idempotent; re-reading a read one is fine. */
   async markRead(req: Request, res: Response) {
     try {

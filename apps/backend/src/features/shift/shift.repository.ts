@@ -21,7 +21,10 @@ import {
   ShiftAgencyTable,
   ShiftPayTierTable,
   ShiftPayTier,
+  ShiftDrinkMenuTable,
+  ShiftDrinkMenuItem,
 } from './shift.model';
+import { ShiftWriteRefused, type ShiftWriteGuard } from './shift-write-guard';
 
 // A pay-tier override row as accepted from the controller — the caller supplies
 // only the rate fields; shift_id, actor, and timestamps are set by the repo.
@@ -29,6 +32,67 @@ export type ShiftPayTierInput = Omit<
   ShiftPayTier,
   'id' | 'shiftId' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'
 >;
+
+// One line of a special event's own price list (0167), as accepted from the
+// controller — same rule as `ShiftPayTierInput`: the repo sets the rest.
+export type ShiftDrinkMenuInput = Omit<
+  ShiftDrinkMenuItem,
+  'id' | 'shiftId' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'
+>;
+
+/**
+ * Everything ONE posted shift writes — the arguments `createWithPayTiers` takes,
+ * as one value, so a batch can carry a list of them (`createManyWithPayTiers`).
+ */
+export type ShiftPostWrite = {
+  data: Omit<ShiftInsertType, 'id' | 'createdAt' | 'updatedAt'>;
+  payTiers?: ShiftPayTierInput[];
+  /** The invited agencies, already checked against the outlet's APPROVED links. */
+  agencyIds?: string[];
+  /** Named picks, already filtered to agencies invited on this shift. */
+  requestedPrs?: { userId: string; agencyId: string }[];
+  /** A special event's own price list, already normalised. */
+  eventDrinkMenu?: ShiftDrinkMenuInput[];
+};
+
+/**
+ * What a shift reads THROUGH its event template (0128), joined on every read.
+ *
+ * The cover picture has always ridden along this way. The special sub-type does
+ * too, now as the FALLBACK: since 0167 the shift keeps its own type and "Other"
+ * name (`shift.special_event_type`), and a reader prefers those. A shift posted
+ * before 0167 has NULL there, and one posted from a card carried the card's type
+ * LOCKED (the composer hides the type picker), so for it the card's type is the
+ * honest answer. Both ride on every read; the web mapper picks.
+ */
+const TEMPLATE_FIELDS = {
+  templateCoverImage: ShiftTemplateTable.coverImage,
+  templateSpecialEventType: ShiftTemplateTable.specialEventType,
+  templateCustomEventName: ShiftTemplateTable.customSpecialEventName,
+};
+
+/**
+ * Log a failed shift write — but not a guard's refusal, which is the caller's
+ * ANSWER (shift-write-guard.ts), just as `ShiftFullError` is not logged either.
+ */
+function logWriteFailure(method: string, error: unknown): void {
+  if (error instanceof ShiftWriteRefused) return;
+  logger.error(`[ShiftRepository.${method}] Error:`, error);
+}
+
+function withTemplateFields(row: {
+  shift: ShiftType;
+  templateCoverImage: string | null;
+  templateSpecialEventType: string | null;
+  templateCustomEventName: string | null;
+}) {
+  return {
+    ...row.shift,
+    templateCoverImage: row.templateCoverImage,
+    templateSpecialEventType: row.templateSpecialEventType,
+    templateCustomEventName: row.templateCustomEventName,
+  };
+}
 
 export class ShiftRepositoryClass {
   async create(
@@ -65,18 +129,23 @@ export class ShiftRepositoryClass {
     }
   }
 
-  async getById(id: string): Promise<ShiftType | null> {
+  /**
+   * `client`: the pool, or a seating guard's transaction (pr-seating-rules.ts) —
+   * which re-reads the shift's time under the shift's lock, in case an edit
+   * moved it after the caller first read it.
+   */
+  async getById(id: string, client: DbTransaction | typeof db = db): Promise<ShiftType | null> {
     try {
       // The event cover rides on every shift read (0128): agencies and PRs
       // may not read another org's template list, so the picture has to
       // arrive WITH the shift.
-      const [row] = await db
-        .select({ shift: ShiftTable, templateCoverImage: ShiftTemplateTable.coverImage })
+      const [row] = await client
+        .select({ shift: ShiftTable, ...TEMPLATE_FIELDS })
         .from(ShiftTable)
         .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
         .where(eq(ShiftTable.id, id))
         .limit(1);
-      const shift = row ? { ...row.shift, templateCoverImage: row.templateCoverImage } : undefined;
+      const shift = row ? withTemplateFields(row) : undefined;
       return shift ?? null;
     } catch (error) {
       logger.error('[ShiftRepository.getById] Error:', error);
@@ -97,14 +166,15 @@ export class ShiftRepositoryClass {
    * A DRAFT has not been asked for yet and so cannot clash with anything, which is
    * the same call `outletDailyPrUsage` makes. `shift_date` is a plain `date` column
    * (since 0023), so these bounds are plain 'YYYY-MM-DD' comparisons.
+   *
+   * `client` is the pool unless the write guard hands in its transaction
+   * (shift-write-guard.ts, 30 Sep 2026): the re-check under the venue's lock then
+   * reads on the connection that holds it, never a second pooled one.
    */
-  async listByOutletAroundDate(params: {
-    outletId: string;
-    shiftDate: string;
-    excludeShiftId?: string;
-  }): Promise<
-    { id: string; shiftDate: string; slot: string | null; eventName: string | null }[]
-  > {
+  async listByOutletAroundDate(
+    params: { outletId: string; shiftDate: string; excludeShiftId?: string },
+    client: DbTransaction | typeof db = db,
+  ): Promise<{ id: string; shiftDate: string; slot: string | null; eventName: string | null }[]> {
     try {
       const day = String(params.shiftDate).slice(0, 10);
       // Date.UTC normalises the overflow, so this is correct across month and year
@@ -122,7 +192,7 @@ export class ShiftRepositoryClass {
       ];
       if (params.excludeShiftId) conditions.push(ne(ShiftTable.id, params.excludeShiftId));
 
-      return await db
+      return await client
         .select({
           id: ShiftTable.id,
           shiftDate: ShiftTable.shiftDate,
@@ -340,6 +410,70 @@ export class ShiftRepositoryClass {
     }
   }
 
+  /** A special event's own price list (0167), in the composer's order. */
+  async listEventDrinkMenuForShift(shiftId: string): Promise<ShiftDrinkMenuItem[]> {
+    try {
+      return await db
+        .select()
+        .from(ShiftDrinkMenuTable)
+        .where(eq(ShiftDrinkMenuTable.shiftId, shiftId))
+        .orderBy(asc(ShiftDrinkMenuTable.sortOrder));
+    } catch (error) {
+      logger.error('[ShiftRepository.listEventDrinkMenuForShift] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event price lists for a PAGE of shifts, keyed by shift id — batched for the
+   * list endpoint exactly as `listPayTiersForShifts` is, so the Today sheet does
+   * not cost a query per row.
+   *
+   * Throws rather than answering empty, like the pay tiers: an empty list means
+   * "this event is priced from the Workspace", so a failed read reported as one
+   * would print the everyday prices under an event that set its own.
+   */
+  async listEventDrinkMenuForShifts(
+    shiftIds: string[],
+  ): Promise<Map<string, ShiftDrinkMenuItem[]>> {
+    try {
+      if (shiftIds.length === 0) return new Map();
+      const rows = await db
+        .select()
+        .from(ShiftDrinkMenuTable)
+        .where(inArray(ShiftDrinkMenuTable.shiftId, shiftIds))
+        .orderBy(asc(ShiftDrinkMenuTable.sortOrder));
+      const byShift = new Map<string, ShiftDrinkMenuItem[]>();
+      for (const row of rows) {
+        byShift.set(row.shiftId, [...(byShift.get(row.shiftId) ?? []), row]);
+      }
+      return byShift;
+    } catch (error) {
+      logger.error('[ShiftRepository.listEventDrinkMenuForShifts] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Replace a special event's own price list wholesale (delete-then-insert) —
+   * the same shape as `replacePayTiers`. An empty array clears it, and the
+   * night is then priced from the venue's Workspace list.
+   */
+  async replaceEventDrinkMenu(
+    shiftId: string,
+    rows: ShiftDrinkMenuInput[],
+    actor: string,
+    tx?: DbTransaction,
+  ): Promise<void> {
+    const dbClient = tx ?? db;
+    await dbClient.delete(ShiftDrinkMenuTable).where(eq(ShiftDrinkMenuTable.shiftId, shiftId));
+    if (rows.length > 0) {
+      await dbClient
+        .insert(ShiftDrinkMenuTable)
+        .values(rows.map((r) => ({ ...r, shiftId, createdBy: actor, updatedBy: actor })));
+    }
+  }
+
   /**
    * Replace a shift's pay-tier overrides wholesale (delete-then-insert), mirroring
    * how the outlet workspace replaces its child rows. Passing an empty array
@@ -369,6 +503,15 @@ export class ShiftRepositoryClass {
    * `shift_agency` rows is invisible to every agency, so a partial commit would
    * leave a job nobody can see and nobody can explain. The caller has already
    * checked each id against the outlet's APPROVED links.
+   *
+   * `eventDrinkMenu` is a special event's own price list (0167), already
+   * normalised by the controller (`normaliseSpecialEvent`) — so a normal shift
+   * arrives with none. Same transaction for the same reason: a special night
+   * committed without its prices would quietly be priced from the Workspace.
+   *
+   * `guard` runs FIRST in the transaction, before the shift row (30 Sep 2026):
+   * the venue's lock and the rules re-read through `tx` (shift-write-guard.ts).
+   * A refusal it throws rolls the transaction back with nothing written.
    */
   async createWithPayTiers(
     data: Omit<ShiftInsertType, 'id' | 'createdAt' | 'updatedAt'>,
@@ -379,68 +522,174 @@ export class ShiftRepositoryClass {
     // this shift — a request addressed to an uninvited agency would be a
     // row nobody can ever read.
     requestedPrs?: { userId: string; agencyId: string }[],
+    eventDrinkMenu?: ShiftDrinkMenuInput[],
+    guard?: ShiftWriteGuard,
   ): Promise<ShiftType> {
     try {
       return await db.transaction(async (tx) => {
-        const shift = await this.create(data, tx);
-        // Always at least the originating agency, so a caller that passes
-        // nothing still produces a visible shift rather than an orphan.
-        const invited = [...new Set([data.agencyId, ...(agencyIds ?? [])])];
-        await tx
-          .insert(ShiftAgencyTable)
-          .values(
-            invited.map((agencyId) => ({
-              shiftId: shift.id,
-              agencyId,
-              createdBy: actor,
-              updatedBy: actor,
-            })),
-          )
-          .onConflictDoNothing();
-        if (payTiers) await this.replacePayTiers(shift.id, payTiers, actor, tx);
-        // The venue's named picks, atomically with the shift they belong to
-        // (0131) — same reasoning as shift_agency above: a partial commit
-        // would post a job that silently forgot who was asked for.
-        if (requestedPrs && requestedPrs.length > 0) {
-          await tx
-            .insert(ShiftPrRequestTable)
-            .values(
-              requestedPrs.map((r) => ({
-                shiftId: shift.id,
-                userId: r.userId,
-                agencyId: r.agencyId,
-                createdBy: actor,
-                updatedBy: actor,
-              })),
-            )
-            .onConflictDoNothing();
-        }
-        return shift;
+        await guard?.(tx);
+        return this.writeShiftPost(
+          { data, payTiers, agencyIds, requestedPrs, eventDrinkMenu },
+          actor,
+          tx,
+        );
       });
     } catch (error) {
-      logger.error('[ShiftRepository.createWithPayTiers] Error:', error);
+      logWriteFailure('createWithPayTiers', error);
       throw error;
+    }
+  }
+
+  /**
+   * Several posted shifts, ALL OR NOTHING — `POST /shift/batch`.
+   *
+   * Each one is written by the very same `writeShiftPost` a single post runs,
+   * so a batch can never store a shift differently from a single post; the only
+   * difference is that they share ONE transaction. A failure on the fifth shift
+   * rolls back the first four with it, which is the whole point: Post Job's old
+   * one-at-a-time loop left the earlier shifts posted when a later one failed.
+   *
+   * Returns the shifts in the order they were given. `guard` runs first, before
+   * the first shift, exactly as on a single post.
+   */
+  async createManyWithPayTiers(
+    posts: ShiftPostWrite[],
+    actor: string,
+    guard?: ShiftWriteGuard,
+  ): Promise<ShiftType[]> {
+    try {
+      return await db.transaction(async (tx) => {
+        await guard?.(tx);
+        let written: ShiftType[] = [];
+        // In order, one at a time: a transaction is one connection, so there is
+        // nothing to gain from overlapping them, and the order is the answer's.
+        for (const post of posts) {
+          written = [...written, await this.writeShiftPost(post, actor, tx)];
+        }
+        return written;
+      });
+    } catch (error) {
+      logWriteFailure('createManyWithPayTiers', error);
+      throw error;
+    }
+  }
+
+  /**
+   * THE ONE INSERT PATH for a posted shift: the row, its agency fan-out, its
+   * pay-tier overrides, its event prices and its named picks, on the caller's
+   * transaction. `createWithPayTiers` wraps one in a transaction of its own and
+   * `createManyWithPayTiers` wraps a whole batch in a single one.
+   */
+  private async writeShiftPost(
+    post: ShiftPostWrite,
+    actor: string,
+    tx: DbTransaction,
+  ): Promise<ShiftType> {
+    const { data, payTiers, agencyIds, requestedPrs, eventDrinkMenu } = post;
+    const shift = await this.create(data, tx);
+    // Always at least the originating agency, so a caller that passes
+    // nothing still produces a visible shift rather than an orphan.
+    const invited = [...new Set([data.agencyId, ...(agencyIds ?? [])])];
+    await tx
+      .insert(ShiftAgencyTable)
+      .values(
+        invited.map((agencyId) => ({
+          shiftId: shift.id,
+          agencyId,
+          createdBy: actor,
+          updatedBy: actor,
+        })),
+      )
+      .onConflictDoNothing();
+    if (payTiers) await this.replacePayTiers(shift.id, payTiers, actor, tx);
+    if (eventDrinkMenu) await this.replaceEventDrinkMenu(shift.id, eventDrinkMenu, actor, tx);
+    // The venue's named picks, atomically with the shift they belong to
+    // (0131) — same reasoning as shift_agency above: a partial commit
+    // would post a job that silently forgot who was asked for.
+    if (requestedPrs && requestedPrs.length > 0) {
+      await tx
+        .insert(ShiftPrRequestTable)
+        .values(
+          requestedPrs.map((r) => ({
+            shiftId: shift.id,
+            userId: r.userId,
+            agencyId: r.agencyId,
+            createdBy: actor,
+            updatedBy: actor,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+    return shift;
+  }
+
+  /**
+   * Replace a shift's named-PR requests wholesale (delete-then-insert), the same
+   * shape as `replacePayTiers`. An empty list clears them. The caller has already
+   * re-resolved every pair against the agencies INVITED on this shift, exactly as
+   * create does — a request addressed to an uninvited agency is a row nobody can
+   * ever read.
+   */
+  async replaceRequestedPrs(
+    shiftId: string,
+    rows: { userId: string; agencyId: string }[],
+    actor: string,
+    tx?: DbTransaction,
+  ): Promise<void> {
+    const dbClient = tx ?? db;
+    await dbClient.delete(ShiftPrRequestTable).where(eq(ShiftPrRequestTable.shiftId, shiftId));
+    if (rows.length > 0) {
+      await dbClient
+        .insert(ShiftPrRequestTable)
+        .values(
+          rows.map((r) => ({
+            shiftId,
+            userId: r.userId,
+            agencyId: r.agencyId,
+            createdBy: actor,
+            updatedBy: actor,
+          })),
+        )
+        .onConflictDoNothing();
     }
   }
 
   /**
    * Update a shift and, when `payTiers` is provided, replace its overrides in the
    * same transaction. `payTiers` undefined leaves existing overrides untouched.
+   *
+   * `requestedPrs` follows the same rule: undefined leaves the venue's named
+   * picks alone, an array (even empty) replaces them — atomically with the shift,
+   * so an edit can never land the new time without the new names or vice versa.
+   *
+   * So does `eventDrinkMenu` (0167), the special event's own price list — and
+   * the controller hands in `[]` when an edit turns the shift normal, so the
+   * kind and its prices can never disagree after a commit.
+   *
+   * `guard` runs first, before the UPDATE — the same seam as a post's.
    */
   async updateWithPayTiers(
     id: string,
     data: Partial<ShiftInsertType>,
     payTiers: ShiftPayTierInput[] | undefined,
     actor: string,
+    requestedPrs?: { userId: string; agencyId: string }[],
+    eventDrinkMenu?: ShiftDrinkMenuInput[],
+    guard?: ShiftWriteGuard,
   ): Promise<ShiftType | null> {
     try {
       return await db.transaction(async (tx) => {
+        await guard?.(tx);
         const shift = await this.update(id, data, tx);
         if (shift && payTiers) await this.replacePayTiers(id, payTiers, actor, tx);
+        if (shift && requestedPrs) await this.replaceRequestedPrs(id, requestedPrs, actor, tx);
+        if (shift && eventDrinkMenu) {
+          await this.replaceEventDrinkMenu(id, eventDrinkMenu, actor, tx);
+        }
         return shift;
       });
     } catch (error) {
-      logger.error('[ShiftRepository.updateWithPayTiers] Error:', error);
+      logWriteFailure('updateWithPayTiers', error);
       throw error;
     }
   }
@@ -505,14 +754,14 @@ export class ShiftRepositoryClass {
       const totalCount = Number(countRow?.value ?? 0);
 
       const shiftRows = await db
-        .select({ shift: ShiftTable, templateCoverImage: ShiftTemplateTable.coverImage })
+        .select({ shift: ShiftTable, ...TEMPLATE_FIELDS })
         .from(ShiftTable)
         .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
         .where(whereClause)
         .orderBy(ShiftTable.shiftDate)
         .limit(pageSize)
         .offset((page - 1) * pageSize);
-      const shifts = shiftRows.map((r) => ({ ...r.shift, templateCoverImage: r.templateCoverImage }));
+      const shifts = shiftRows.map(withTemplateFields);
 
       return { shifts, totalCount };
     } catch (error) {

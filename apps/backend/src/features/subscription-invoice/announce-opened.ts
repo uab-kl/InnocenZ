@@ -44,19 +44,31 @@ export async function announceOpenedInvoices(opened: OpenedInvoice[]): Promise<n
      * adding two of them as floats is how 6999.00 + 150.10 becomes 7149.099999.
      * The one place this figure is read is a person's notification, so it has to
      * be exact.
+     *
+     * What is OWED — every row's `amount` is already net of the credit taken
+     * off it as it was minted (29 Sep 2026: the notice used to quote the figure
+     * BEFORE credits, a bigger bill than the one the org was asked to pay).
      */
     cents: number;
+    /** The credits taken off those same rows, in cents — 0 when none was. */
+    creditCents: number;
     currency: string;
     count: number;
     periodStart: string;
     periodEnd: string;
+    /**
+     * A partial first period billed by the day, if the night opened one. At
+     * most one per lane — only a lane's first period can be partial — and in
+     * practice one per org, because outlet months never are.
+     */
+    proRata: OpenedInvoice['proRata'];
   };
 
   const groups = new Map<string, Group>();
   for (const row of opened) {
     const key = `${row.subscriberType}:${row.subscriberId}`;
-    const parsed = Math.round(Number(row.amount) * 100);
-    const cents = Number.isFinite(parsed) ? parsed : 0;
+    const cents = toCents(row.amount);
+    const creditCents = row.creditApplied ? toCents(row.creditApplied) : 0;
     const existing = groups.get(key);
     if (!existing) {
       groups.set(key, {
@@ -64,15 +76,19 @@ export async function announceOpenedInvoices(opened: OpenedInvoice[]): Promise<n
         subscriberId: row.subscriberId,
         subscriberName: row.subscriberName,
         cents,
+        creditCents,
         currency: row.currency,
         count: 1,
         periodStart: row.periodStart,
         periodEnd: row.periodEnd,
+        proRata: row.proRata,
       });
       continue;
     }
     existing.cents += cents;
+    existing.creditCents += creditCents;
     existing.count += 1;
+    existing.proRata ??= row.proRata;
     // The widest window the night opened, so a plan and an add-on billed on
     // slightly different periods are described by something true of both.
     if (row.periodStart < existing.periodStart) existing.periodStart = row.periodStart;
@@ -102,6 +118,7 @@ export async function announceOpenedInvoices(opened: OpenedInvoice[]): Promise<n
         continue;
       }
 
+      // What is OWED, after any credit — the figure the org will be asked for.
       const amount = formatMoney(group.cents, group.currency);
       const written = await notifyMany(recipients, {
         kind: 'subscription_invoice_opened',
@@ -109,8 +126,12 @@ export async function announceOpenedInvoices(opened: OpenedInvoice[]): Promise<n
         body:
           group.count > 1
             ? `${group.periodStart} to ${group.periodEnd}, across ${group.count} lines. ` +
+              proRataSentence(group.proRata, group.currency) +
+              creditSentence(group) +
               'Open Subscription to see everything still unpaid.'
             : `${group.periodStart} to ${group.periodEnd}. ` +
+              proRataSentence(group.proRata, group.currency) +
+              creditSentence(group) +
               'Open Subscription to see everything still unpaid.',
         payload: {
           periodStart: group.periodStart,
@@ -120,6 +141,9 @@ export async function announceOpenedInvoices(opened: OpenedInvoice[]): Promise<n
           amount: (group.cents / 100).toFixed(2),
           currency: group.currency,
           count: group.count,
+          // Only when a credit was taken, so every other notice's payload is
+          // exactly what it was. `amount` above is already net of it.
+          ...(group.creditCents > 0 ? { creditApplied: (group.creditCents / 100).toFixed(2) } : {}),
         },
         actor: SYSTEM_ACTOR,
       });
@@ -132,6 +156,42 @@ export async function announceOpenedInvoices(opened: OpenedInvoice[]): Promise<n
     }
   }
   return told;
+}
+
+/**
+ * "Pro-rated: 2 of 7 days from 2026-08-07 (full period RM 125.00). " — or
+ * nothing at all, so every whole-period notice reads exactly as it did.
+ *
+ * Said in the notice because "New bill: RM 35.71" for a RM 125 week reads as a
+ * wrong price to the owner who receives it (owner, 29 Sep 2026: a first
+ * partial week is not billed in full).
+ */
+function proRataSentence(proRata: OpenedInvoice['proRata'], currency: string): string {
+  if (!proRata) return '';
+  const full = formatMoney(Math.round(Number(proRata.fullAmount) * 100), currency);
+  return (
+    `Pro-rated: ${proRata.billedDays} of ${proRata.periodDays} days ` +
+    `from ${proRata.billedFrom} (full period ${full}). `
+  );
+}
+
+/**
+ * "RM 10.00 credit from a switch to a cheaper plan taken off (RM 35.71 before
+ * credit). " — or nothing when no credit was taken, so every other notice reads
+ * exactly as it did. The only credit this ledger mints is `prorateLaneSwitch`'s,
+ * for a mid-period move to a cheaper plan, which is what the sentence names.
+ */
+function creditSentence(group: { cents: number; creditCents: number; currency: string }): string {
+  if (group.creditCents <= 0) return '';
+  const credit = formatMoney(group.creditCents, group.currency);
+  const before = formatMoney(group.cents + group.creditCents, group.currency);
+  return `${credit} credit from a switch to a cheaper plan taken off (${before} before credit). `;
+}
+
+/** A numeric(12,2) string in integer cents; an unreadable one counts as 0 rather than NaN. */
+function toCents(amount: string): number {
+  const parsed = Math.round(Number(amount) * 100);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 /** `695000` -> `RM 6,950.00`. Thousands separated, cents always shown. */

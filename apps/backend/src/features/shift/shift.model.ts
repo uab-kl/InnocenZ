@@ -1,4 +1,4 @@
-import { date, integer, numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date, index, integer, numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
@@ -70,6 +70,20 @@ export const ShiftTable = MainSchema.table('shift', {
    * and a `.references()` back at it would be a module cycle.
    */
   templateId: uuid('template_id'),
+  /**
+   * The special SUB-TYPE (0167) — vip | launch | private_table |
+   * brand_activation | corporate | other — spelled exactly as on
+   * `shift_template` (varchar 30, values `specialEventTypeValues`).
+   *
+   * A blank special post had nowhere to keep this, so it came back a bare
+   * "Special". Always NULL on a normal shift: `normaliseSpecialEvent` clears it
+   * whenever the kind is not special. A shift posted before 0167 has NULL here
+   * and its reader falls back to the card's type (`templateSpecialEventType`),
+   * which is why both ride on every read.
+   */
+  specialEventType: varchar('special_event_type', { length: 30 }),
+  /** The name typed for "Other" (0167) — kept only while the type IS 'other'. */
+  customSpecialEventName: varchar('custom_special_event_name', { length: 120 }),
   languages: varchar('languages', { length: 255 }),
   /**
    * What the venue asked people to WEAR (0132) — free text with five
@@ -217,6 +231,53 @@ export const ShiftPayTierTable = MainSchema.table('shift_pay_tier', {
 
 export type ShiftPayTier = typeof ShiftPayTierTable.$inferSelect;
 export type ShiftPayTierInsertType = typeof ShiftPayTierTable.$inferInsert;
+
+/**
+ * A special event's OWN price list (0167) — the per-shift twin of
+ * `outlet_drink_menu`, exactly as `shift_pay_tier` is the twin of
+ * `outlet_tier_rate`.
+ *
+ * Not a shift column on `outlet_drink_menu`: that table IS the venue's everyday
+ * list, every reader takes it by outlet, and the Workspace save REPLACES its
+ * rows — event rows there would leak into the everyday list or be wiped by the
+ * next Workspace save. Each row carries its own name and price because the
+ * price FOR THIS EVENT is a different fact from the everyday price, and it must
+ * not move when the everyday list is edited later.
+ *
+ * `slug` keeps the composer's item id, which for a row copied from the Workspace
+ * is that row's own slug — so a reader can say which event prices differ.
+ * `category` is carried verbatim, 'tip' included, for the reason spelled out in
+ * the web's `outlet-workspace-map.ts`: collapsing a tips row to 'service' moves
+ * every tip logged against it into the wrong bucket.
+ *
+ * Only a special shift has rows; `normaliseSpecialEvent` clears them when an
+ * edit turns the shift normal. NO rows on a special shift means "priced from the
+ * Workspace list", which is also every special shift posted before 0167.
+ */
+export const ShiftDrinkMenuTable = MainSchema.table(
+  'shift_drink_menu',
+  {
+    id: uuid('id').defaultRandom().notNull().primaryKey(),
+    shiftId: uuid('shift_id')
+      .notNull()
+      .references(() => ShiftTable.id, { onDelete: 'cascade' }),
+    slug: varchar('slug', { length: 100 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    priceRm: numeric('price_rm', { precision: 12, scale: 2 }).notNull().default('0'),
+    // 'drink' | 'service' | 'tip' — the same vocabulary as outlet_drink_menu.
+    category: varchar('category', { length: 20 }).notNull().default('service'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdBy: varchar('created_by').notNull().default('system'),
+    updatedBy: varchar('updated_by').notNull().default('system'),
+  },
+  // The one read: "this shift's prices" (the shift sheet, the list fan-out).
+  (table) => [index('shift_drink_menu_shift_idx').on(table.shiftId)],
+);
+
+export type ShiftDrinkMenuItem = typeof ShiftDrinkMenuTable.$inferSelect;
+export type ShiftDrinkMenuInsertType = typeof ShiftDrinkMenuTable.$inferInsert;
 
 export type ShiftFilter = {
   id?: string;

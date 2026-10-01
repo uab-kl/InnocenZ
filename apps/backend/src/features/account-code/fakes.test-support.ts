@@ -31,6 +31,7 @@ export function fakeUser(overrides: Partial<UserType> = {}): UserType {
     preferredLocale: null,
     failedLoginAttempts: 0,
     lockedUntil: null,
+    lastFailedLoginAt: null,
     blockedReason: null,
     sessionsValidFrom: null,
     createdAt: new Date(NOW - 86_400_000),

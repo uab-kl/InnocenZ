@@ -1,5 +1,7 @@
+import { localiseMemberChangeMessage } from "@agency-portal/lib/member-change-copy";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	addAgencyMember,
 	fetchAgencyMembers,
@@ -136,29 +138,45 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 		onSuccess: invalidate,
 	});
 
+	/*
+	 * Both writes hand back the server's own sentence ("Member reactivated as
+	 * Director.") — the house rule is that every decision confirms in the
+	 * server's words, and this used to resolve to nothing, so the Approvals pane
+	 * had no sentence to show and showed none.
+	 *
+	 * In the READER's language: the sentence is English on the wire, and every
+	 * screen showing it reads it from here, so it is translated once, here
+	 * (`localiseMemberChangeMessage`; an unknown sentence passes through).
+	 */
+	const { t } = usePortalLocale();
+	const localise = (message: string | undefined) =>
+		message ? localiseMemberChangeMessage(message, t) : message;
+
 	const changeMember = useMutation({
 		mutationFn: async (input: {
 			memberId: string;
 			subRole?: string;
 			status?: string;
-		}): Promise<void> => {
+		}): Promise<{ message?: string }> => {
 			const id = orgId as string;
 			const { memberId, ...payload } = input;
-			if (kind === "agency") {
-				await updateAgencyMember(id, memberId, payload, logout);
-				return;
-			}
-			await updateOutletMember(id, memberId, payload, logout);
+			const res =
+				kind === "agency"
+					? await updateAgencyMember(id, memberId, payload, logout)
+					: await updateOutletMember(id, memberId, payload, logout);
+			return { message: localise(res?.message) };
 		},
 		onSuccess: invalidate,
 	});
 
 	const removeMember = useMutation({
-		mutationFn: (memberId: string) => {
+		mutationFn: async (memberId: string) => {
 			const id = orgId as string;
-			return kind === "agency"
-				? removeAgencyMember(id, memberId, logout)
-				: removeOutletMember(id, memberId, logout);
+			const res =
+				kind === "agency"
+					? await removeAgencyMember(id, memberId, logout)
+					: await removeOutletMember(id, memberId, logout);
+			return { ...res, message: localise(res?.message) ?? "" };
 		},
 		onSuccess: invalidate,
 	});

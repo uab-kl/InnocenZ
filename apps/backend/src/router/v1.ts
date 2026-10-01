@@ -34,6 +34,7 @@ import ratingRoutes from '@/features/rating/rating.routes.js';
 import notificationRoutes from '@/features/notification/notification.routes.js';
 import collectionInvoiceRoutes from '@/features/collection-invoice/collection-invoice.routes.js';
 import { platformAuditMiddleware } from '@/middlewares/platform-audit.js';
+import { guardIdParams } from '@/middlewares/guard-id-params.js';
 import { signPrivateFiles } from '@/middlewares/sign-private-files.js';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import { requireAdmin } from '@/middlewares/require-role.js';
@@ -117,5 +118,9 @@ v1Router.use('/rating', ratingRoutes);
 v1Router.use('/notification', notificationRoutes);
 // Agency receivables. Scoped per org in the controller.
 v1Router.use('/collection-invoice', collectionInvoiceRoutes);
+
+// LAST, once every router above is mounted: a malformed `:id` / `:…Id` is a 404
+// before any guard or handler sees it, instead of a 22P02 that surfaced as 500.
+guardIdParams(v1Router);
 
 export default v1Router;

@@ -9,7 +9,9 @@ vi.mock('@/features/outlet/outlet-member.repository.js', () => ({ OutletMemberRe
 vi.mock('./subscription-payment.repository.js', () => ({ SubscriptionPaymentRepositoryClass: class {} }));
 vi.mock('@/features/notification/notify.js', () => ({ notifyMany: vi.fn() }));
 
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type { PaymentMethod } from '@/features/payment-method/payment-method.model.js';
+import { REFUND_DUE_PAID_TWICE_PREFIX, REFUND_DUE_VOIDED_BILL_PREFIX } from './refund-due.repository.js';
 import {
   AUTO_CHARGE_ACTOR,
   type AutoChargeCandidate,
@@ -21,6 +23,7 @@ import {
   invoiceIdFromAutoChargeOrderId,
   manualPaymentInFlight,
   runAutoCharge,
+  strandedClaimsCondition,
 } from './auto-charge.js';
 
 /**
@@ -255,5 +258,28 @@ describe('the failure notice', () => {
     expect(formatBillAmount('1500.1', 'MYR')).toBe('RM 1,500.10');
     expect(formatBillAmount('9999.99', 'MYR')).toBe('RM 9,999.99');
     expect(formatBillAmount('0.29', 'MYR')).toBe('RM 0.29');
+  });
+});
+
+/**
+ * Review, 30 Sep 2026: a claim marked refund-due — money that ARRIVED on a
+ * voided or already-paid bill — was logged as "stranded" every night.
+ */
+describe('stranded claims', () => {
+  test('a claim marked refund-due is not stranded; one with no reason at all still is', () => {
+    const where = new PgDialect().sqlToQuery(strandedClaimsCondition(kl('2026-09-30T03:00:00')));
+
+    // NULL-safe: a bare NOT(marker) would be NULL for every ordinary claim.
+    expect(where.sql).toContain(
+      '("main"."subscription_payment"."failure_reason" is null or not (' +
+        '"main"."subscription_payment"."failure_reason" like $5 or ' +
+        '"main"."subscription_payment"."failure_reason" like $6))',
+    );
+    expect(where.params.slice(4)).toEqual([
+      `${REFUND_DUE_VOIDED_BILL_PREFIX}%`,
+      `${REFUND_DUE_PAID_TWICE_PREFIX}%`,
+    ]);
+    // Still only the job's own claims, still only the unresolved ones.
+    expect(where.params.slice(0, 3)).toEqual([AUTO_CHARGE_ACTOR, 'initiated', 'pending']);
   });
 });

@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
-import { formatDate, getErrorMessage } from "@/lib/utils";
+import { formatDate, formatDay, getErrorMessage } from "@/lib/utils";
 import {
 	fetchAgencyMembers,
 	fetchAgencyMembershipsForUser,
@@ -310,8 +310,9 @@ export function OrgMemberPage({
 							<DetailField
 								icon={CalendarDays}
 								label={t.adminOrg.memberDob}
+								// A date-only column — `formatDate` added a UTC-midnight "08:00 am".
 								value={
-									account.profile.dob ? formatDate(account.profile.dob) : null
+									account.profile.dob ? formatDay(account.profile.dob) : null
 								}
 							/>
 							{/* Age is DERIVED by the API from the IC, never stored — the same

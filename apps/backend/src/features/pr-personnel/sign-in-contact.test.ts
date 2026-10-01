@@ -100,11 +100,14 @@ describe('signInPhoneLookupForms — agrees with the REAL login lookup', () => {
     expect(lookupFinds(onFile, typed)).toBe(true);
   });
 
-  it('control: the stored form ALONE misses a 00-prefixed number (the bug these forms fix)', () => {
+  it('the shared matcher now covers a 00-prefixed row too, so it and these forms agree', () => {
+    // This was the CONTROL showing the stored form alone missed a 00-prefixed
+    // number. Since the 30 Sep 2026 security review `phoneLoginCandidates`
+    // folds the 00 prefix itself (the delivery drops it), so both find it.
     const stored = storedSignInPhone('00123456789');
     expect(stored).toBe('+123456789');
-    expect(phoneLoginCandidates(stored as string)).not.toContain('00123456789');
-    expect(phoneLoginCandidates(storedSignInPhone('0060123456789') as string)).not.toContain(
+    expect(phoneLoginCandidates(stored as string)).toContain('00123456789');
+    expect(phoneLoginCandidates(storedSignInPhone('0060123456789') as string)).toContain(
       '0060123456789',
     );
   });

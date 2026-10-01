@@ -67,6 +67,27 @@ const CODE_FLOW_SENTENCES: ReadonlyArray<readonly [string, ErrorKey]> = [
   ['That is already your phone number', 'samePhone'],
   ['That email is already used by another account', 'emailTaken'],
   ['That phone number is already used by another account', 'phoneTaken'],
+  /*
+   * The two answers `/auth/register` gives a PR sign-up that collides with an
+   * account (owner, 29 Sep 2026: "General message, both"; the backend's
+   * account-answers.ts): one naming no field, and one naming the phone — sent
+   * only when her code reached that phone alone.
+   */
+  [
+    "We couldn't complete sign-up — if you already have an account, sign in or reset your password",
+    'signupNotCompleted',
+  ],
+  [
+    'That phone number already has an account — sign in, or reset your password',
+    'signupPhoneHasAccount',
+  ],
+  /*
+   * 400 from `/auth/register` for a phone receipt that is dead — and since
+   * 30 Sep 2026 ANY 409 spends it, as success always did, so a retry that
+   * resends it lands here. The sign-up wizard reads this to go back for a
+   * fresh code (`screens/sign-up/register-refusal.ts`).
+   */
+  ['Phone verification is missing or expired — verify again', 'phoneVerificationExpired'],
   ['Your account has no phone or email we can send a code to', 'noContactChannel'],
   /*
    * 422 — the PASSWORD change's own version of that, and a DIFFERENT sentence
@@ -317,8 +338,9 @@ export function localizeApiError(
  * Localise a SIGN-IN failure. The sign-in screen must use this, not
  * `localizeLoginError` alone.
  *
- * `localizeLoginError` knows the four sentences that only /auth/login sends
- * (not registered, inactive, wrong password, the minute-counted lockout). But
+ * `localizeLoginError` knows the sentences that only /auth/login sends (wrong
+ * email or password, wrong phone number or password, inactive, the
+ * minute-counted lockout). But
  * `session.signIn` re-throws every status other than 400/401, so the screen also
  * receives the shared ones: the login limiter's 429 "Too many sign-in attempts.
  * Please wait a few minutes and try again.", the catch-all 500 "Internal Server

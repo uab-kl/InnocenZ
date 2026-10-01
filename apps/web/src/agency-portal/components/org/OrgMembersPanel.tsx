@@ -271,9 +271,14 @@ export function OrgMembersPanel({
 	const onChangeRole = async (member: OrgMember, subRole: string) => {
 		if (subRole === member.subRole) return;
 		try {
-			await changeMember.mutateAsync({ memberId: member.id, subRole });
+			const result = await changeMember.mutateAsync({
+				memberId: member.id,
+				subRole,
+			});
+			// The server's own sentence first, as on the Approvals pane.
 			toast(
-				fill(t.profile.roleChangedTo, { role: labelForSubRole(subRole) }),
+				result.message?.trim() ||
+					fill(t.profile.roleChangedTo, { role: labelForSubRole(subRole) }),
 				"success",
 			);
 		} catch (error) {
@@ -285,9 +290,9 @@ export function OrgMembersPanel({
 		if (!memberToRemove) return;
 		const member = memberToRemove;
 		try {
-			await removeMember.mutateAsync(member.id);
+			const result = await removeMember.mutateAsync(member.id);
 			setMemberToRemove(null);
-			toast(t.profile.memberRemoved, "success");
+			toast(result?.message?.trim() || t.profile.memberRemoved, "success");
 		} catch (error) {
 			setMemberToRemove(null);
 			toast(serverMessage(error, t.profile.couldNotRemoveMember), "warn");

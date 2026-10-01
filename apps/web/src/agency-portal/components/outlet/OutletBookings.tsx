@@ -1,12 +1,15 @@
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { OutletCutLossActions } from "@agency-portal/components/outlet/OutletCutLossActions";
 import { OutletLaborCostReport } from "@agency-portal/components/outlet/OutletLaborCostReport";
+import { OutletShiftSalesPanel } from "@agency-portal/components/outlet/OutletLogSales";
 import {
 	OutletShiftDetailPanel,
 	OutletShiftStatusBadge,
 } from "@agency-portal/components/outlet/OutletShiftDetailPanel";
 import { OutletTodayOperationPanel } from "@agency-portal/components/outlet/OutletTodayOperationPanel";
 import { OutletEmptyState } from "@agency-portal/components/outlet/outlet-portal-ui";
+import { useOutletShiftSales } from "@agency-portal/hooks/use-outlet-shift-sales";
+import { useOutletEffectiveWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -23,7 +26,7 @@ import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import {
 	outletShiftDemandSupplied,
 	resolveShiftTierRates,
-	shiftSpecialEventLabel,
+	specialEventPillLabel,
 } from "@agency-portal/lib/outlet-demo";
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
 import { pickLiveShift } from "@agency-portal/lib/outlet-live-shift";
@@ -55,7 +58,13 @@ export function OutletBookings({
 	agencyPrs?: AgencyManagedPR[];
 }) {
 	const { t } = usePortalLocale();
-	const outletWorkspace = useStore((s) => s.outletWorkspace);
+	// The venue's real rate card on a real session — the store slice is a
+	// placeholder ladder there, which priced this card's "Pay" range and sales
+	// targets at demo money for every tier the shift did not name.
+	const outletWorkspace = useOutletEffectiveWorkspace();
+	// What the server has recorded as sold (approved receipts). The demo path
+	// below reads receipt scans a real login never has, so it said RM 0.
+	const shiftSales = useOutletShiftSales();
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const storeRoster = useStore((s) => s.agencyRoster);
 	const prReceiptScans = useStore((s) => s.prReceiptScans);
@@ -206,13 +215,15 @@ export function OutletBookings({
 					r.status !== "rejected",
 			)
 			.reduce((sum, r) => sum + r.amountIn, 0);
-		const displaySales = outletShiftDisplayLiveSales(s, {
-			outletName: s.outletName,
-			drinkMenu: outletWorkspace.drinkMenu ?? [],
-			rosterSlots: rosterTonight,
-			receiptScans: prReceiptScans,
-			specialServiceRm: tonightSpecialServiceRm,
-		});
+		const displaySales = shiftSales.backed
+			? (shiftSales.byShift.get(s.id)?.salesRm ?? 0)
+			: outletShiftDisplayLiveSales(s, {
+					outletName: s.outletName,
+					drinkMenu: outletWorkspace.drinkMenu ?? [],
+					rosterSlots: rosterTonight,
+					receiptScans: prReceiptScans,
+					specialServiceRm: tonightSpecialServiceRm,
+				});
 		const { demand, supplied } = outletShiftDemandSupplied(s);
 
 		return (
@@ -263,7 +274,9 @@ export function OutletBookings({
 							<span className="truncate text-sm font-semibold">{s.event}</span>
 							{s.eventKind === "special" && (
 								<IzPill variant="gold" className="shrink-0 !py-0.5 !text-[9px]">
-									{shiftSpecialEventLabel(
+									{/* A special post with no sub-type (one legacy blank post
+									    before 0167) printed an EMPTY gold pill — say "Special". */}
+									{specialEventPillLabel(
 										s.specialEventType,
 										t,
 										s.customSpecialEventName,
@@ -332,13 +345,29 @@ export function OutletBookings({
 					agencyPrs={agencyPrs}
 				/>
 			)}
+			{/*
+			 * LOG SALES, per PR, for the shift the panels describe — a REAL session
+			 * only (owner default, 29 Sep 2026). It writes `shift_sale`, the very
+			 * rows the Sales figure on the card above and the live sales in PR
+			 * tonight read. It offers itself only once the shift is live or ended
+			 * and only to a lane holding `sales:create`. A demo Today never showed
+			 * Log Sales on its cards, and still does not.
+			 */}
+			{variant === "home" && panelShift && shiftSales.backed && (
+				<OutletShiftSalesPanel
+					shiftId={panelShift.id}
+					shift={panelShift}
+					roster={rosterOverride}
+					agencyPrs={agencyPrs}
+				/>
+			)}
 			{variant === "home" && panelShift && (
-				<OutletLaborCostReport shift={panelShift} />
+				<OutletLaborCostReport shift={panelShift} agencyPrs={agencyPrs} />
 			)}
 			{variant === "home" &&
 				panelShift &&
 				panelShift.status === "confirmed" && (
-					<OutletCutLossActions shift={panelShift} />
+					<OutletCutLossActions shift={panelShift} agencyPrs={agencyPrs} />
 				)}
 			{variant === "future" && futureShifts.map((s) => renderShiftCard(s))}
 		</div>

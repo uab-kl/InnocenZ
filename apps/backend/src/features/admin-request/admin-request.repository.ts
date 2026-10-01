@@ -38,7 +38,7 @@ export type NegotiatedByRoleRow = {
  * my attention" badge, and a request they have already picked up is reasonably
  * out of it. Different question, different test, on purpose.
  */
-const AWAITING_ANSWER = ['pending', 'contacted'] as const;
+export const AWAITING_ANSWER = ['pending', 'contacted'] as const;
 
 export class AdminRequestRepositoryClass {
   /**
@@ -304,28 +304,40 @@ export class AdminRequestRepositoryClass {
   }
 
   /**
-   * Move a request out of `pending` ONLY IF IT IS STILL PENDING, returning it —
-   * or null when it is not (answered, withdrawn, or no such id).
+   * THE ONE CLAIM every answer takes — approve, resolve, mark contacted,
+   * decline: move the request ONLY IF IT IS STILL AWAITING AN ANSWER
+   * (`AWAITING_ANSWER`), returning it, or null when it is not (answered,
+   * withdrawn, or no such id).
    *
-   * One statement with the status in its WHERE, rather than read-then-write:
-   * `approve` used to check nothing at all, so an approved, declined, withdrawn
-   * or 'direct' plan change could be approved again and applied to the ledger a
-   * second time. A check read beforehand would still let two admins (or one
-   * double-click) both see 'pending'; this row lock lets exactly one through.
+   * One statement with the status in its WHERE, rather than read-then-write.
+   * `approve` and `resolve` used to check nothing at all, so an approved,
+   * declined, withdrawn or 'direct' plan change could be approved again, and a
+   * POS quote or Custom price already resolved could be resolved again — each
+   * applying to the ledger a second time. A check read beforehand would still
+   * let two admins (or one double-click) both see it waiting; this row lock
+   * lets exactly one answer through.
    *
-   * Takes a transaction and does NOT swallow errors, unlike `update`: it runs
-   * inside the switch's own transaction, and a swallowed error would read as
-   * "no longer pending" while the transaction it broke carried on.
+   * ⚠️ `approve` had its own twin of this, `claimPending`, which accepted
+   * `pending` ONLY — so a plan change an admin had marked contacted could never
+   * be approved (29 Sep 2026). There is one claim now, on one definition of
+   * "still waiting", so the answers cannot disagree about it again.
+   *
+   * Takes the caller's transaction when there is one (`approve` claims inside
+   * the switch's own, so a switch that fails leaves the request as it was), and
+   * does NOT swallow errors, unlike `update`: a swallowed error would read as
+   * "somebody else answered it" while the transaction it broke carried on.
    */
-  async claimPending(
+  async claimAwaitingAnswer(
     id: string,
     data: Partial<AdminRequestInsertType>,
-    tx: DbTransaction,
+    tx?: DbTransaction,
   ): Promise<AdminRequest | null> {
-    const [row] = await tx
+    const [row] = await (tx ?? db)
       .update(AdminRequestTable)
       .set({ ...data, updatedAt: new Date() })
-      .where(and(eq(AdminRequestTable.id, id), eq(AdminRequestTable.status, 'pending')))
+      .where(
+        and(eq(AdminRequestTable.id, id), inArray(AdminRequestTable.status, AWAITING_ANSWER)),
+      )
       .returning();
     return row ?? null;
   }

@@ -4,8 +4,8 @@ import { managedPrFromBackend } from "@agency-portal/lib/pr-personnel-map";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { useOutletRatings } from "./use-outlet-ratings";
+import { fetchAllOutletPrs, outletPrsKey } from "./use-outlet-shared-queries";
 
 /**
  * One selectable PR on the Post Job "Select PRs" picker — the fields the card
@@ -37,6 +37,28 @@ export interface UseOutletPrPool {
 	backed: boolean;
 	prs: OutletPrPoolCandidate[];
 	isLoading: boolean;
+	/**
+	 * The pool could not be READ (1 Oct 2026). `prs` is empty then too, and must
+	 * not be told as "no PRs to name yet": the server now answers 500 when it
+	 * cannot read the venue's agencies, where it used to answer an empty list.
+	 */
+	isError: boolean;
+}
+
+/**
+ * What the Select PRs picker says while it has nobody to show — loading, a read
+ * that FAILED, or a venue that genuinely has no one to name yet. Undefined for a
+ * demo session, which draws its own store. Three different states, three
+ * different sentences: an empty list after a failure is not an empty roster.
+ */
+export function prPoolEmptyHint(
+	pool: Pick<UseOutletPrPool, "backed" | "isLoading" | "isError">,
+	copy: { loading: string; failed: string; none: string },
+): string | undefined {
+	if (!pool.backed) return undefined;
+	if (pool.isLoading) return copy.loading;
+	if (pool.isError) return copy.failed;
+	return copy.none;
 }
 
 /** Mean stars per PR from this outlet's own rating rows. */
@@ -95,12 +117,12 @@ export function useOutletPrPool(agencyIds?: string[]): UseOutletPrPool {
 		// gets its own key rather than overwriting theirs.
 		queryKey: agencyKey
 			? ["outlet", "post-job", "pr-pool", agencyKey]
-			: ["outlet", "today", "prs"],
+			: outletPrsKey,
+		// Paged out: a single `pageSize: 500` request stops at the server's 100, and
+		// the unfiltered branch shares its key with Today and History.
 		queryFn: () =>
-			fetchPrPersonnel(
-				agencyKey
-					? { pageSize: 500, agencyIds: agencyKey.split(",") }
-					: { pageSize: 500 },
+			fetchAllOutletPrs(
+				agencyKey ? { agencyIds: agencyKey.split(",") } : {},
 				logout,
 			),
 		enabled: backed,
@@ -145,5 +167,10 @@ export function useOutletPrPool(agencyIds?: string[]): UseOutletPrPool {
 			});
 	}, [backed, prsQuery.data, ratings]);
 
-	return { backed, prs, isLoading: backed && prsQuery.isLoading };
+	return {
+		backed,
+		prs,
+		isLoading: backed && prsQuery.isLoading,
+		isError: backed && prsQuery.isError,
+	};
 }

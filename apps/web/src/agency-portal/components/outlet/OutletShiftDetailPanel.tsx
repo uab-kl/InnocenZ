@@ -13,9 +13,9 @@ import {
 	OutletTargetActualCard,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
-import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import { useOutletShiftActions } from "@agency-portal/hooks/use-outlet-shift-actions";
-import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
+import { useOutletShiftSales } from "@agency-portal/hooks/use-outlet-shift-sales";
+import { useOutletEffectiveWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -25,8 +25,8 @@ import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import {
 	formatOutletPriceRm,
 	formatOutletShiftMetricAmount,
-	formatShiftDrinkPricingSummary,
 	formatShiftEventTypeSummary,
+	OUTLET_DRINKS_PRICE_SECTION_ID,
 	OUTLET_PR_TONIGHT_SECTION_ID,
 	OUTLET_REDUCE_CUTLOST_SECTION_ID,
 	OUTLET_SERVICE_ENTITLEMENT_SECTION_ID,
@@ -41,9 +41,11 @@ import {
 	resolveShiftTierRates,
 	scrollToOutletLaborCostReport,
 	scrollToOutletLiveSales,
-	shiftDrinkMenuDetailLines,
 } from "@agency-portal/lib/outlet-demo";
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
+import { shiftSheetSalesLog } from "@agency-portal/lib/outlet-sales-log";
+import { shiftPriceGroups } from "@agency-portal/lib/outlet-shift-price-groups";
+import { outletWriteRefusalText } from "@agency-portal/lib/outlet-write-refusal";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { shiftTierStaffingByPayTier } from "@agency-portal/lib/post-job-pay-tiers";
 import { shiftEndInstant } from "@agency-portal/lib/shift-window";
@@ -169,12 +171,9 @@ export function OutletShiftDetailPanel({
 	// RM 500 / 10% / 15%, which made the card look half-broken rather than wrong.
 	// Post Job already picks the backed copy this way; the two screens must agree
 	// about what the venue charges.
-	const storeWorkspace = useStore((s) => s.outletWorkspace);
-	const backedWorkspace = useOutletWorkspace();
-	const outletWorkspace =
-		backedWorkspace.backed && backedWorkspace.workspace
-			? backedWorkspace.workspace
-			: storeWorkspace;
+	const outletWorkspace = useOutletEffectiveWorkspace();
+	// The venue's recorded floor sales — the Sales tile's real "actual".
+	const shiftSales = useOutletShiftSales();
 	const storeAgencyPRs = useStore((s) => s.agencyPRs);
 	const storeRoster = useStore((s) => s.agencyRoster);
 	const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
@@ -208,12 +207,17 @@ export function OutletShiftDetailPanel({
 			 * venue believed the night was settled when nothing had been written.
 			 *
 			 * The owner's rule: show the server's own sentence, both ways —
-			 * silence reads as failure and invites a second, harmful click.
+			 * silence reads as failure and invites a second, harmful click. In
+			 * the reader's language where the portal knows it (a plan cap is
+			 * the usual one: a status change is re-checked against the plan).
 			 */
 			confirmShiftBackend(shiftId)
 				.then(() => toast(t.today.staffingConfirmed, "success"))
 				.catch((e) =>
-					toast(serverMessage(e, t.today.couldNotConfirmStaffing), "warn"),
+					toast(
+						outletWriteRefusalText(e, t, t.today.couldNotConfirmStaffing),
+						"warn",
+					),
 				);
 		} else {
 			confirmShiftDemo(shiftId);
@@ -222,6 +226,14 @@ export function OutletShiftDetailPanel({
 
 	const can = useOutletCan();
 	const canLogSales = can("logSales");
+	// Which Log Sales this sheet draws — a real session gets Today's per-PR
+	// panel, a demo keeps its counter; see `shiftSheetSalesLog`.
+	const salesLog = shiftSheetSalesLog({
+		backed: shiftSales.backed,
+		hidden: hideLogSales,
+		canLogSales,
+		status: shift.status,
+	});
 	const canConfirm = can("confirmShift");
 	// const canSeal = can("sealShift");
 	const canStaff = can("manageShiftStaffing");
@@ -249,10 +261,10 @@ export function OutletShiftDetailPanel({
 		? selfApplicants
 		: outletRequests;
 
-	const drinkLines = shiftDrinkMenuDetailLines(
-		shift,
-		outletWorkspace.drinkMenu ?? [],
-	);
+	// Drinks and Service Entitlement as the two lists they are — see the helper.
+	const prices = shiftPriceGroups(shift, outletWorkspace.drinkMenu ?? [], {
+		backed,
+	});
 	const eventTypeLabel = formatShiftEventTypeSummary(
 		shift.eventKind ?? "normal",
 		t,
@@ -265,11 +277,6 @@ export function OutletShiftDetailPanel({
 	// list, so a lookup would blank exactly the cross-org surfaces that need it.
 	const eventCover = apiAssetUrl(shift.templateCoverImage);
 	const [coverZoom, setCoverZoom] = useState(false);
-	const drinkPricingLabel = formatShiftDrinkPricingSummary(
-		shift,
-		outletWorkspace.drinkMenu ?? [],
-		t,
-	);
 	const tierRates = resolveShiftTierRates(shift, outletWorkspace);
 	const prTierById = Object.fromEntries(
 		agencyPRs.map((pr) => [pr.id, pr.trainingLevel]),
@@ -305,18 +312,24 @@ export function OutletShiftDetailPanel({
 	);
 	const displaySales = useMemo(
 		() =>
-			outletShiftDisplayLiveSales(
-				shift,
-				hideCutlost
-					? {
-							outletName: shift.outletName,
-							drinkMenu: outletWorkspace.drinkMenu ?? [],
-							rosterSlots: rosterTonight,
-							receiptScans: prReceiptScans,
-							specialServiceRm: tonightSpecialServiceRm,
-						}
-					: undefined,
-			),
+			// A real session reads what the server RECORDED (approved receipts).
+			// The demo path below reads receipt scans a real login never holds, and
+			// the stored `live_sales` column nothing writes — both RM 0 on a night
+			// the PRs sold RM 1,900.
+			shiftSales.backed
+				? (shiftSales.byShift.get(shift.id)?.salesRm ?? 0)
+				: outletShiftDisplayLiveSales(
+						shift,
+						hideCutlost
+							? {
+									outletName: shift.outletName,
+									drinkMenu: outletWorkspace.drinkMenu ?? [],
+									rosterSlots: rosterTonight,
+									receiptScans: prReceiptScans,
+									specialServiceRm: tonightSpecialServiceRm,
+								}
+							: undefined,
+					),
 		[
 			shift,
 			hideCutlost,
@@ -324,6 +337,8 @@ export function OutletShiftDetailPanel({
 			rosterTonight,
 			prReceiptScans,
 			tonightSpecialServiceRm,
+			shiftSales.backed,
+			shiftSales.byShift,
 		],
 	);
 	const cutLoss = outletShiftCutLossForShift(shift, tierRates, prTierById);
@@ -425,30 +440,77 @@ export function OutletShiftDetailPanel({
 						</span>
 						{eventTypeLabel}
 					</p>
-					<p className="iz-tiny iz-muted2">
-						<Link
-							to="/outlet/workspace"
-							hash={OUTLET_SERVICE_ENTITLEMENT_SECTION_ID}
-							className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
-						>
-							{t.today.serviceEntitlement}
-						</Link>
-						<span className="text-[var(--iz-muted)]"> · </span>
-						{drinkPricingLabel}
-					</p>
-					{shift.eventKind === "special" && drinkLines.length > 0 && (
-						<p className="iz-tiny iz-muted2 leading-relaxed">
-							{drinkLines.map((d, i) => (
-								<span key={d.name}>
-									{i > 0 ? " · " : null}
-									<span
-										className={d.changed ? "text-[var(--iz-gold)]" : undefined}
-									>
-										{d.name} RM {formatOutletPriceRm(d.priceRm)}
-									</span>
-								</span>
-							))}
+					{/* One line per LIST — Drinks, then Service Entitlement — each with
+					    its own range and its own Workspace link, never one flat run of
+					    every price. The items themselves show on a special event, as
+					    before, but under their own list. A special event that set its
+					    OWN prices in Post Job (0167) prints those, labelled as the
+					    event's, and drops the Workspace link: that page holds the
+					    everyday list, not the one printed here. */}
+					{prices.groups.length === 0 ? (
+						<p className="iz-tiny iz-muted2">
+							<Link
+								to="/outlet/workspace"
+								hash={OUTLET_DRINKS_PRICE_SECTION_ID}
+								className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
+							>
+								{t.today.addDrinkPricesInWorkspace}
+							</Link>
 						</p>
+					) : (
+						prices.groups.map((group) => (
+							<div key={group.category}>
+								<p className="iz-tiny iz-muted2">
+									{prices.eventSpecific ? (
+										<span className="text-[var(--iz-muted)]">
+											{group.category === "drink"
+												? t.workspace.drinksPrice
+												: t.workspace.serviceEntitlement}
+										</span>
+									) : (
+										<Link
+											to="/outlet/workspace"
+											hash={
+												group.category === "drink"
+													? OUTLET_DRINKS_PRICE_SECTION_ID
+													: OUTLET_SERVICE_ENTITLEMENT_SECTION_ID
+											}
+											className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
+										>
+											{group.category === "drink"
+												? t.workspace.drinksPrice
+												: t.workspace.serviceEntitlement}
+										</Link>
+									)}
+									<span className="text-[var(--iz-muted)]"> · </span>
+									{fill(
+										prices.eventSpecific
+											? t.postJob.pricesEventSpecific
+											: t.postJob.pricesWorkspace,
+										{
+											min: formatOutletPriceRm(group.minRm),
+											max: formatOutletPriceRm(group.maxRm),
+										},
+									)}
+								</p>
+								{shift.eventKind === "special" && (
+									<p className="iz-tiny iz-muted2 leading-relaxed">
+										{group.lines.map((d, i) => (
+											<span key={d.name}>
+												{i > 0 ? " · " : null}
+												<span
+													className={
+														d.changed ? "text-[var(--iz-gold)]" : undefined
+													}
+												>
+													{d.name} RM {formatOutletPriceRm(d.priceRm)}
+												</span>
+											</span>
+										))}
+									</p>
+								)}
+							</div>
+						))
 					)}
 				</div>
 				{/*
@@ -522,7 +584,7 @@ export function OutletShiftDetailPanel({
 
 				{(adjustmentsLabel || bestEffortSaved > 0) && (
 					<p className="iz-tiny iz-muted2 mt-2 text-center">
-						Posted {shift.quantity}
+						{fill(t.calendar.postedQuantity, { n: shift.quantity })}
 						{adjustmentsLabel ? ` · ${adjustmentsLabel}` : ""}
 						{bestEffortSaved > 0
 							? fill(t.today.savedAmount, {
@@ -536,7 +598,11 @@ export function OutletShiftDetailPanel({
 					shift.status === "confirmed" &&
 					showCutlost &&
 					!hideCutlost && (
-						<OutletCutLossActions shift={shift} sectionId={cutlostSectionId} />
+						<OutletCutLossActions
+							shift={shift}
+							sectionId={cutlostSectionId}
+							agencyPrs={agencyPrsOverride}
+						/>
 					)}
 
 				<div className="mt-2.5">
@@ -561,7 +627,7 @@ export function OutletShiftDetailPanel({
 										: t.today.requestedPrs}
 								</p>
 								<IzPill variant="amber" className="!py-0.5 !text-[9px]">
-									{visibleApplicants.length} waiting
+									{fill(t.calendar.nWaiting, { n: visibleApplicants.length })}
 								</IzPill>
 							</div>
 							{!showApplicantActions && (
@@ -604,7 +670,23 @@ export function OutletShiftDetailPanel({
 						</div>
 					)}
 
-				{canLogSales && shift.status === "confirmed" && !hideLogSales && (
+				{/*
+				 * LOG SALES IN THE SHEET, on a real session too. This passed no
+				 * shift, so the real-session branch of the panel had nothing to log
+				 * against and drew nothing: a venue could log a PR's sales on Today
+				 * and nowhere else. It now gets the very panel Today uses — the
+				 * same `logSales` grant, the same live-or-ended rule, the same
+				 * drinks + tips + services total with every PR's row editable.
+				 */}
+				{salesLog === "perPr" && (
+					<OutletShiftSalesPanel
+						shiftId={shift.id}
+						shift={shift}
+						roster={rosterOverride}
+						agencyPrs={agencyPrsOverride}
+					/>
+				)}
+				{salesLog === "demoCounter" && (
 					<div className="mt-3">
 						<OutletShiftSalesPanel
 							shiftId={shift.id}
@@ -613,7 +695,7 @@ export function OutletShiftDetailPanel({
 						/>
 					</div>
 				)}
-				{canLogSales && shift.status === "sealed" && (
+				{salesLog === "lockedNote" && (
 					<p className="iz-tiny iz-muted mt-2">{t.today.salesLocked}</p>
 				)}
 

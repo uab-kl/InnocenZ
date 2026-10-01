@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { adminConsoleRoleName } from "@/lib/auth/console-role";
 import {
 	updateMyDisplayName,
 	uploadMyProfileImage,
@@ -60,7 +61,8 @@ function ProfilePage() {
 		};
 	}, [previewUrl]);
 
-	const roleLabel = user?.roles?.[0] ?? "Admin";
+	// The admin role, not `roles[0]` — see `adminConsoleRoleName`.
+	const roleLabel = adminConsoleRoleName(user?.roles);
 	const savedImageUrl = apiAssetUrl(user?.profileImage);
 	const avatarSrc =
 		previewUrl ??

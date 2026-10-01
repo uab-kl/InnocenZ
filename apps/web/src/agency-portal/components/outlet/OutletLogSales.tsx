@@ -1,9 +1,15 @@
+import { OutletPrSalesLog } from "@agency-portal/components/outlet/OutletPrSalesLog";
+import type {
+	AgencyManagedPR,
+	AgencyRosterSlot,
+} from "@agency-portal/lib/agency-demo";
 import {
 	effectiveShiftDrinkMenu,
 	OUTLET_SERVICE_ENTITLEMENT_SECTION_ID,
 } from "@agency-portal/lib/outlet-demo";
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
-import { useStore } from "@agency-portal/lib/store";
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Minus, ScanLine, Wine } from "lucide-react";
@@ -17,9 +23,38 @@ type OutletShiftSalesPanelProps = {
 	label?: string;
 	compact?: boolean;
 	collapsible?: boolean;
+	/**
+	 * A REAL session's shift, with the roster slots and PR records it is
+	 * resolved against (useOutletToday). The demo store holds no shifts on a
+	 * real login, so without these the panel has nothing to log against.
+	 */
+	shift?: ShiftRequest;
+	roster?: AgencyRosterSlot[];
+	agencyPrs?: AgencyManagedPR[];
 };
 
-export function OutletShiftSalesPanel({
+/**
+ * LOG SALES — per PR on a real session, per drink on a demo one.
+ *
+ * A real session used to get `null` here: this panel read its shift out of the
+ * demo store, which a real login blanks. The backend records floor sales per
+ * PR, so a real session now logs through `OutletPrSalesLog` (owner default,
+ * 29 Sep 2026); a demo session keeps the per-drink counter below, unchanged.
+ */
+export function OutletShiftSalesPanel(props: OutletShiftSalesPanelProps) {
+	if (getOutletIdentity() !== null) {
+		return props.shift ? (
+			<OutletPrSalesLog
+				shift={props.shift}
+				roster={props.roster}
+				agencyPrs={props.agencyPrs}
+			/>
+		) : null;
+	}
+	return <DemoShiftSalesPanel {...props} />;
+}
+
+function DemoShiftSalesPanel({
 	shiftId,
 	sealed = false,
 	label,

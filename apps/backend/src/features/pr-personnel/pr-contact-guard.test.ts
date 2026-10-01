@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/util/member-code', () => ({ ensurePersonCode: vi.fn(async () => undefined) }));
 
 import { PrControllerClass } from '@/features/pr-personnel/pr.controller';
+import { PR_MOBILE_REQUIRED } from '@/features/pr-personnel/pr-write-rules';
 import { phoneLoginCandidates } from '@/features/user/user.repository';
 
 /**
@@ -658,6 +659,41 @@ describe('POST /pr — existing accounts keep their sign-in contact', () => {
       }),
     );
     expect(t.prRepository.ensureOpsBridge).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a NEW PR with no mobile number — a stub without one can never be claimed', async () => {
+    const t = build({ account: null });
+    const res = fakeResponse();
+
+    await t.controller.create(request({ name: 'New Person', email: 'new@example.com' }), res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body?.message).toBe(PR_MOBILE_REQUIRED);
+    expect(t.userRepository.createUser).not.toHaveBeenCalled();
+    expect(t.prRepository.ensureOpsBridge).not.toHaveBeenCalled();
+    expect(t.agencyPrRepository.upsertLink).not.toHaveBeenCalled();
+  });
+
+  it('refuses a NEW PR whose "mobile" cannot be reached (no code could ever be sent to it)', async () => {
+    const t = build({ account: null });
+    const res = fakeResponse();
+
+    await t.controller.create(request({ name: 'New Person', phone: 'x' }), res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body?.message).toBe(PR_MOBILE_REQUIRED);
+    expect(t.userRepository.createUser).not.toHaveBeenCalled();
+  });
+
+  it('still adds an EXISTING account matched by email without a mobile number', async () => {
+    const account = activatedAccount({ phoneNum: null });
+    const t = build({ account, directory: [account] });
+    const res = fakeResponse();
+
+    await t.controller.create(request({ name: 'Victoria Tan', email: account.email ?? '' }), res);
+
+    expect(res.statusCode).toBe(201);
+    expect(t.userRepository.createUser).not.toHaveBeenCalled();
   });
 
   it('an admin may still attach an account by userId', async () => {

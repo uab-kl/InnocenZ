@@ -1,6 +1,10 @@
 import { AgencyPaidPvHistory } from "@agency-portal/components/agency/AgencyPaidPvHistory";
-import { ShiftHistoryLog } from "@agency-portal/components/iz/ShiftHistoryLog";
+import {
+	ShiftHistoryLog,
+	type ShiftHistoryTakeHome,
+} from "@agency-portal/components/iz/ShiftHistoryLog";
 import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
+import { formatRM } from "@agency-portal/components/iz/ui";
 import {
 	OutletPage,
 	OutletPageHeader,
@@ -8,9 +12,17 @@ import {
 import { useAgencyHistory } from "@agency-portal/hooks/use-agency-history";
 import { ownedByAgency } from "@agency-portal/lib/agency-demo";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
+import {
+	historySealedPayoutRm,
+	historyTakeHome,
+	historyWagesRm,
+} from "@agency-portal/lib/history-take-home";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { getPrAgencyById } from "@agency-portal/lib/pr-demo";
-import { scopeShiftHistoryToAgencyName } from "@agency-portal/lib/shift-history-utils";
+import {
+	type ShiftHistoryRow,
+	scopeShiftHistoryToAgencyName,
+} from "@agency-portal/lib/shift-history-utils";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
@@ -20,25 +32,43 @@ import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type HistoryTab = "shifts" | "outlets" | "paid";
 
+/**
+ * The header line: TAKE-HOME first, the wage part beside it (owner default,
+ * 29 Sep 2026). `takeHomeRm` is null while its other parts — the vouchers,
+ * their lines and receipts — are loading or failed; the line then states
+ * wages alone rather than a sum missing a part.
+ */
 function historySummaryHint(
-	rows: { dateIso: string; dateDisplay: string; totalPayout: number }[],
+	rows: ShiftHistoryRow[],
 	shiftLabel: string,
 	t: PortalTranslations,
+	takeHomeRm: number | null,
 ) {
 	if (rows.length === 0) return t.history.noShiftHistoryYet;
 	const sorted = [...rows].sort((a, b) => a.dateIso.localeCompare(b.dateIso));
 	const oldest = sorted[0]?.dateDisplay;
 	const newest = sorted[sorted.length - 1]?.dateDisplay;
-	const totalPayout = rows.reduce((a, r) => a + r.totalPayout, 0);
 	const range =
 		oldest && newest && oldest !== newest
 			? `${oldest} – ${newest}`
 			: (oldest ?? newest);
+	// The cards' own formatter: `toLocaleString()` followed the BROWSER and
+	// dropped the cents, so "RM 250" here sat above "RM 250.00" below.
+	const wages = formatRM(historyWagesRm(rows));
+	if (takeHomeRm === null) {
+		return fill(t.history.summaryLineWagesOnly, {
+			count: rows.length,
+			label: shiftLabel,
+			range: range ?? "",
+			total: wages,
+		});
+	}
 	return fill(t.history.summaryLine, {
 		count: rows.length,
 		label: shiftLabel,
 		range: range ?? "",
-		total: `RM ${totalPayout.toLocaleString()}`,
+		total: formatRM(takeHomeRm),
+		wages,
 	});
 }
 
@@ -119,6 +149,31 @@ function AgencyHistory() {
 		[shiftHistory],
 	);
 
+	/*
+	 * What the PRs take home across the ledger — see history-take-home.ts for
+	 * every part and its row. A real session builds it from stored rows only:
+	 * each night's approved overtime and commission are already sealed onto its
+	 * row by the hook, and the deductions are THIS agency's own vouchers (the
+	 * `deduction` field and the penalty lines, server-scoped). A demo session
+	 * keeps its fixture, which already seals take-home onto each row.
+	 *
+	 * The SAME value goes to the log below, so every PR card is this sum cut per
+	 * PR — the cards add up to the header.
+	 */
+	const takeHome = useMemo<ShiftHistoryTakeHome>(
+		() =>
+			backend.backed
+				? { ready: backend.takeHomeReady, vouchers: backend.voucherDeductions }
+				: { ready: true, vouchers: [] },
+		[backend.backed, backend.takeHomeReady, backend.voucherDeductions],
+	);
+	const takeHomeRm = useMemo(() => {
+		if (!backend.backed) return historySealedPayoutRm(shiftHistory);
+		if (!takeHome.ready) return null;
+		return historyTakeHome({ rows: shiftHistory, vouchers: takeHome.vouchers })
+			.takeHomeRm;
+	}, [backend.backed, takeHome, shiftHistory]);
+
 	const summaryHint = useMemo(() => {
 		if (tab === "paid")
 			return fill(
@@ -137,13 +192,14 @@ function AgencyHistory() {
 					),
 				}),
 				t,
+				takeHomeRm,
 			);
 		}
-		return historySummaryHint(shiftHistory, t.history.prShifts, t);
+		return historySummaryHint(shiftHistory, t.history.prShifts, t, takeHomeRm);
 		// `t` belongs in the deps: without it the hint keeps the wording from
 		// whichever language was active when the memo last ran, so switching
 		// language would leave this one line in the old language.
-	}, [tab, shiftHistory, outletCount, paidCount, t]);
+	}, [tab, shiftHistory, outletCount, paidCount, t, takeHomeRm]);
 
 	const setTab = (next: HistoryTab) => {
 		void navigate({
@@ -205,6 +261,7 @@ function AgencyHistory() {
 						groupBy="pr"
 						rows={shiftHistory}
 						agencyPRs={agencyPRs}
+						takeHome={takeHome}
 						embedded
 					/>
 				</>
@@ -219,6 +276,7 @@ function AgencyHistory() {
 						groupBy="venue"
 						rows={shiftHistory}
 						agencyPRs={agencyPRs}
+						takeHome={takeHome}
 						embedded
 					/>
 				</>

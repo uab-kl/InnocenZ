@@ -37,13 +37,19 @@ credentials, writes nothing, and distinguishes the two failures cleanly:
 ```
 curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:7777/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"uab.innocenz@gmail.com","password":"deliberately-wrong-password"}'
+  -d '{"email":"uab.innocenz@gmail.com","password":"<password>"}'
 ```
 
-`{"success":false,"message":"Wrong password"}` + **401** = the user row was read successfully,
-schema is fine. A **500** = the SELECT itself blew up, so a declared column is missing. Reaching
-the password comparison at all is the evidence — see [[confirm-before-asserting]] and
-[[prove-guards-live-without-writing]] for the same "fire the refusal, it writes nothing" idea.
+`{"success":false,"message":"Wrong email or password"}` + **401** = the user SELECT ran, schema is
+fine. A **500** = the SELECT itself blew up, so a declared column is missing. (Since 30 Sep 2026 an
+address with NO account gets the same 401 after the same SELECT — see
+[[no-account-existence-leaks]] — so use an address nobody holds.)
+
+⚠️ **It is NOT write-free.** Every `POST /auth/login` writes an `audit_logs` row
+(`platformAuditMiddleware`), and a wrong password on a REAL account also bumps its
+`failed_login_attempts` and can lock it. Prefer reading `information_schema.columns` (below); fire
+the login only when the owner is fine with an audit row, and never at a real account. See
+[[confirm-before-asserting]] and [[prove-guards-live-without-writing]].
 
 To prove a specific column really landed, query `information_schema.columns` directly rather
 than trusting `drizzle-kit`'s "migrations applied successfully!" — it prints that even when it

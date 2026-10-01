@@ -95,6 +95,13 @@ export interface PaymentVoucher {
 	 */
 	voucherNo: string | null;
 	agencyId: string;
+	/**
+	 * The issuing agency's name, joined through `agency_id` on the LIST route
+	 * only. Voucher numbers are per agency, so across agencies (the admin list)
+	 * the number alone names two different documents — this says whose it is.
+	 * Absent on the detail route.
+	 */
+	agencyName?: string | null;
 	prId: string | null;
 	prName: string;
 	/**

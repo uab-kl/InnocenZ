@@ -269,12 +269,38 @@ const disputeResolved: Resolver = (ctx) => {
 };
 
 const paymentVoucherIssued: Resolver = (ctx) => {
-  const out: Localized = { title: ctx.t.notif.pvIssuedTitle };
+  // "Resend to PR" rings again (owner, 29 Sep 2026) — worded as a reminder.
+  const out: Localized = {
+    title: ctx.payload.resent === true ? ctx.t.notif.pvResentTitle : ctx.t.notif.pvIssuedTitle,
+  };
   const start = calendarDay(ctx.payload.weekStart, ctx.locale);
   const end = calendarDay(ctx.payload.weekEnd, ctx.locale);
   if (start && end) {
     out.body = formatMessage(ctx.t.notif.pvIssuedBody, { start, end });
   }
+  return out;
+};
+
+/**
+ * `payment_voucher_paid` — the agency's "Mark as paid", or a settled payout run.
+ *
+ * The payload carries the amount (a decimal string) and, from both lanes, the
+ * voucher number; a row without a usable amount keeps its stored English body
+ * rather than printing a sentence with a hole in it.
+ */
+const paymentVoucherPaid: Resolver = (ctx) => {
+  const out: Localized = { title: ctx.t.notif.pvPaidTitle };
+  const amount = count(ctx.payload, 'amount');
+  if (amount === null) return out;
+  const voucherNo = text(ctx.payload, 'voucherNo');
+  out.body = voucherNo
+    ? formatMessage(ctx.t.notif.pvPaidBody, {
+        voucherNo,
+        amount: formatRM(amount),
+      })
+    : formatMessage(ctx.t.notif.pvPaidBodyNoNumber, {
+        amount: formatRM(amount),
+      });
   return out;
 };
 
@@ -352,6 +378,7 @@ const RESOLVERS: Partial<Record<NotificationKind, Resolver>> = {
   overtime_decided: overtimeDecided,
   payment_voucher_dispute_resolved: disputeResolved,
   payment_voucher_issued: paymentVoucherIssued,
+  payment_voucher_paid: paymentVoucherPaid,
   shift_released_early: releasedEarly,
   agency_broadcast: agencyBroadcast,
   agency_join_resolved: agencyJoinResolved,

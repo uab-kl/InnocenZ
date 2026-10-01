@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, lte, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, lte, not, or, type SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { env } from '@/env.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
@@ -17,6 +17,7 @@ import { klToday } from '@/features/payment-voucher/payment-voucher-week.js';
 import { SubscriptionInvoiceTable } from '@/features/subscription-invoice/subscription-invoice.model.js';
 import { logger } from '@/util/logger.js';
 import { getGateway, listGateways, type PaymentGateway } from './payment-gateway.js';
+import { refundDueMarked } from './refund-due.repository.js';
 import { SubscriptionPaymentTable } from './subscription-payment.model.js';
 import { SubscriptionPaymentRepositoryClass } from './subscription-payment.repository.js';
 
@@ -371,19 +372,30 @@ async function claim(candidate: AutoChargeCandidate, gateway: PaymentGateway, no
   });
 }
 
+/**
+ * Which claims are STRANDED: the job's own, still `initiated`/`pending`, left
+ * past the window — and NOT marked refund-due. A marked claim's money ARRIVED
+ * (on a voided or already-paid bill) and waits on the admin's refunds-due card
+ * until someone marks it refunded; logging it as unresolved every night would
+ * bury the claims that really are.
+ */
+export function strandedClaimsCondition(now: Date): SQL {
+  return and(
+    eq(SubscriptionPaymentTable.createdBy, AUTO_CHARGE_ACTOR),
+    inArray(SubscriptionPaymentTable.status, ['initiated', 'pending']),
+    lt(SubscriptionPaymentTable.updatedAt, new Date(now.getTime() - AUTO_CHARGE_STRANDED_MS)),
+    // NULL-safe: NOT over a NULL reason is NULL, which would drop every ordinary claim.
+    or(isNull(SubscriptionPaymentTable.failureReason), not(refundDueMarked())),
+  ) as SQL;
+}
+
 /** Automatic claims left unresolved past the stranded window — surfaced, never silently kept. */
 async function listStrandedClaims(now: Date) {
   return db
     .select({ id: SubscriptionPaymentTable.id, invoiceNo: SubscriptionInvoiceTable.invoiceNo })
     .from(SubscriptionPaymentTable)
     .innerJoin(SubscriptionInvoiceTable, eq(SubscriptionInvoiceTable.id, SubscriptionPaymentTable.subscriptionInvoiceId))
-    .where(
-      and(
-        eq(SubscriptionPaymentTable.createdBy, AUTO_CHARGE_ACTOR),
-        inArray(SubscriptionPaymentTable.status, ['initiated', 'pending']),
-        lt(SubscriptionPaymentTable.updatedAt, new Date(now.getTime() - AUTO_CHARGE_STRANDED_MS)),
-      ),
-    );
+    .where(strandedClaimsCondition(now));
 }
 
 export type AutoChargeRunResult = {

@@ -50,6 +50,7 @@ vi.mock("@/lib/portal-i18n/context", async () => {
 	};
 });
 
+import { setAgencyPrApproval } from "@/services/agency";
 import { useAgencyPendingPrs } from "./use-agency-pending-prs";
 
 const zh = translations.zh;
@@ -170,5 +171,128 @@ describe("useAgencyPendingPrs · invite (POST /pr)", () => {
 			phone: "012-345 6789",
 			email: undefined,
 		});
+	});
+});
+
+/**
+ * 29 Sep 2026: "a real join/leave decision still answers 'OK'". The Approvals
+ * page toasts whatever these callbacks are handed, so the hook must hand it the
+ * SERVER's sentence — in the reader's language (zh here, so a passthrough
+ * cannot pass) — for a decision, a repeat and a refusal alike.
+ */
+describe("useAgencyPendingPrs · approve / reject (PATCH …/approval)", () => {
+	const decision = vi.mocked(setAgencyPrApproval);
+
+	beforeEach(() => {
+		decision.mockReset();
+	});
+
+	async function decide(
+		result: ReturnType<typeof setup>["result"],
+		act_: "approve" | "reject",
+	) {
+		const onSuccess = vi.fn();
+		const onError = vi.fn();
+		act(() => {
+			if (act_ === "approve") {
+				result.current.approve("pr-user-1", { onSuccess, onError });
+			} else {
+				result.current.reject("pr-user-1", "Roster is full", {
+					onSuccess,
+					onError,
+				});
+			}
+		});
+		await waitFor(() =>
+			expect(onSuccess.mock.calls.length + onError.mock.calls.length).toBe(1),
+		);
+		return { onSuccess, onError };
+	}
+
+	it("an approved join confirms with the server's sentence, translated — never 'OK'", async () => {
+		decision.mockResolvedValue({
+			success: true,
+			message: "Request approved — they are on your roster now.",
+		});
+		const { result } = setup();
+
+		const { onSuccess, onError } = await decide(result, "approve");
+
+		expect(onError).not.toHaveBeenCalled();
+		expect(onSuccess).toHaveBeenCalledWith(zh.agencyPending.srvJoinApproved);
+		expect(decision.mock.calls[0]?.[2]).toEqual({
+			approveStatus: "approved",
+			rejectReason: undefined,
+		});
+	});
+
+	it("a declined departure confirms that they stay and the reason was sent", async () => {
+		decision.mockResolvedValue({
+			success: true,
+			message:
+				"Departure declined — they stay on your roster, and your reason was sent to them.",
+		});
+		const { result } = setup();
+
+		const { onSuccess } = await decide(result, "reject");
+
+		expect(onSuccess).toHaveBeenCalledWith(
+			zh.agencyPending.srvDepartureDeclined,
+		);
+	});
+
+	it("a repeat click is confirmed as a repeat, in the reader's language", async () => {
+		decision.mockResolvedValue({
+			success: true,
+			message: "Already approved — they are on your roster. Nothing changed.",
+		});
+		const { result } = setup();
+
+		const { onSuccess } = await decide(result, "approve");
+
+		expect(onSuccess).toHaveBeenCalledWith(zh.agencyPending.srvAlreadyApproved);
+	});
+
+	it("a 409 on a decided row is an ERROR carrying the server's reason, translated", async () => {
+		decision.mockRejectedValue(
+			refusal(
+				409,
+				"This request was already declined, so it can no longer be approved — they can apply again, and the new request will appear here. Nothing changed.",
+			),
+		);
+		const { result } = setup();
+
+		const { onSuccess, onError } = await decide(result, "approve");
+
+		expect(onSuccess).not.toHaveBeenCalled();
+		expect(onError).toHaveBeenCalledWith(
+			zh.agencyPending.srvDeclinedCannotApprove,
+		);
+	});
+
+	it("the settlement gate's list of blockers is shown exactly as the server wrote it", async () => {
+		const blockers =
+			"The departure cannot be approved yet: 1 voucher still unpaid (PV-000123).";
+		decision.mockRejectedValue(refusal(409, blockers));
+		const { result } = setup();
+
+		const { onError } = await decide(result, "approve");
+
+		expect(onError).toHaveBeenCalledWith(blockers);
+	});
+
+	it("no answer at all reads the translated fallbacks — never an English literal", async () => {
+		decision.mockResolvedValue({ success: true, message: "" });
+		const { result } = setup();
+		const approved = await decide(result, "approve");
+		expect(approved.onSuccess).toHaveBeenCalledWith(zh.approvals.approved);
+
+		decision.mockRejectedValue(
+			new AxiosError("Network Error", AxiosError.ERR_NETWORK),
+		);
+		const failed = await decide(result, "reject");
+		expect(failed.onError).toHaveBeenCalledWith(
+			zh.agencyPending.couldNotSaveDecision,
+		);
 	});
 });

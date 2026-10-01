@@ -1,5 +1,6 @@
 import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import { outletWriteRefusalText } from "@agency-portal/lib/outlet-write-refusal";
 import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -93,7 +94,13 @@ export function useCutlostRequests(
 			invalidate();
 			toast(t.agencyPending.cutlostRaised, "success");
 		},
-		onError: failed(t.agencyPending.couldNotRaiseCutlost),
+		// The VENUE's refusal ("One or more PRs are not on this shift", the lane
+		// guard), in the portal's language where it is one the portal knows.
+		onError: (error: unknown) =>
+			toast(
+				outletWriteRefusalText(error, t, t.agencyPending.couldNotRaiseCutlost),
+				"warn",
+			),
 	});
 
 	const decide = useMutation({

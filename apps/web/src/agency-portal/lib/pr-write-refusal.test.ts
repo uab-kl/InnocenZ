@@ -18,6 +18,8 @@ const PR_ROUTE_SENTENCES = [
 	"This PR has no linked user account, so profile details cannot be saved",
 	"Invalid email",
 	"Name is required",
+	// PR_MOBILE_REQUIRED, backend pr-write-rules.ts (29 Sep 2026).
+	"A mobile number is required to add a new PR — it is how the PR claims the account at sign-up",
 ];
 
 const HAS_CJK = /[㐀-鿿]/;

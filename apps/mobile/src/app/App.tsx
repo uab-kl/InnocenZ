@@ -70,6 +70,9 @@ function LoggedInShell() {
 function AppShell() {
   const { me, booting, offline, resume, signOut } = useSession();
   const [authView, setAuthView] = useState<'signIn' | 'signUp'>('signIn');
+  // Carried from sign-up to the sign-in screen — today only "your account is
+  // ready, sign in" when the sign-in right after a sign-up failed.
+  const [signInNotice, setSignInNotice] = useState<string | null>(null);
 
   // Signup leaves authView on 'signUp'; clear it once logged in so logout
   // returns to Login, not the registration wizard.
@@ -100,9 +103,20 @@ function AppShell() {
     return (
       <PhoneFrame scroll={false}>
         {authView === 'signUp' ? (
-          <SignUpScreen onBackToSignIn={() => setAuthView('signIn')} />
+          <SignUpScreen
+            onBackToSignIn={(notice) => {
+              setSignInNotice(notice ?? null);
+              setAuthView('signIn');
+            }}
+          />
         ) : (
-          <LoginScreen onCreateAccount={() => setAuthView('signUp')} />
+          <LoginScreen
+            notice={signInNotice}
+            onCreateAccount={() => {
+              setSignInNotice(null);
+              setAuthView('signUp');
+            }}
+          />
         )}
       </PhoneFrame>
     );

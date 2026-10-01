@@ -23,7 +23,14 @@ export type PendingCutlostRequest = {
 	slotsCut?: number;
 	estimatedSavings: number;
 	cutlostBefore: number;
+	/** A display label on demo rows ("13 Jul 2026 · 12:40"). */
 	requestedAt: string;
+	/**
+	 * The backend's `created_at`, an ISO instant in UTC. Formatted for the
+	 * reader at render time (`cutlostRequestedAtLabel`) — printing it raw showed
+	 * "2026-08-06T08:12:25.416Z", a UTC clock eight hours off the venue's.
+	 */
+	requestedAtIso?: string;
 	declineReason?: string;
 	rationale?: string[];
 };
@@ -72,9 +79,68 @@ export function toPendingCutlostRequest(live: {
 		estimatedSavings: Number(live.estimatedSavings) || 0,
 		cutlostBefore: 0,
 		requestedAt: live.createdAt,
+		requestedAtIso: live.createdAt,
 		declineReason: live.declineReason ?? undefined,
 		rationale: live.rationale ?? undefined,
 	};
+}
+
+/**
+ * When the venue asked, in the reader's language and on their clock.
+ *
+ * A live row carries an ISO instant; a demo row carries a finished label and
+ * passes through. `timeZone` exists for tests — screens omit it and read the
+ * browser's own zone, like every other stamp in the portal.
+ */
+export function cutlostRequestedAtLabel(
+	req: Pick<PendingCutlostRequest, "requestedAt" | "requestedAtIso">,
+	localeTag: string,
+	timeZone?: string,
+): string {
+	if (!req.requestedAtIso) return req.requestedAt;
+	const at = new Date(req.requestedAtIso);
+	if (Number.isNaN(at.getTime())) return req.requestedAt;
+	return at.toLocaleString(localeTag, {
+		day: "2-digit",
+		month: "short",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		...(timeZone ? { timeZone } : {}),
+	});
+}
+
+/**
+ * The shift's day as a reader says it ("Thu, 6 Aug 2026"). The backend sends
+ * the `date` column as `YYYY-MM-DD`, parsed here as a LOCAL calendar day so no
+ * zone can move it; anything else is a demo label and passes through.
+ */
+export function cutlostShiftDateLabel(
+	dateLabel: string,
+	localeTag: string,
+): string {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateLabel);
+	if (!m) return dateLabel;
+	const day = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+	return day.toLocaleDateString(localeTag, {
+		weekday: "short",
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	});
+}
+
+/**
+ * The "Cutlost RM …" chip's figure, or null to leave the chip out.
+ *
+ * `cutlostBefore` has no server-side counterpart — the mapper above sets it to
+ * 0 for every live row — so the chip read "Cutlost RM 0" on each one. Nothing
+ * to show is not a loss of zero.
+ */
+export function cutlostLossChipRm(
+	req: Pick<PendingCutlostRequest, "cutlostBefore">,
+): number | null {
+	return req.cutlostBefore > 0 ? Math.round(req.cutlostBefore) : null;
 }
 
 export function cutlostRequestTitle(

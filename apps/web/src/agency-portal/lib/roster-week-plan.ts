@@ -32,6 +32,46 @@ export function rosterWeekStart(dateIso: string): string {
 	return getPayrollWeekSundayIso(dateIso);
 }
 
+/**
+ * The Planning tab's "Est labour cost": each booking's OWN wage, summed.
+ *
+ * On a real session `estPayout` is the server's `pay_amount` for that PR's tier
+ * (see `assignmentWageRm`), so a Tier II booking on a RM 600 card adds 600. The
+ * old sum was window hours × the shift's Tier I day rate — RM 500 an hour for
+ * every tier — with an unexplained ×1.08 on top and RM 350 invented for a slot
+ * with no figure. A booking off the plan (cancelled, no-show, excused) adds 0.
+ */
+export function rosterWageBillRm(slots: AgencyRosterSlot[]): number {
+	return slots.reduce(
+		(sum, slot) =>
+			slot.status === "unavailable" ? sum : sum + (slot.estPayout ?? 0),
+		0,
+	);
+}
+
+/**
+ * The Planning tab's "PRs rostered this week": PEOPLE first, bookings second.
+ *
+ * The tile counted assignment ROWS under a label that says PRs, so one PR
+ * booked on five nights read "5 PRs rostered". Owner default (29 Sep 2026):
+ * count distinct PRs, and keep the booking count beside it ("N PRs · M shifts").
+ *
+ * The same rule as `rosterWageBillRm` above for what counts at all: a booking
+ * off the plan (cancelled, no-show, excused — `unavailable`) is neither a
+ * person rostered nor a shift they are booked on. Keyed on `prId`, which is the
+ * PR's user id on every backend slot.
+ */
+export function rosterWeekHeadcount(slots: AgencyRosterSlot[]): {
+	prs: number;
+	shifts: number;
+} {
+	const onPlan = slots.filter((slot) => slot.status !== "unavailable");
+	return {
+		prs: new Set(onPlan.map((slot) => slot.prId)).size,
+		shifts: onPlan.length,
+	};
+}
+
 export function weekDayIsos(weekStartIso: string): string[] {
 	const start = parseLocalIso(weekStartIso);
 	return Array.from({ length: 7 }, (_, i) => formatLocalIso(addDays(start, i)));

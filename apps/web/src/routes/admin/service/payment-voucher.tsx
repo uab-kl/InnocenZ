@@ -9,6 +9,11 @@ import { Loader2, ReceiptText } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import {
+	agencySignLine,
+	prSignLine,
+	voucherNumberLabel,
+} from "@/components/admin/voucher-identity";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +53,12 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
-import { formatDate, formatNumber, formatPrice } from "@/lib/utils";
+import {
+	formatDay,
+	formatNumber,
+	formatPrice,
+	formatPriceRm,
+} from "@/lib/utils";
 import {
 	type DisputeComponent,
 	type DisputeOutcome,
@@ -215,12 +225,14 @@ function PaymentVoucherPage() {
 					<Table>
 						<TableHeader>
 							<TableRow>
+								<TableHead>{t.adminService.colVoucher}</TableHead>
 								<TableHead>{t.adminService.colPrName}</TableHead>
 								<TableHead>{t.table.outlet}</TableHead>
 								<TableHead>{t.adminService.colCycle}</TableHead>
 								<TableHead className="w-[140px]">
 									{t.adminService.issued}
 								</TableHead>
+								<TableHead>{t.adminService.colSigned}</TableHead>
 								<TableHead className="text-right">{t.table.net} (RM)</TableHead>
 								<TableHead className="w-[130px]">{t.admin.colStatus}</TableHead>
 							</TableRow>
@@ -228,14 +240,14 @@ function PaymentVoucherPage() {
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={6} className="h-32 text-center">
+									<TableCell colSpan={8} className="h-32 text-center">
 										<Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
 									</TableCell>
 								</TableRow>
 							) : vouchersQuery.isError ? (
 								<TableRow>
 									<TableCell
-										colSpan={6}
+										colSpan={8}
 										className="h-32 text-center text-muted-foreground"
 									>
 										{t.adminService.pvLoadFailed}
@@ -244,7 +256,7 @@ function PaymentVoucherPage() {
 							) : vouchers.length === 0 ? (
 								<TableRow>
 									<TableCell
-										colSpan={6}
+										colSpan={8}
 										className="h-32 text-center text-muted-foreground"
 									>
 										{t.adminService.noVouchersFound}
@@ -257,15 +269,36 @@ function PaymentVoucherPage() {
 										className="cursor-pointer"
 										onClick={() => setSelectedId(voucher.id)}
 									>
+										{/* The number never travels without its agency: numbering
+										    is per agency, so two companies each hold a PV-000001. */}
+										<TableCell>
+											<div className="font-medium tabular-nums">
+												{voucherNumberLabel(voucher)}
+											</div>
+											<div className="text-xs text-muted-foreground">
+												{voucher.agencyName ?? "—"}
+											</div>
+										</TableCell>
 										<TableCell className="font-medium">
 											{voucher.prName}
 										</TableCell>
 										<TableCell>{voucher.outlet ?? "—"}</TableCell>
 										<TableCell>{voucher.cycle ?? "—"}</TableCell>
 										<TableCell>
-											{voucher.issuedDate
-												? formatDate(voucher.issuedDate)
-												: "—"}
+											{voucher.issuedDate ? formatDay(voucher.issuedDate) : "—"}
+										</TableCell>
+										{/* Both halves of the dual signature, with their times —
+										    the first two questions an escalation asks. */}
+										<TableCell className="text-xs">
+											<div>
+												{t.adminService.agency}:{" "}
+												{voucher.financeHeadSignedAt
+													? fmtDateTime(voucher.financeHeadSignedAt)
+													: "—"}
+											</div>
+											<div>
+												{t.table.pr}: {prSignLine(voucher, fmtDateTime) ?? "—"}
+											</div>
 										</TableCell>
 										<TableCell className="text-right tabular-nums">
 											{formatPrice(voucher.net)}
@@ -329,7 +362,15 @@ function PaymentVoucherPage() {
 					className="w-full overflow-y-auto sm:max-w-lg"
 				>
 					{selectedId && (
-						<VoucherDetail id={selectedId} onRefreshFail={logout} />
+						<VoucherDetail
+							id={selectedId}
+							// The detail route carries no agency join; the row it was
+							// opened from does.
+							agencyName={
+								vouchers.find((v) => v.id === selectedId)?.agencyName ?? null
+							}
+							onRefreshFail={logout}
+						/>
 					)}
 				</SheetContent>
 			</Sheet>
@@ -339,9 +380,11 @@ function PaymentVoucherPage() {
 
 function VoucherDetail({
 	id,
+	agencyName,
 	onRefreshFail,
 }: {
 	id: string;
+	agencyName: string | null;
 	onRefreshFail: () => void;
 }) {
 	const { t } = usePortalLocale();
@@ -377,8 +420,14 @@ function VoucherDetail({
 					<StatusBadge status={voucher.status} />
 				</SheetTitle>
 				<SheetDescription>
-					{voucher.cycle ?? t.adminService.paymentVoucher}
-					{voucher.outlet ? ` · ${voucher.outlet}` : ""}
+					{[
+						voucherNumberLabel(voucher),
+						agencyName,
+						voucher.cycle ?? t.adminService.paymentVoucher,
+						voucher.outlet,
+					]
+						.filter((part): part is string => Boolean(part?.trim()))
+						.join(" · ")}
 				</SheetDescription>
 			</SheetHeader>
 
@@ -404,9 +453,14 @@ function VoucherDetail({
 						label={t.adminService.prIc}
 						value={voucher.prIc ?? "—"}
 					/>
+					{/* Who signed for the agency, as what, and when — then the PR. */}
 					<DetailField
-						label={t.adminService.financeHead}
-						value={voucher.financeHeadName ?? "—"}
+						label={t.izPv.agencySigned}
+						value={agencySignLine(voucher, t, fmtDateTime) ?? "—"}
+					/>
+					<DetailField
+						label={t.izPv.prSigned}
+						value={prSignLine(voucher, fmtDateTime) ?? "—"}
 					/>
 					<DetailField
 						label={t.adminService.bankRef}
@@ -737,8 +791,8 @@ function VoucherDisputes({
 			toast.error(
 				// `toMutationError` returns null only for a falsy error, which cannot
 				// happen in onError — the `??` is for the type, not for the case.
-				toMutationError(error, t.adminService.couldNotResolveDispute)?.message ??
-					t.adminService.couldNotResolveDispute,
+				toMutationError(error, t.adminService.couldNotResolveDispute)
+					?.message ?? t.adminService.couldNotResolveDispute,
 			),
 	});
 
@@ -936,13 +990,19 @@ function TotalRow({
 			}`}
 		>
 			<dt>{label}</dt>
-			<dd className="tabular-nums">RM {formatPrice(value)}</dd>
+			{/* A negative net reads "−RM 4.50", the sign before the currency. */}
+			<dd className="tabular-nums">{formatPriceRm(value)}</dd>
 		</div>
 	);
 }
 
+/**
+ * Every caller passes a DATE-ONLY column (issued, pay-by, week, line, receipt,
+ * dispute) — `formatDate` read those as UTC midnight and printed "08:00 am"
+ * beside each (28 Sep audit). `fmtDateTime` below is for real instants.
+ */
 function fmtDate(value: string | null): string {
-	return value ? formatDate(value) : "—";
+	return value ? formatDay(value) : "—";
 }
 
 function fmtDateTime(value: string | null): string {

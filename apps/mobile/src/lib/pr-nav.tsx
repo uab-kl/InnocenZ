@@ -10,8 +10,32 @@ export type ScanMode = 'scan' | 'selflog';
 
 export type PaymentWeekFocus = 'current' | 'last';
 
+/**
+ * Opening Shifts ON something — a notification's shift or swap request
+ * (TopBar, `notification-targets.ts`). Each navigation makes a NEW object, and
+ * that identity is what ShiftsScreen reacts to, so a second notification tapped
+ * while Shifts is already open still opens its own item.
+ */
+export type ShiftsFocus =
+  /**
+   * The To-do section, where swap requests are answered. `swapId` = the request
+   * the notice was about, so To-do can say it is no longer open when it was
+   * answered or withdrawn before the tap.
+   */
+  | { section: 'todo'; swapId?: string }
+  /**
+   * The Agency Schedule, with this day's sheet open. `assignmentId` = the
+   * booking the notice was about, so the sheet can say when it is gone.
+   */
+  | { section: 'schedule'; dateIso: string; assignmentId?: string };
+
 export type PrRoute =
-  | { name: 'tabs'; tab: PrTab; paymentWeek?: PaymentWeekFocus }
+  | {
+      name: 'tabs';
+      tab: PrTab;
+      paymentWeek?: PaymentWeekFocus;
+      shiftsFocus?: ShiftsFocus;
+    }
   | {
       name: 'scan';
       category: ScanCategory;
@@ -24,6 +48,8 @@ export type PrRoute =
 type SetTabOptions = {
   /** When opening Payment after check-out, land on This week (or Last week). */
   paymentWeek?: PaymentWeekFocus;
+  /** When opening Shifts from a notification, land on its item. */
+  shiftsFocus?: ShiftsFocus;
 };
 
 /** The two halves of the History tab. */
@@ -77,6 +103,7 @@ export function PrNavProvider({ children }: { children: React.ReactNode }) {
       name: 'tabs',
       tab,
       ...(tab === 'payment' && opts?.paymentWeek ? { paymentWeek: opts.paymentWeek } : {}),
+      ...(tab === 'shifts' && opts?.shiftsFocus ? { shiftsFocus: opts.shiftsFocus } : {}),
     });
   }, []);
 

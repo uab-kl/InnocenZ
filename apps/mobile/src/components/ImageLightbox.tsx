@@ -18,7 +18,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -31,6 +30,7 @@ import { C, F } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { useLocale } from '../i18n';
 import { XIcon, ZoomIn } from './icons';
+import { PhoneSheet } from './PhoneSheet';
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
@@ -144,11 +144,12 @@ export function ImageLightbox({
     controlRefs.current[1] = n;
   }, []);
 
-  // CALLBACK ref, not useRef: the Modal portals its content in a tick AFTER
-  // the commit that set `uri`, so an effect keyed on [uri] runs while the
-  // frame is still null and silently attaches nothing (proven live 20 Aug
+  // CALLBACK ref, not useRef: RN-web's Modal portalled its content a tick
+  // AFTER the commit that set `uri`, so an effect keyed on [uri] ran while the
+  // frame was still null and silently attached nothing (proven live 20 Aug
   // 2026 — the by-hand probe listener worked, the component's never fired).
-  // State re-runs the effect the moment the node actually exists.
+  // The viewer now opens in PhoneSheet, which portals in the same commit, but
+  // state re-runs the effect the moment the node exists under EITHER host.
   const [frameNode, setFrameNode] = useState<View | null>(null);
   const frameRef = useRef<View | null>(null);
   // STABLE identity (useCallback): an inline ref function is new every render,
@@ -425,7 +426,9 @@ export function ImageLightbox({
   }, [uri, frameNode]);
   if (!uri) return null;
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    // PhoneSheet, not a bare Modal: on the web build a Modal covers the whole
+    // browser window, outside the phone frame. A phone still gets the Modal.
+    <PhoneSheet visible animationType="fade" onRequestClose={onClose}>
       {/* Plain View, NOT a closing Pressable: the ✕ Return button is the ONE
           way out (owner's call) — plus the hardware back via onRequestClose. */}
       <View
@@ -500,7 +503,7 @@ export function ImageLightbox({
         </View>
         <Text style={s.hint}>{t.profile.viewerHint}</Text>
       </View>
-    </Modal>
+    </PhoneSheet>
   );
 }
 

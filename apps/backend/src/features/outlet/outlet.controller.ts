@@ -26,7 +26,7 @@ import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { createDefaultRateCard } from '@/features/outlet-workspace/default-rate-card.js';
 import { createStarterTemplates } from '@/features/shift-template/starter-templates.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
-import { addressQueryFromOutlet, geocodeAddress } from './geocode';
+import { addressQueryFromOutlet, geocodeAddress, searchLocations } from './geocode';
 import { type OrgScopeDeps, resolveOrgScope } from '@/util/org-scope.js';
 import { OutletFilter, OutletStatus } from './outlet.model';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
@@ -46,6 +46,10 @@ import {
   commitMembershipChange,
   MEMBERSHIP_CHANGE_NOT_SAVED,
 } from '@/features/rbac/membership-access';
+import {
+  memberRemovalMessage,
+  memberUpdateMessage,
+} from '@/features/rbac/member-change-message';
 import { portalRepository } from '@/features/rbac/portal/portal.repository';
 import { outletUserSubRoleValues, type OutletUserType } from './outlet.model';
 import { db } from '@/db/index.js';
@@ -644,7 +648,9 @@ export class OutletControllerClass {
           data: null,
         });
       }
-      const outcome = await geocodeAddress(parsed.data.address);
+      // A typed search offers the places Google Maps knows by that name, not
+      // just the geocoder's one best match (see searchLocations).
+      const outcome = await searchLocations(parsed.data.address);
       if (!outcome.ok) {
         // 404 for "nothing matched"; 503 for a key/quota/network problem, so the
         // form can tell "try another address" apart from "try again later".
@@ -1394,9 +1400,16 @@ export class OutletControllerClass {
 
       const member =
         await this.outletMemberRepository.getByIdEnriched(memberId);
-      res
-        .status(200)
-        .json({ success: true, message: 'Member updated', data: member });
+      // The sentence the portal prints as the confirmation — see the agency twin.
+      const message = memberUpdateMessage({
+        org: 'outlet',
+        previousStatus: target.status,
+        previousSubRole: target.subRole,
+        wasMember: Boolean(target.firstActivatedAt),
+        nextStatus: parsed.data.status,
+        nextSubRole: parsed.data.subRole,
+      });
+      res.status(200).json({ success: true, message, data: member });
     } catch (error) {
       logger.error('[OutletController.updateMember] Error:', error);
       res.status(500).json({
@@ -1492,9 +1505,12 @@ export class OutletControllerClass {
         });
       }
 
-      res
-        .status(200)
-        .json({ success: true, message: 'Member removed', data: null });
+      res.status(200).json({
+        success: true,
+        // A decline and a deactivation are this same call; say which it was.
+        message: memberRemovalMessage(nextStatus),
+        data: null,
+      });
     } catch (error) {
       logger.error('[OutletController.removeMember] Error:', error);
       res.status(500).json({

@@ -2,6 +2,7 @@ import { and, eq, inArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { DbTransaction } from '@/types/db-transaction';
 import { logger } from '@/util/logger';
+import { safeErrorFields } from '@/features/auth/query-error-redaction';
 import {
   UserProfileFilter,
   UserProfileInsertType,
@@ -76,6 +77,13 @@ export class UserProfileRepositoryClass {
   /**
    * Match IC / passport / work-permit numbers ignoring dashes, spaces and case.
    * Used to refuse duplicate PR registration on the same identity document.
+   *
+   * ⚠️ A FAILED READ THROWS (security review, 30 Sep 2026). It used to answer
+   * null — "nobody holds this ID" — so a database blip let a sign-up create a
+   * second account on an identity document already on file. Sign-up is the
+   * only caller, and its handler turns the throw into a 500 that creates
+   * nothing. Logged through `safeErrorFields`: the raw error carries the
+   * normalised ID number as a bound value.
    */
   async findByNormalizedIdNo(idNo: string): Promise<UserProfileType | null> {
     const normalized = idNo.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -90,8 +98,8 @@ export class UserProfileRepositoryClass {
         .limit(1);
       return profile ?? null;
     } catch (error) {
-      logger.error('[UserProfileRepository.findByNormalizedIdNo] Error:', error);
-      return null;
+      logger.error('[UserProfileRepository.findByNormalizedIdNo] Error:', safeErrorFields(error));
+      throw error;
     }
   }
 

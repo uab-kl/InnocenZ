@@ -50,6 +50,10 @@ const PR_ROW_IDENTITY_FIELDS = [
   // and admin callers; listed here so a later change that puts it on every row
   // still cannot hand it to a venue.
   'hasPassword',
+  // The KPI score — the agency's and admin's number, never a venue's (owner,
+  // 29 Sep 2026). Added by `GET /pr` for those two only; listed for the same
+  // reason as `hasPassword`.
+  'kpiScore',
 ] as const;
 
 /**

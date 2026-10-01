@@ -6,6 +6,7 @@ import {
 	nextRenewalFromInvoices,
 	sortMemberSubscriptions,
 } from "@agency-portal/lib/subscription-record";
+import { useOutletIsOwner } from "@agency-portal/lib/use-portal-can";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -47,6 +48,25 @@ export interface PosQuoteContact {
 export interface PlanChangeResult {
 	ok: boolean;
 	reason?: string;
+}
+
+/**
+ * What the venue is billed each month, lane by lane.
+ *
+ * A venue on the POS add-on pays for its plan AND the add-on every month (two
+ * invoices per period), and "Billed monthly" used to print the plan alone — a
+ * figure RM 200 short for the one venue holding POS today. Null when no plan
+ * price is known, so the caller prints nothing rather than a guess.
+ */
+export function outletMonthlyBill(
+	planRm: number | null,
+	addonRm: number | null,
+): { totalRm: number; planRm: number; addonRm: number | null } | null {
+	if (planRm === null || !Number.isFinite(planRm)) return null;
+	const addon = addonRm !== null && Number.isFinite(addonRm) ? addonRm : null;
+	// Summed in cents: two RM amounts added as floats can land a sen off.
+	const totalCents = Math.round(planRm * 100) + Math.round((addon ?? 0) * 100);
+	return { totalRm: totalCents / 100, planRm, addonRm: addon };
 }
 
 /**
@@ -321,10 +341,21 @@ export function useOutletSubscription() {
 	 * holds several venues edits the right one's card, and the server checks it
 	 * against the venues they actually hold.
 	 */
+	/*
+	 * ⚠️ THE OWNER ONLY — the same line the server draws.
+	 *
+	 * `GET /payment-method/mine` is `orgOwnerPaysOnly`: Finance, Director, Ops
+	 * Head and the Guarantor are all refused, correctly (owner, 12 Sep 2026: only
+	 * the owner sees and changes how the organisation pays). The page already
+	 * hides the card from them, but this query still fired for every lane, so
+	 * each non-owner visit to Subscription collected a 403 — and react-query
+	 * retried it — for a section that was never going to render.
+	 */
+	const isOrgOwner = useOutletIsOwner();
 	const cardQuery = useQuery({
 		queryKey: ["payment-method", "mine", outletId ?? "none"],
 		queryFn: () => fetchMyPaymentMethod(logout, outletId ?? undefined),
-		enabled: backed,
+		enabled: backed && isOrgOwner,
 		staleTime: 60_000,
 	});
 
@@ -535,6 +566,8 @@ export function useOutletSubscription() {
 		invoiceLane,
 		isPaymentHistoryLoading: invoicesQuery.isLoading,
 		activePlanName,
+		/** The plan lane's price from the ledger row — what is actually billed. */
+		planAmountRm: activeSubscription ? Number(activeSubscription.amount) : null,
 		/** Real next billing date from the ledger; null when nothing is active. */
 		nextRenewalDate,
 		/** Each lane's current billing window, and the add-on's own renewal. */

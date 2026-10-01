@@ -2,6 +2,7 @@ import { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
 import { AuthControllerClass } from '@/features/auth/auth.controller.js';
 import { OtpControllerClass } from '@/features/auth/otp.controller.js';
 import { PhoneVerificationRepositoryClass } from '@/features/auth/phone-verification.repository.js';
+import { SignupEmailCodesClass } from '@/features/auth/signup-email-code.js';
 import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { HealthControllerClass } from '@/features/health/health.controller.js';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
@@ -68,6 +69,8 @@ import { ShiftSaleControllerClass } from '@/features/shift-sale/shift-sale.contr
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
 import { PaymentVoucherDisputeRepositoryClass } from '@/features/payment-voucher/payment-voucher-dispute.repository.js';
 import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
+import { HistoryExtrasControllerClass } from '@/features/payment-voucher/history-extras.controller.js';
+import { HistoryExtrasRepositoryClass } from '@/features/payment-voucher/history-extras.repository.js';
 import { PayoutBatchControllerClass } from '@/features/payment-voucher/payout-batch.controller.js';
 import { PayoutBatchRepositoryClass } from '@/features/payment-voucher/payout-batch.repository.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
@@ -105,6 +108,12 @@ export const otpController = new OtpControllerClass(
   phoneVerificationRepository,
   userRepository,
 );
+// The emailed code a public venue, agency or team-member sign-up must carry
+// (owner, 30 Sep 2026). ONE instance: it sends the code, and both sign-up
+// controllers spend it.
+export const signupEmailCodes = new SignupEmailCodesClass({
+  codes: phoneVerificationRepository,
+});
 // Declared before authController — PR register writes agency_pr by user_id;
 // outlet/agency web register creates the org + owner membership.
 export const agencyPrRepository = new AgencyPrRepository();
@@ -163,6 +172,7 @@ export const authController = new AuthControllerClass(
   outletMemberRepository,
   subscriptionRepository,
   memberSubscriptionRepository,
+  { signupEmailCodes },
 );
 export const healthController = new HealthControllerClass();
 
@@ -233,6 +243,7 @@ export const orgMemberInviteController = new OrgMemberInviteControllerClass(
   roleRepository,
   userRoleRepository,
   userProfileRepository,
+  signupEmailCodes,
 );
 
 export const platformConfigRepository = new PlatformConfigRepositoryClass();
@@ -419,6 +430,13 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(
   prRepository,
   paymentVoucherDisputeRepository,
   shiftAssignmentRepository,
+);
+
+// The agency History's take-home extras — commission per assignment, penalty
+// per voucher — in one read instead of one voucher detail per voucher.
+export const historyExtrasController = new HistoryExtrasControllerClass(
+  new HistoryExtrasRepositoryClass(),
+  agencyMemberRepository,
 );
 
 // The bank-run lane. Takes the voucher repository because settling a run marks

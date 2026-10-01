@@ -14,6 +14,7 @@ import {
   derivePayeeCode,
   exportLineDescription,
   dayMonth,
+  formatVoucherRm,
   klStamp,
   loadAgencyLogo,
   slashDate,
@@ -39,6 +40,21 @@ const XEND = MARGIN + CONTENT_W;
 const ROW_H = 16;
 const FILL = '#ececec';
 const BORDER = '#777777';
+
+/**
+ * The one glyph this document cannot print as the others do.
+ *
+ * PDFKit's STANDARD fonts (Helvetica here) are WinAnsi-encoded, and U+2212 — the
+ * minus `formatVoucherRm` puts before a negative total — has no code there:
+ * PDFKit writes its UTF-16 value as two stray bytes of zero width (checked on
+ * pdfkit 0.15.2), so "−RM 4.50" would print as garbage. The en dash (WinAnsi
+ * 0x96) is the typographic stand-in for a minus in a font without one, so the
+ * PDF reads "–RM 4.50" where the print view and both workbooks read "−RM 4.50":
+ * the same sign in the same place, one glyph apart.
+ */
+export function winAnsiMinus(text: string): string {
+  return text.replace(/−/g, '–');
+}
 
 export async function buildVoucherPdf(params: {
   voucher: PaymentVoucherWithLines;
@@ -217,12 +233,10 @@ export async function buildVoucherPdf(params: {
       .text('Total', XC, blockTop + blockH / 2 - 20, { width: XEND - XC, align: 'center' });
     doc
       .fontSize(13)
-      .text(
-        `RM ${net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`,
-        XC,
-        blockTop + blockH / 2 + 4,
-        { width: XEND - XC, align: 'center' },
-      );
+      .text(winAnsiMinus(formatVoucherRm(net)), XC, blockTop + blockH / 2 + 4, {
+        width: XEND - XC,
+        align: 'center',
+      });
 
     // ── The DUAL signature block: agency (approved by) on the left, PR (payee)
     // on the right, the order the voucher is actually signed in.

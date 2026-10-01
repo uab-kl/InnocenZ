@@ -1,6 +1,8 @@
 import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
+import { useAgencyOutletWorkspace } from "@agency-portal/hooks/use-agency-outlet-workspace";
 import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import type { AgencyOutletSummary } from "@agency-portal/lib/agency-outlet-shifts";
+import { outletHeadlineRates } from "@agency-portal/lib/outlet-card-rates";
 import { cn } from "@agency-portal/lib/utils";
 import { Check } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -12,12 +14,6 @@ type OutletThemeKey = (typeof OUTLET_THEME_KEYS)[number];
 function outletThemeKey(outlet: string): OutletThemeKey {
 	const idx = OUTLET_NAMES.indexOf(outlet);
 	return OUTLET_THEME_KEYS[idx >= 0 ? idx % OUTLET_THEME_KEYS.length : 0];
-}
-
-function formatOutletTipRange(wagePerHour: number) {
-	const min = Math.round(wagePerHour * 0.08);
-	const max = Math.round(wagePerHour * 0.18);
-	return `RM ${min}–${max}`;
 }
 
 function DemandKpi({
@@ -90,7 +86,15 @@ export function ManageOutletGridCard({
 }: ManageOutletGridCardProps) {
 	const { t } = usePortalLocale();
 	const theme = outletThemeKey(summary.outlet);
-	const wage = summary.rule.wagePerHour.toLocaleString("en-MY");
+	// The venue's own saved rate card — the same query the detail view runs, so
+	// opening the venue costs no second request. Null = nothing to quote, and the
+	// card then quotes nothing rather than the demo rule behind `summary.rule`.
+	const workspace = useAgencyOutletWorkspace(summary.outlet);
+	const rates = outletHeadlineRates({
+		backed: workspace.backed,
+		workspace: workspace.workspace,
+		demoRule: summary.rule,
+	});
 
 	// A real <button>, not an <article role="button">: the whole card is one
 	// activation target, and the native element brings the keyboard handling the
@@ -134,9 +138,13 @@ export function ManageOutletGridCard({
 								{t.manageOutlet.endedFinishing}
 							</p>
 						)}
-						<p className="iz-outlet-manage-card__rate">
-							{fill(t.manageOutlet.perShift, { wage })}
-						</p>
+						{rates && (
+							<p className="iz-outlet-manage-card__rate">
+								{fill(t.manageOutlet.perShift, {
+									wage: rates.wage.toLocaleString("en-MY"),
+								})}
+							</p>
+						)}
 					</div>
 				</div>
 				<span className="iz-outlet-manage-card__events">
@@ -164,12 +172,17 @@ export function ManageOutletGridCard({
 			</div>
 
 			<div className="iz-outlet-manage-card__foot">
-				<p className="iz-outlet-manage-card__meta">
-					{fill(t.manageOutlet.drinksAndTips, {
-						pct: summary.rule.drinkPct,
-						range: formatOutletTipRange(summary.rule.wagePerHour),
-					})}
-				</p>
+				{/* The venue's own percentages, the same pair the detail header
+				    quotes — not a tip "range" derived from the wage, which no rate
+				    card holds. */}
+				{rates && (
+					<p className="iz-outlet-manage-card__meta">
+						{fill(t.manageOutlet.drinksAndTips, {
+							pct: rates.drinkPct,
+							tips: rates.tipPct,
+						})}
+					</p>
+				)}
 				<span className="iz-outlet-manage-card__legend">
 					{t.manageOutlet.demandSupplied}
 				</span>

@@ -90,6 +90,12 @@ export interface LogShiftSaleInput {
 	drinkSalesRm?: number;
 	tipUnits?: number;
 	tipSalesRm?: number;
+	/**
+	 * Services (owner, 29 Sep 2026: "Count services too"). The server's total is
+	 * drinks + tips + services; OMITTED, the row keeps the services it holds.
+	 */
+	serviceUnits?: number;
+	serviceSalesRm?: number;
 }
 
 export async function fetchShiftSaleReport(
@@ -134,15 +140,26 @@ export async function fetchShiftSales(
 	return response.data.data ?? [];
 }
 
+/**
+ * `POST /shift-sale` — UPSERTS the (shift, PR) row: every field sent REPLACES
+ * the stored one, and an omitted drink/tip unit count or tip figure is written
+ * as 0 (omitted SERVICE fields keep the stored services). The server computes
+ * the total as drinks + tips + services. Callers send what they mean to keep
+ * (see `buildShiftSaleInput`).
+ *
+ * Hands back the SERVER's sentence with the row: the portal confirms every
+ * action in the server's own words, and returning `data` alone left the Log
+ * Sales panel nothing to say.
+ */
 export async function logShiftSale(
 	input: LogShiftSaleInput,
 	onRefreshFail: () => void,
-): Promise<ShiftSale> {
+): Promise<{ sale: ShiftSale; message: string }> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<{
 		success: boolean;
 		message: string;
 		data: ShiftSale;
 	}>("/shift-sale", input);
-	return response.data.data;
+	return { sale: response.data.data, message: response.data.message ?? "" };
 }

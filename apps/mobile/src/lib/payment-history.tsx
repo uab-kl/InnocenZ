@@ -17,6 +17,12 @@ type PaymentHistoryState = {
   vouchers: PrHistoryVoucher[];
   weeks: HistPayWeek[];
   loading: boolean;
+  /**
+   * The first read has ANSWERED (success or failure). `vouchers` starts empty,
+   * and "no vouchers yet" and "not read yet" look identical without this — PV
+   * detail must not call a voucher missing off a list that was never read.
+   */
+  loaded: boolean;
   error: string | null;
   refresh: () => Promise<void>;
 };
@@ -27,6 +33,7 @@ export function PaymentHistoryProvider({ children }: { children: React.ReactNode
   const { token } = useSession();
   const [vouchers, setVouchers] = useState<PrHistoryVoucher[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -40,6 +47,7 @@ export function PaymentHistoryProvider({ children }: { children: React.ReactNode
       setVouchers([]);
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [token]);
 
@@ -53,8 +61,8 @@ export function PaymentHistoryProvider({ children }: { children: React.ReactNode
   );
 
   const value = useMemo(
-    () => ({ vouchers, weeks, loading, error, refresh }),
-    [vouchers, weeks, loading, error, refresh],
+    () => ({ vouchers, weeks, loading, loaded, error, refresh }),
+    [vouchers, weeks, loading, loaded, error, refresh],
   );
 
   return (

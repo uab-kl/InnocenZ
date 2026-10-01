@@ -26,6 +26,14 @@ export type WhatsAppSendResult =
   | { ok: false; error: string };
 
 /**
+ * The WHOLE Graph API send — connect, headers and body — gives up after this.
+ * 10 s is ~30× the edge's measured 0.2-0.3 s answer, so only a hung call is
+ * cut, where Node's own defaults (10 s to connect, 300 s for headers) held a
+ * sign-up answer for up to five minutes.
+ */
+export const WHATSAPP_SEND_TIMEOUT_MS = 10_000;
+
+/**
  * Human label for template {{2}} — matches app purpose.
  *
  * The contact-change purposes default to a neutral label; their callers pass a
@@ -88,6 +96,10 @@ export function resolveOtpTemplateName(
       process.env.META_WHATSAPP_OTP_TEMPLATE_PASSWORD_CHANGE?.trim() ||
       process.env.META_WHATSAPP_OTP_TEMPLATE_RESET_PASSWORD?.trim() ||
       forgot,
+    // Email only (signup-email-code.ts) — never sent on WhatsApp. Listed so the
+    // record stays total; the sign-up template is the honest fallback if it
+    // ever were.
+    signup_email: process.env.META_WHATSAPP_OTP_TEMPLATE_SIGNUP?.trim(),
   };
   return byPurpose[purpose] || process.env.META_WHATSAPP_OTP_TEMPLATE?.trim() || undefined;
 }
@@ -174,7 +186,10 @@ export async function sendWhatsAppOtp(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(WHATSAPP_SEND_TIMEOUT_MS),
     });
+    // A body the timeout cuts off after a 2xx reads as `{}`, like any unreadable
+    // body: Meta accepted the message, only its id is lost.
     const json = (await res.json().catch(() => ({}))) as {
       messages?: Array<{ id?: string }>;
       error?: { message?: string };
@@ -198,6 +213,9 @@ export async function sendWhatsAppOtp(
     const messageId = json.messages?.[0]?.id ?? '';
     return { ok: true, messageId };
   } catch (error) {
+    // The timeout lands here too — `AbortSignal.timeout` rejects the fetch with a
+    // 'TimeoutError', which the log line names — and answers exactly as a host
+    // that could not be reached does: callers only ever see this one shape.
     logger.error('[whatsapp] send error', safeErrorFields(error));
     return { ok: false, error: 'Could not reach WhatsApp Cloud API' };
   }

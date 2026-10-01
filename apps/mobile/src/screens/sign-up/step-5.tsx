@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import {
 	ActivityIndicator,
 	Image,
-	Modal,
 	Pressable,
 	ScrollView,
 	StyleSheet,
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PublicAgency } from '../../lib/api';
+import { PhoneSheet } from '../../components/PhoneSheet';
 import {
 	captureFromCamera,
 	pickImageFromGallery,
@@ -672,9 +672,10 @@ export function Step5Summary({
 				</View>
 			</View>
 
-			<Modal
+			{/* PhoneSheet, not a bare Modal: on the web build a Modal covers the
+				browser window outside the phone frame. */}
+			<PhoneSheet
 				visible={openDisclaimer !== null}
-				transparent
 				animationType="fade"
 				onRequestClose={() => setOpenDisclaimer(null)}
 			>
@@ -697,7 +698,7 @@ export function Step5Summary({
 						</Pressable>
 					</View>
 				</View>
-			</Modal>
+			</PhoneSheet>
 		</>
 	);
 }

@@ -43,6 +43,9 @@ export const PR_WRITE_SENTENCES: Record<string, Label> = {
 	) => t.managePr.noLinkedAccount,
 	"Invalid email": (t) => t.authCodes.serverEnterValidEmail,
 	"Name is required": (t) => t.managePr.nameRequired,
+	// `PR_MOBILE_REQUIRED` in backend pr-write-rules.ts — change both together.
+	"A mobile number is required to add a new PR — it is how the PR claims the account at sign-up":
+		(t) => t.managePr.mobileRequired,
 };
 
 /** Sentences that say nothing the caller's own fallback does not say better. */

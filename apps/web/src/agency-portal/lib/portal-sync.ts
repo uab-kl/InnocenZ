@@ -70,11 +70,20 @@ export type RosterPayoutEstimateOpts = {
 	shiftTierRates?: Record<OutletPrTier, OutletTierRateSettings>;
 };
 
-/** Estimated roster payout — wages & commission from PR training tier + live floor metrics */
+/**
+ * Estimated roster payout — wages & commission from PR training tier + live
+ * floor metrics.
+ *
+ * ⚠️ A BACKEND slot carries the server's own wage (`wageRm`) and that is the
+ * answer. Pricing it here would run `calcShiftPayout` against the store's
+ * commission rules, which a real session leaves empty — so every venue fell
+ * through to the first DEMO rule and every PR was priced off Velvet 23's card.
+ */
 export function estimateRosterSlotPayout(
 	slot: AgencyRosterSlot,
 	opts: RosterPayoutEstimateOpts = {},
 ): number {
+	if (slot.wageRm !== undefined) return slot.wageRm;
 	const rules = opts.rules ?? OUTLET_COMMISSION_RULES;
 	const perDrinkRm = opts.perDrinkRm ?? 12;
 	const hours = shiftHoursFromLabel(slot.shift);

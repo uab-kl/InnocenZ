@@ -289,6 +289,32 @@ function money(cell: { value: unknown; numFmt?: string }, amount: number): void 
   cell.numFmt = '#,##0.00';
 }
 
+/** U+2212 MINUS SIGN — the glyph every portal and the PR app print. */
+const MINUS = '−';
+
+/**
+ * THE TOTAL, as every rendering of this voucher prints it: "RM 1,234.50", and a
+ * NEGATIVE as "−RM 4.50" — the sign in front of the currency.
+ *
+ * Formatting the signed number put the sign INSIDE the amount ("RM -4.50", seen
+ * on a PR whose deductions outran the week, 30 Sep 2026). Signed on what is
+ * PRINTED, so anything that rounds to 0.00 prints unsigned.
+ *
+ * ⚠️ Kept identical to `formatRM` in apps/web/src/agency-portal/lib/format-rm.ts,
+ * which the web twin of this document (`pv-pdf.ts`) prints its total with. The
+ * two documents are signed against each other; they do not get to differ by a
+ * sign. The PDF alone swaps the glyph — see `winAnsiMinus` in
+ * payment-voucher-pdf.ts.
+ */
+export function formatVoucherRm(n: number): string {
+  const amount = Math.abs(n).toLocaleString('en-MY', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const negative = n < 0 && /[1-9]/.test(amount);
+  return `${negative ? MINUS : ''}RM ${amount}`;
+}
+
 function esc(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -335,7 +361,7 @@ th{background:#f2f2f2;text-align:left}.tot{font-weight:bold;font-size:14px}.sig{
 <button onclick="window.print()" style="margin-left:10px">Print</button></div>
 <table><thead><tr><th>#</th><th>Description</th><th>Unit</th><th>Unit Price (RM)</th><th>Amount (RM)</th></tr></thead>
 <tbody>${rows}</tbody>
-<tfoot><tr class="tot"><td colspan="4">Total</td><td style="text-align:right">RM ${net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td></tr></tfoot></table>
+<tfoot><tr class="tot"><td colspan="4">Total</td><td style="text-align:right">${formatVoucherRm(net)}</td></tr></tfoot></table>
 <table class="sig"><tr>
 <td style="border:none;width:50%;vertical-align:top;padding-left:0"><p><strong>Agency (Approved by)</strong></p>
 <p>Signature: ${financeSigned ? financeName : '____________________'}</p>
@@ -447,7 +473,9 @@ export async function buildVoucherWorkbook(params: {
 
   // Payment details beside the merged total block.
   const net = Number(voucher.net ?? '0');
-  const totalText = `Total\n\nRM ${net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`;
+  // TEXT, as it always was: one merged cell carrying the label and the figure
+  // together. The line cells above stay real numbers (`money`).
+  const totalText = `Total\n\n${formatVoucherRm(net)}`;
   const payStart = rowNo;
   ws.getCell(`A${payStart}`).value = 'Payment Details:';
   ws.getCell(`A${payStart}`).font = { bold: true };

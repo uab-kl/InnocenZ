@@ -267,3 +267,28 @@ describe("overdueSummary — what is LATE, never merely what is unpaid", () => {
 		expect(overdueSummary(odd, "weekly", TODAY).amountRm).toBe(0.21);
 	});
 });
+
+/**
+ * Owner, 29 Sep 2026: "Add Void". A bill InnocenZ voided is owed by nobody, so
+ * however old its period, it is never late and never in the red warning.
+ */
+describe("a VOIDED bill is never overdue", () => {
+	it("is not a debt, whatever its period end", () => {
+		const voided = inv("2026-08-22", { status: "void" });
+		expect(isSettled(voided)).toBe(true);
+		expect(dueStatusFor(voided, "weekly", TODAY).bucket).not.toBe("overdue");
+	});
+
+	it("drops out of the overdue total beside a genuinely late bill", () => {
+		const summary = overdueSummary(
+			[
+				inv("2026-08-22"),
+				inv("2026-08-29", { status: "void", amount: "999.00" }),
+			],
+			"weekly",
+			TODAY,
+		);
+		expect(summary.count).toBe(1);
+		expect(summary.amountRm).toBe(125);
+	});
+});

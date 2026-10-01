@@ -18,6 +18,10 @@ router.get('/unread-count', notificationController.unreadCount.bind(notification
 
 router.get('/', notificationController.listMine.bind(notificationController));
 
+// Before '/:id/read' for the same reason as above, though the segment counts
+// differ today: a literal must never be readable as an id.
+router.post('/read-all', notificationController.markAllRead.bind(notificationController));
+
 router.post('/:id/read', notificationController.markRead.bind(notificationController));
 
 export default router;

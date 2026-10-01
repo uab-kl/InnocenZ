@@ -2,6 +2,8 @@ import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCardTitle, IzPill } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
+import { useOutletEffectiveWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
+import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { recommendBestEffortCutlost } from "@agency-portal/lib/outlet-cutlost-recommendations";
 import { cutlostRequestTitle } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
@@ -47,11 +49,18 @@ export function OutletCutLossActions({
 	shift,
 	className,
 	sectionId = OUTLET_REDUCE_CUTLOST_SECTION_ID,
+	agencyPrs: agencyPrsOverride,
 }: {
 	shift: ShiftRequest;
 	className?: string;
 	/** DOM id for scroll targets — unique per shift when inline in a list. */
 	sectionId?: string;
+	/**
+	 * The backend PR records on a real session. The store slice is blank there,
+	 * so every booked PR's tier was unknown when the cut-loss was priced.
+	 * Omitted on demo sessions, which read the store.
+	 */
+	agencyPrs?: AgencyManagedPR[];
 }) {
 	const { t } = usePortalLocale();
 	/*
@@ -62,8 +71,10 @@ export function OutletCutLossActions({
 	 * on click rather than an action that was never offered.
 	 */
 	const canRequestCutLoss = useOutletCan()("requestCutLoss");
-	const outletWorkspace = useStore((s) => s.outletWorkspace);
-	const agencyPRs = useStore((s) => s.agencyPRs);
+	// The venue's real rate card — see useOutletEffectiveWorkspace.
+	const outletWorkspace = useOutletEffectiveWorkspace();
+	const storeAgencyPRs = useStore((s) => s.agencyPRs);
+	const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
 	const pendingCutlostRequests = useStore((s) => s.pendingCutlostRequests);
 	const requestOutletCutlostReduction = useStore(
 		(s) => s.requestOutletCutlostReduction,

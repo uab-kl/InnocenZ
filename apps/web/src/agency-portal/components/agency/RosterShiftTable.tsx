@@ -29,6 +29,7 @@ import {
 } from "@agency-portal/lib/outlet-demo";
 import {
 	type OutletPrLiveSales,
+	type RecordedFloorSales,
 	type RosterShiftEarningsContext,
 	rosterSlotBreakdownTotal,
 	rosterSlotHasReceiptFloorSales,
@@ -43,6 +44,7 @@ import {
 	type PrSwapRequest,
 } from "@agency-portal/lib/pr-features";
 import { formatRosterShiftTime } from "@agency-portal/lib/pr-session";
+import { liveSalesFromRecorded } from "@agency-portal/lib/roster-recorded-sales";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -78,12 +80,38 @@ function resolveRosterSlotFloorSales(
 	});
 }
 
+/**
+ * The Drinks / Tips figures for one slot. A REAL session hands in what the
+ * server recorded (`shift_sale`, roster-recorded-sales.ts) and reads only that —
+ * a slot with no row is "—", never a demo estimate. A demo session passes no
+ * map and keeps its fixture engine.
+ */
+function slotFloorSales(
+	slot: AgencyRosterSlot,
+	recordedBySlotId: Map<string, RecordedFloorSales> | null | undefined,
+	outletShifts: OutletShiftTierRef[] | undefined,
+	drinkMenu: OutletDrinkPrice[],
+	receiptScans: PrReceiptScan[] | undefined,
+): OutletPrLiveSales {
+	return recordedBySlotId
+		? liveSalesFromRecorded(recordedBySlotId.get(slot.id))
+		: resolveRosterSlotFloorSales(slot, outletShifts, drinkMenu, receiptScans);
+}
+
 function formatRosterSlotDrinks(floor: OutletPrLiveSales): string {
 	return floor.drinkSalesRm > 0 ? formatRM(floor.drinkSalesRm) : "—";
 }
 
 function formatRosterSlotTips(floor: OutletPrLiveSales): string {
 	return floor.tipRm > 0 ? formatRM(floor.tipRm) : "—";
+}
+
+/** A booking off the plan costs nothing — a dash, since RM 0.00 reads as a price. */
+function formatRosterSlotPayout(
+	slot: AgencyRosterSlot,
+	estPayout: number,
+): string {
+	return slot.status === "unavailable" ? "—" : formatRM(estPayout);
 }
 
 export function rosterSlotDisplayPayout(
@@ -96,6 +124,10 @@ export function rosterSlotDisplayPayout(
 	receiptScans: PrReceiptScan[] | undefined,
 	earningsContext?: RosterShiftEarningsContext | null,
 ): number {
+	// Off the plan — cancelled, a no-show or approved MC/leave — is owed nothing,
+	// so it adds nothing. The Est. payout chip sums this very figure, and it used
+	// to count an excused PR's full day as money the agency would pay out.
+	if (slot.status === "unavailable") return 0;
 	const floor = resolveRosterSlotFloorSales(
 		slot,
 		outletShifts,
@@ -308,6 +340,7 @@ export function RosterShiftTable({
 	happyHourEnd = "22:00",
 	workspaceTierRates,
 	commissionOnlyRates,
+	recordedBySlotId,
 	canAssign,
 	onEdit,
 	onFlagNoShow,
@@ -328,6 +361,11 @@ export function RosterShiftTable({
 	happyHourEnd?: string;
 	workspaceTierRates?: Record<OutletPrTier, OutletTierRateSettings>;
 	commissionOnlyRates?: CommissionOnlyRateSettings;
+	/**
+	 * A real session's recorded floor sales per slot (useAgencyRecordedFloorSales).
+	 * Null / omitted = a demo session, which keeps the fixture engine.
+	 */
+	recordedBySlotId?: Map<string, RecordedFloorSales> | null;
 	canAssign: boolean;
 	onEdit: (id: string) => void;
 	onFlagNoShow: (id: string) => void;
@@ -433,8 +471,9 @@ export function RosterShiftTable({
 					</thead>
 					<tbody>
 						{slots.map((slot) => {
-							const floor = resolveRosterSlotFloorSales(
+							const floor = slotFloorSales(
 								slot,
+								recordedBySlotId,
 								outletShifts,
 								drinkMenu,
 								receiptScans,
@@ -474,8 +513,9 @@ export function RosterShiftTable({
 
 			<div className="space-y-2 md:hidden">
 				{slots.map((slot) => {
-					const floor = resolveRosterSlotFloorSales(
+					const floor = slotFloorSales(
 						slot,
+						recordedBySlotId,
 						outletShifts,
 						drinkMenu,
 						receiptScans,
@@ -516,6 +556,7 @@ export function RosterShiftTable({
 					kind={earningsSheet?.kind ?? null}
 					anchorSlot={earningsSheet?.slot ?? null}
 					earningsContext={earningsContext}
+					recordedBySlotId={recordedBySlotId}
 					onClose={() => setEarningsSheet(null)}
 				/>
 			)}
@@ -654,10 +695,10 @@ function RosterTableRow({
 						className="iz-roster-amount-btn--gold"
 						onClick={() => onOpenEarningsSheet("payout", slot)}
 					>
-						{formatRM(estPayout)}
+						{formatRosterSlotPayout(slot, estPayout)}
 					</RosterAmountButton>
 				) : (
-					formatRM(estPayout)
+					formatRosterSlotPayout(slot, estPayout)
 				)}
 			</td>
 			{canAssign && (
@@ -813,10 +854,12 @@ function RosterShiftCard({
 						className="iz-roster-amount-btn--gold"
 						onClick={() => onOpenEarningsSheet("payout", slot)}
 					>
-						{formatRM(estPayout)}
+						{formatRosterSlotPayout(slot, estPayout)}
 					</RosterAmountButton>
 				) : (
-					<span className="text-[var(--iz-gold-l)]">{formatRM(estPayout)}</span>
+					<span className="text-[var(--iz-gold-l)]">
+						{formatRosterSlotPayout(slot, estPayout)}
+					</span>
 				)}
 			</div>
 			{prSwap && (

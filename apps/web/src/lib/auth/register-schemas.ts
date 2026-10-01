@@ -31,7 +31,7 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.max(50, messages.registrationNumberMax)
 				.refine(
 					(value): boolean =>
-						value.trim() === "" || /^d{6,9}-[A-Z]$/i.test(value.trim()),
+						value.trim() === "" || /^\d{6,9}-[A-Z]$/i.test(value.trim()),
 					messages.companyRegistrationOldFormat,
 				),
 			/* SSM has issued ONE format since 2019: twelve digits, no letters and no
@@ -43,7 +43,7 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.min(1, messages.companyRegistrationNewRequired)
 				.max(50, messages.registrationNumberMax)
 				.refine(
-					(value): boolean => /^d{12}$/.test(value.trim()),
+					(value): boolean => /^\d{12}$/.test(value.trim()),
 					messages.companyRegistrationNewFormat,
 				),
 			/** The licence to trade — a different document from either registration
@@ -184,7 +184,7 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				return;
 			}
 			// A passport encodes neither, so both are asked for outright.
-			if (!/^d{4}-d{2}-d{2}$/.test(data.dob)) {
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(data.dob)) {
 				ctx.addIssue({
 					code: "custom",
 					message: messages.dobRequired,

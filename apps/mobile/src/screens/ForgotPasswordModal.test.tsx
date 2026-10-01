@@ -1,6 +1,7 @@
 // No runner import: apps/mobile runs JEST (jest-expo preset), which provides
 // describe/expect/test/jest as globals.
 import * as React from 'react';
+import { Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -20,6 +21,18 @@ jest.mock('../lib/api', () => ({
   startForgotPassword: jest.fn(),
   completeForgotPassword: jest.fn(),
 }));
+// Only the web test below reaches it; on a phone PhoneSheet is a native Modal.
+jest.mock('react-dom', () => ({
+  ...jest.requireActual('react-dom'),
+  createPortal: jest.fn((node: unknown) => node),
+}));
+
+/*
+ * The first render pays for the whole module graph (expo-constants, the icon
+ * SVGs, the dictionary); under a parallel `nx run-many` that alone can pass
+ * Jest's 5 s default. Same per-suite budget as SecurityScreen.test.tsx.
+ */
+jest.setTimeout(30_000);
 
 const start = startForgotPassword as jest.MockedFunction<typeof startForgotPassword>;
 const complete = completeForgotPassword as jest.MockedFunction<typeof completeForgotPassword>;
@@ -97,6 +110,42 @@ describe('ForgotPasswordModal — Phone / Email switch', () => {
     await fireEvent.press(screen.getByText(EN.forgot.byPhone));
     expect(screen.queryByText(EN.errors.invalidEmailAddress)).toBeNull();
     expect(screen.getByText(EN.forgot.phoneHint)).toBeTruthy();
+  });
+});
+
+describe('ForgotPasswordModal — inside the phone frame on the web build', () => {
+  test('the sheet AND the dial-code picker it opens stay in the frame — the picker on top', async () => {
+    // A bare Modal on web covers the whole browser window; the picker opened
+    // from inside it must also stack ABOVE the sheet, not behind it.
+    const { createPortal } = jest.requireMock('react-dom') as { createPortal: jest.Mock };
+    createPortal.mockClear();
+    const host = { id: 'iz-phone-screen' };
+    const doc = globalThis as { document?: unknown };
+    const savedDocument = doc.document;
+    const savedOs = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'web' });
+    doc.document = { getElementById: (id: string) => (id === 'iz-phone-screen' ? host : null) };
+    try {
+      const screen = await renderSheet();
+      expect(screen.getByText(EN.forgot.phoneHint)).toBeTruthy();
+      await fireEvent.press(screen.getByText(/\+60/));
+      expect(await screen.findByText(EN.login.dialTitle)).toBeTruthy();
+
+      const calls = createPortal.mock.calls as [
+        React.ReactElement<{ style: StyleProp<ViewStyle> }>,
+        unknown,
+      ][];
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls.every(([, container]) => container === host)).toBe(true);
+      const layers = new Set(
+        calls.map(([overlay]) => StyleSheet.flatten(overlay.props.style)?.zIndex),
+      );
+      // The sheet at the base layer, the picker one above it.
+      expect([...layers].sort()).toEqual([100, 101]);
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, get: () => savedOs });
+      doc.document = savedDocument;
+    }
   });
 });
 

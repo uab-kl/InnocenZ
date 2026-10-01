@@ -145,6 +145,14 @@ export const RegisterOrgMemberSchema = z
       .transform((v) => (v && v.length > 0 ? v : undefined)),
     password: z.string().min(6, 'Password must be at least 6 characters'),
     confirmPassword: z.string().min(6, 'Confirm your password'),
+    /**
+     * The code emailed by POST /auth/signup-email-code, and its id (owner,
+     * 30 Sep 2026: proof before the account is created). Optional HERE so the
+     * handler answers their absence with its own sentence; `signup-email-code.ts`
+     * judges their shape.
+     */
+    emailCodeId: z.string().trim().max(64).optional(),
+    emailCode: z.string().trim().max(16).optional(),
     join: z
       .object({
         kind: z.enum(['agency', 'outlet']),

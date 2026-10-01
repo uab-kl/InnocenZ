@@ -149,7 +149,9 @@ describe('notPendingMessage — why an answered request cannot be approved again
     expect(notPendingMessage('declined')).toMatch(/declined/i);
     expect(notPendingMessage('withdrawn')).toMatch(/withdrew/i);
     expect(notPendingMessage('direct')).toMatch(/applied when it was filed/i);
-    expect(notPendingMessage('contacted')).toMatch(/contacted/i);
+    // Any other state names itself. (`contacted` no longer reaches this: it is
+    // still awaiting an answer and approves — see admin-request-answer-guard.)
+    expect(notPendingMessage('resolved')).toMatch(/resolved, not awaiting an answer/i);
   });
 
   it('always says that nothing was changed', () => {

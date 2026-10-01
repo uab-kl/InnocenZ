@@ -9,7 +9,11 @@ import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { Error } from '@/error/index';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
-import { CreateShiftSaleSchema } from '@/schema/shift-sale.schema';
+import {
+  CreateShiftSaleSchema,
+  SALES_CEILING_RM,
+  SALES_TOTAL_TOO_LARGE,
+} from '@/schema/shift-sale.schema';
 import { ShiftSaleFilter } from './shift-sale.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 
@@ -118,7 +122,26 @@ export class ShiftSaleControllerClass {
       // Total is computed server-side; the client never dictates the sum.
       const drinkSalesRm = parsed.data.drinkSalesRm ?? 0;
       const tipSalesRm = parsed.data.tipSalesRm ?? 0;
-      const totalSalesRm = drinkSalesRm + tipSalesRm;
+      /*
+       * SERVICES COUNT (owner, 29 Sep 2026: "Count services too").
+       *
+       * The total used to be drinks + tips, so a row carrying a receipt's
+       * service sales was under-stated the moment a venue logged it, and Log
+       * Sales had to keep such rows read-only. Services the caller sends are
+       * written; services it leaves out are the row's own, read back, so a log
+       * that only edits drinks never wipes them.
+       */
+      const needsStored =
+        parsed.data.serviceSalesRm === undefined || parsed.data.serviceUnits === undefined;
+      const stored = needsStored
+        ? await this.shiftSaleRepository.getByShiftAndPr(shift.id, pr.id)
+        : null;
+      const serviceSalesRm = parsed.data.serviceSalesRm ?? Number(stored?.serviceSalesRm ?? 0);
+      const serviceUnits = parsed.data.serviceUnits ?? stored?.serviceUnits ?? 0;
+      const totalSalesRm = drinkSalesRm + tipSalesRm + serviceSalesRm;
+      if (totalSalesRm > SALES_CEILING_RM) {
+        return res.status(400).json({ success: false, message: SALES_TOTAL_TOO_LARGE, data: null });
+      }
 
       const actor = getActor(req);
       const sale = await this.shiftSaleRepository.upsert({
@@ -148,6 +171,8 @@ export class ShiftSaleControllerClass {
         drinkSalesRm: money(drinkSalesRm),
         tipUnits: parsed.data.tipUnits ?? 0,
         tipSalesRm: money(tipSalesRm),
+        serviceUnits,
+        serviceSalesRm: money(serviceSalesRm),
         totalSalesRm: money(totalSalesRm),
         createdBy: actor,
         updatedBy: actor,

@@ -138,6 +138,36 @@ export function pvEventMsForDate(
 	return null;
 }
 
+/**
+ * THE PAYROLL LIST'S FREE-TEXT SEARCH — what someone at a desk actually types.
+ *
+ * The list offered a PR picker and status chips and nothing that took a PV
+ * number, so finding "PV-000009" meant reading every card on every week tab.
+ * Matches the printed number, the PR's names (legal and nickname, and the label
+ * the card prints), the IC, and the venue — trimmed and case-insensitive. An
+ * IC is also matched on its DIGITS, so "900101145566" finds "900101-14-5566";
+ * only for an all-digit query, or "PV-000009" would match any IC with 000009.
+ */
+export function pvMatchesSearch(
+	pv: Pick<
+		PrPaymentVoucher,
+		"voucherNo" | "prName" | "prNickname" | "prIc" | "outlet"
+	>,
+	query: string,
+	prLabel = "",
+): boolean {
+	const q = query.trim().toLowerCase();
+	if (!q) return true;
+	const fields = [pv.voucherNo, pv.prName, pv.prNickname, pv.outlet, prLabel];
+	if (fields.some((field) => (field ?? "").toLowerCase().includes(q))) {
+		return true;
+	}
+	const ic = pv.prIc ?? "";
+	if (ic.toLowerCase().includes(q)) return true;
+	const digits = q.replace(/[\s-]/g, "");
+	return /^\d+$/.test(digits) && ic.replace(/\D/g, "").includes(digits);
+}
+
 export function pvDayTimeFilterActive(filter: PvDayTimeFilter): boolean {
 	return Boolean(filter.date || filter.timeFrom || filter.timeTo);
 }

@@ -3,7 +3,11 @@ import {
 	DEFAULT_GEO_FENCE_RADIUS,
 	useOutletGeoFence,
 } from "@agency-portal/hooks/use-outlet-geo-fence";
-import { geoFenceAddressSync } from "@agency-portal/lib/geo-fence-address";
+import {
+	geocodeLosesDetail,
+	geoFenceAddressSync,
+	typedAddressSync,
+} from "@agency-portal/lib/geo-fence-address";
 import type { OrgAddress } from "@agency-portal/lib/org-address";
 import { useStore } from "@agency-portal/lib/store";
 import { Crosshair, MapPin, Search, Trash2 } from "lucide-react";
@@ -20,6 +24,7 @@ const MAX_RADIUS = 1000;
 function precisionNote(
 	precision: GeocodeCandidate["precision"],
 	t: PortalTranslations,
+	isPlace?: boolean,
 ): {
 	label: string;
 	warn: boolean;
@@ -28,8 +33,14 @@ function precisionNote(
 		return { label: t.geofence.precisionRooftop, warn: false };
 	if (precision === "RANGE_INTERPOLATED")
 		return { label: t.geofence.precisionInterpolated, warn: false };
+	// A named place's centre is that place's own pin — "Emhub" has no street in
+	// its Google listing, so it can never be ROOFTOP, yet it is not a block.
+	if (precision === "GEOMETRIC_CENTER" && isPlace)
+		return { label: t.geofence.precisionPlacePin, warn: false };
 	if (precision === "GEOMETRIC_CENTER")
 		return { label: t.geofence.precisionBlockCentre, warn: true };
+	if (precision === "PLACE")
+		return { label: t.geofence.precisionPlace, warn: false };
 	return { label: t.geofence.precisionApproximate, warn: true };
 }
 
@@ -90,6 +101,9 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 	// Which way round the operator is working — and it decides the default
 	// below, so it is not cosmetic.
 	const [fromSearch, setFromSearch] = useState(false);
+	// Whether committing also rewrites the venue's address. null = the operator
+	// has not chosen, so each candidate takes its own default below:
+	//
 	// Searched a DIFFERENT address: they mean to move the venue, so both halves
 	// move together unless they say otherwise.
 	//
@@ -98,7 +112,11 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 	// let a coarse match overwrite a detailed address with a thinner version of
 	// itself — this venue's own lookup answers "Kota Damansara" for a row that
 	// reads "Kompleks Perindustrian EmHub, Persiaran Surian, Seksyen 3…".
-	const [syncAddress, setSyncAddress] = useState(false);
+	//
+	// A SEARCH can land on that same thin answer: typing the very address by
+	// hand defaulted it ON, and one save (29 Sep 2026) replaced the street with
+	// the suburb. A match that loses detail starts OFF however it was reached.
+	const [syncChoice, setSyncChoice] = useState<boolean | null>(null);
 
 	// Demo sessions have no outlet to pin; the demo store holds no coordinates.
 	// Say so rather than rendering nothing — an operator who sees no card at all
@@ -127,6 +145,15 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 	const radiusChanged =
 		pin != null && radiusValid && radiusValue !== pin.radius;
 
+	// "Use the address you entered" (owner, 29 Sep 2026): after a typed search
+	// the operator may keep their own words as the venue address, pinned on the
+	// first match — for a place Google finds but addresses too thinly.
+	const topMatch = fromSearch && searchedAddress ? candidates[0] : undefined;
+	const typedOption =
+		topMatch && searchedAddress
+			? typedAddressSync(searchedAddress, topMatch, outlet)
+			: null;
+
 	const commit = async (lat: number, lng: number, nextAddress?: OrgAddress) => {
 		if (!radiusValid) {
 			toast(
@@ -138,7 +165,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 		try {
 			await save({ lat, lng, radius: radiusValue, address: nextAddress });
 			setRadiusDraft(null);
-			setSyncAddress(false);
+			setSyncChoice(null);
 			toast(
 				nextAddress ? t.geofence.pinAndAddressSaved : t.geofence.pinSaved,
 				"success",
@@ -156,9 +183,8 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 	// Every lookup starts a fresh decision — an operator who changed the sync on
 	// one search must not have that carried, unseen, into the next.
 	const runLookup = (query?: string) => {
-		const searched = Boolean(query?.trim());
-		setFromSearch(searched);
-		setSyncAddress(searched);
+		setFromSearch(Boolean(query?.trim()));
+		setSyncChoice(null);
 		void lookup(query);
 	};
 
@@ -316,11 +342,17 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 								{/* Panel radius sits above the 14px button it contains, so the
 								    corners nest rather than fight. */}
 								{candidates.map((candidate) => {
-									const note = precisionNote(candidate.precision, t);
+									const note = precisionNote(
+										candidate.precision,
+										t,
+										candidate.isPlace,
+									);
 									// The pin is what the fence measures from, so a pin that
 									// lands somewhere the stored address does not describe
 									// makes the address on screen a lie. Offer to move both.
 									const addressSync = geoFenceAddressSync(candidate, outlet);
+									const thin = geocodeLosesDetail(candidate);
+									const syncAddress = syncChoice ?? (fromSearch && !thin);
 									const willWriteAddress = Boolean(
 										addressSync?.differs && syncAddress,
 									);
@@ -330,13 +362,28 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 											className="rounded-2xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] p-3"
 										>
 											<div className="text-sm font-medium text-balance">
-												{candidate.formattedAddress}
+												{candidate.name ?? candidate.formattedAddress}
 											</div>
+											{candidate.name && (
+												<p className="iz-tiny iz-muted mt-0.5 text-pretty">
+													{candidate.formattedAddress}
+												</p>
+											)}
 											<p
 												className={`iz-tiny mt-0.5 ${note.warn ? "text-[var(--iz-amber)]" : "iz-muted"}`}
 											>
 												{note.label}
 											</p>
+											{candidate.partialMatch && (
+												<p className="iz-tiny mt-0.5 text-pretty text-[var(--iz-amber)]">
+													{t.geofence.partialMatch}
+												</p>
+											)}
+											{thin && !syncAddress && (
+												<p className="iz-tiny iz-muted mt-0.5 text-pretty">
+													{t.geofence.keepsOwnAddress}
+												</p>
+											)}
 											{addressSync?.differs && (
 												<div className="mt-2 rounded-[14px] border border-dashed border-[var(--iz-line)] p-2.5">
 													<label className="flex cursor-pointer items-start gap-2">
@@ -344,7 +391,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 															type="checkbox"
 															className="mt-0.5 h-3.5 w-3.5 shrink-0"
 															checked={syncAddress}
-															onChange={(e) => setSyncAddress(e.target.checked)}
+															onChange={(e) => setSyncChoice(e.target.checked)}
 														/>
 														<span className="iz-tiny text-pretty">
 															{t.geofence.alsoUpdateVenueAddress}
@@ -367,7 +414,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 													    the pin from the venue's own address leaves that
 													    address right, whatever wording the map returns —
 													    warning there would cry wolf on the common case. */}
-													{fromSearch && !syncAddress && (
+													{fromSearch && !syncAddress && !thin && (
 														<p className="iz-tiny mt-1 text-pretty text-[var(--iz-amber)]">
 															{t.geofence.addressWillDiffer}
 														</p>
@@ -395,6 +442,35 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 										</div>
 									);
 								})}
+								{topMatch && typedOption && (
+									<div className="rounded-2xl border border-dashed border-[var(--iz-line)] p-3">
+										<div className="text-sm font-medium">
+											{t.geofence.typedAddressTitle}
+										</div>
+										<p className="iz-tiny iz-muted mt-0.5 text-pretty">
+											{typedOption.nextLabel}
+										</p>
+										<p className="iz-tiny iz-muted2 mt-1 text-pretty">
+											{fill(t.geofence.typedAddressPin, {
+												place: topMatch.name ?? topMatch.formattedAddress,
+											})}
+										</p>
+										<button
+											type="button"
+											className="iz-btn iz-btn-primary mt-2 w-full"
+											disabled={isSaving}
+											onClick={() =>
+												void commit(
+													topMatch.lat,
+													topMatch.lng,
+													typedOption.next,
+												)
+											}
+										>
+											{isSaving ? t.common.saving : t.geofence.useTypedAddress}
+										</button>
+									</div>
+								)}
 							</div>
 						)}
 

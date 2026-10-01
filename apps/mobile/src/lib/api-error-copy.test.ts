@@ -30,6 +30,14 @@ const CONTRACT: ReadonlyArray<readonly [string, keyof typeof EN]> = [
   ['That is already your phone number', 'samePhone'],
   ['That email is already used by another account', 'emailTaken'],
   ['That phone number is already used by another account', 'phoneTaken'],
+  // 409s from /auth/register (backend account-answers.ts, 30 Sep 2026).
+  [
+    "We couldn't complete sign-up — if you already have an account, sign in or reset your password",
+    'signupNotCompleted',
+  ],
+  ['That phone number already has an account — sign in, or reset your password', 'signupPhoneHasAccount'],
+  // 400 from /auth/register — the receipt is spent (success or, since 30 Sep 2026, any 409).
+  ['Phone verification is missing or expired — verify again', 'phoneVerificationExpired'],
   ['Your account has no phone or email we can send a code to', 'noContactChannel'],
   // 422 from the password change's start — a DIFFERENT sentence from the one
   // above (password-change.controller.ts NOWHERE_TO_SEND), and neither may
@@ -166,7 +174,7 @@ describe('isSessionRefusal', () => {
   test('a 401 with any other sentence is a refusal she can fix — never a sign-out', () => {
     // POST /user/:id/delete answers a mistyped password with 401.
     expect(isSessionRefusal(401, 'Incorrect password')).toBe(false);
-    expect(isSessionRefusal(401, 'Wrong password')).toBe(false);
+    expect(isSessionRefusal(401, 'Wrong phone number or password')).toBe(false);
     expect(isSessionRefusal(401, 'Invalid code')).toBe(false);
   });
 
@@ -317,10 +325,10 @@ describe('localizeSignInError — what the sign-in screen can receive', () => {
     ['zh', ZH_T],
     ['zh-Hant', ZH_HANT_T],
   ] as const)('%s: sign-in sentences keep their own copy, and the lockout its minutes', (_locale, t) => {
-    expect(localizeSignInError('Wrong password', t)).toBe(t.login.wrongPassword);
-    expect(localizeSignInError('This account is not registered yet.', t)).toBe(
-      t.login.accountNotRegistered,
+    expect(localizeSignInError('Wrong phone number or password', t)).toBe(
+      t.login.wrongPhoneOrPassword,
     );
+    expect(localizeSignInError('Wrong email or password', t)).toBe(t.login.wrongEmailOrPassword);
     expect(localizeSignInError('This account is inactive.', t)).toBe(t.login.accountInactive);
     const lockout = localizeSignInError('Too many failed attempts. Try again in 7 minutes.', t);
     expect(lockout).toBe(formatMessage(t.login.tooManyAttempts, { m: '7' }));
@@ -342,7 +350,9 @@ describe('localizeSignInError — what the sign-in screen can receive', () => {
 
   test('English reads the server sentences unchanged', () => {
     expect(localizeSignInError(LOGIN_500, EN_T)).toBe(LOGIN_500);
-    expect(localizeSignInError('Wrong password', EN_T)).toBe(EN_T.login.wrongPassword);
+    expect(localizeSignInError('Wrong phone number or password', EN_T)).toBe(
+      EN_T.login.wrongPhoneOrPassword,
+    );
   });
 });
 

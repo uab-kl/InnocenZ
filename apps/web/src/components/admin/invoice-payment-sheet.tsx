@@ -26,11 +26,19 @@ import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate, formatDay, formatPrice } from "@/lib/utils";
 import type { PaymentMethod } from "@/services/payment-method";
 import {
+	isInvoiceOwed,
 	type SubscriptionInvoiceStatus,
 	setSubscriptionInvoiceStatus,
+	voidReasonOf,
+	voidSubscriptionInvoice,
 } from "@/services/subscription-invoice";
+
+/** The server's own floor (`VOID_REASON_MIN`) — the button waits for a reason it would accept. */
+const VOID_REASON_MIN = 3;
+
 import {
 	fetchInvoicePaymentDetail,
+	isRefundDue,
 	type SubscriptionPayment,
 	type SubscriptionPaymentStatus,
 } from "@/services/subscription-payment";
@@ -52,15 +60,26 @@ import {
  */
 
 const paymentToneOf: Record<SubscriptionPaymentStatus, string> = {
-	// Green = settled, amber = waiting, red = failed, grey = retracted — the
-	// project's status colour code, same as every other receipt surface.
+	// Green = settled, amber = waiting, red = failed, grey = retracted or closed
+	// — the project's status colour code, same as every other receipt surface.
 	succeeded: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
 	pending: "border-amber-400/40 bg-amber-400/10 text-amber-300",
 	initiated: "border-amber-400/40 bg-amber-400/10 text-amber-300",
 	failed: "border-red-400/40 bg-red-400/10 text-red-300",
-	refunded: "border-red-400/40 bg-red-400/10 text-red-300",
+	// Grey since 30 Sep 2026: "Mark refunded" is the only writer, so a refunded
+	// row is a CLOSED refund — the money came and went back, nothing is owed
+	// either way. Red read as though something was still wrong.
+	refunded: "border-muted-foreground/30 bg-muted/30 text-muted-foreground",
 	voided: "border-muted-foreground/30 bg-muted/30 text-muted-foreground",
 };
+
+/**
+ * Money that ARRIVED but settled nothing — on a voided or already-paid bill —
+ * and is not refunded yet. Its row is stored `pending` (it must stay outside the
+ * one-settlement index), so without this it read as an amber "Awaiting the
+ * bank". Red: money owed back is a deduction from what the org paid.
+ */
+const REFUND_DUE_TONE = "border-red-400/40 bg-red-400/10 text-red-300";
 
 function MethodIcon({ type }: { type: PaymentMethod["type"] }) {
 	if (type === "manual_transfer") return <Landmark className="h-4 w-4" />;
@@ -189,7 +208,34 @@ export function InvoicePaymentSheet({
 			);
 		},
 	});
-	const isSaving = statusMutation.isPending;
+
+	/**
+	 * VOID — take back an UNPAID bill raised in error (owner, 29 Sep 2026: "Add
+	 * Void"). Asks for a reason, because the reason is what stays on the bill's
+	 * record; the server refuses a bill with a payment in flight, money recorded
+	 * or a credit tied to it, and ITS sentence is what the admin reads either way
+	 * (the house rule: every action confirms in the server's words).
+	 */
+	const [voidFor, setVoidFor] = useState<{ id: string; value: string } | null>(
+		null,
+	);
+	const voidMutation = useMutation({
+		mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+			voidSubscriptionInvoice(id, reason, logout),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["invoice-payment-detail"] });
+			queryClient.invalidateQueries({ queryKey: ["subscription-invoices"] });
+			setVoidFor(null);
+			toast.success(response.message || t.adminService.voidInvoiceConfirm);
+		},
+		onError: (error) => {
+			toast.error(
+				toMutationError(error, t.adminService.voidFailed)?.message ??
+					t.adminService.voidFailed,
+			);
+		},
+	});
+	const isSaving = statusMutation.isPending || voidMutation.isPending;
 
 	const { data, isLoading, isError } = useQuery({
 		queryKey: ["invoice-payment-detail", invoiceId],
@@ -479,7 +525,8 @@ export function InvoicePaymentSheet({
 								{
 									key: "unpaid" as const,
 									label: t.subscription.statusUnpaid,
-									rows: history.filter((row) => row.status !== "paid"),
+									// OWED, not "not paid": a voided bill is neither.
+									rows: history.filter(isInvoiceOwed),
 									tone: "amber",
 								},
 							] as const
@@ -548,7 +595,7 @@ export function InvoicePaymentSheet({
 								n: history.filter((row) =>
 									historyFilter === "paid"
 										? row.status === "paid"
-										: row.status !== "paid",
+										: isInvoiceOwed(row),
 								).length,
 								total: history.length,
 							})}
@@ -571,7 +618,7 @@ export function InvoicePaymentSheet({
 									? true
 									: historyFilter === "paid"
 										? row.status === "paid"
-										: row.status !== "paid",
+										: isInvoiceOwed(row),
 							);
 							const groups: {
 								key: string;
@@ -619,10 +666,13 @@ export function InvoicePaymentSheet({
 									<ul className="mt-1.5 space-y-1">
 										{group.rows.map((row) => {
 											const isThisOne = row.id === invoice.id;
+											const isVoid = row.status === "void";
+											const voidReason = isVoid ? voidReasonOf(row.note) : null;
 											const refocusable =
 												!isThisOne &&
 												!!onSelectInvoice &&
-												referenceFor?.id !== row.id;
+												referenceFor?.id !== row.id &&
+												voidFor?.id !== row.id;
 											return (
 												<li
 													key={row.id}
@@ -665,60 +715,157 @@ export function InvoicePaymentSheet({
 															{row.billingCycle === "weekly"
 																? t.subscription.billedWeekly
 																: t.subscription.billedMonthly}
+															{/* A first week billed by the day (owner, 29 Sep
+															    2026) — said here, or the short figure beside it
+															    reads as a mistake to the admin marking it paid. */}
+															{row.proRata
+																? ` · ${fill(t.subscription.proRatedShort, {
+																		n: row.proRata.billedDays,
+																		of: row.proRata.periodDays,
+																	})}`
+																: ""}
 														</span>
 														<span className="flex shrink-0 items-center gap-2">
 															<span className="font-medium">
 																{formatPrice(row.amount)}
 															</span>
+															{/* Green settled, amber waiting — and a VOID is
+															    neither: grey, the colour rule's neutral. */}
 															<Badge
 																variant="outline"
 																className={
 																	row.status === "paid"
 																		? "border-emerald-500/40 text-emerald-500"
-																		: "border-amber-500/40 text-amber-500"
+																		: isVoid
+																			? "border-muted-foreground/30 bg-muted/30 text-muted-foreground"
+																			: "border-amber-500/40 text-amber-500"
 																}
 															>
 																{row.status === "paid"
 																	? t.subscription.statusPaid
-																	: t.subscription.statusUnpaid}
+																	: isVoid
+																		? t.subscription.statusVoid
+																		: t.subscription.statusUnpaid}
 															</Badge>
 															{isThisOne && (
 																<Badge variant="outline">
 																	{t.adminService.thisPeriodBadge}
 																</Badge>
 															)}
-															{referenceFor?.id !== row.id && (
-																<Button
-																	size="sm"
-																	variant={
-																		row.status === "paid"
-																			? "outline"
-																			: "default"
-																	}
-																	disabled={isSaving}
-																	onClick={(event) => {
-																		// A press here settles, never navigates.
-																		event.stopPropagation();
-																		if (row.status === "paid") {
-																			statusMutation.mutate({
-																				id: row.id,
-																				status: "unpaid",
-																			});
-																			return;
+															{/* Only an UNPAID bill with no form open can be voided;
+															    a voided one takes no action at all — it is final. */}
+															{isInvoiceOwed(row) &&
+																referenceFor?.id !== row.id &&
+																voidFor?.id !== row.id && (
+																	<Button
+																		size="sm"
+																		variant="outline"
+																		disabled={isSaving}
+																		onClick={(event) => {
+																			event.stopPropagation();
+																			setReferenceFor(null);
+																			setVoidFor({ id: row.id, value: "" });
+																		}}
+																	>
+																		{t.adminService.voidInvoice}
+																	</Button>
+																)}
+															{!isVoid &&
+																referenceFor?.id !== row.id &&
+																voidFor?.id !== row.id && (
+																	<Button
+																		size="sm"
+																		variant={
+																			row.status === "paid"
+																				? "outline"
+																				: "default"
 																		}
-																		setReferenceFor({
-																			id: row.id,
-																			value: "",
-																		});
-																	}}
-																>
-																	{row.status === "paid"
-																		? t.adminService.markUnpaid
-																		: t.adminService.markPaid}
-																</Button>
-															)}
+																		disabled={isSaving}
+																		onClick={(event) => {
+																			// A press here settles, never navigates.
+																			event.stopPropagation();
+																			if (row.status === "paid") {
+																				statusMutation.mutate({
+																					id: row.id,
+																					status: "unpaid",
+																				});
+																				return;
+																			}
+																			setVoidFor(null);
+																			setReferenceFor({
+																				id: row.id,
+																				value: "",
+																			});
+																		}}
+																	>
+																		{row.status === "paid"
+																			? t.adminService.markUnpaid
+																			: t.adminService.markPaid}
+																	</Button>
+																)}
 														</span>
 													</div>
+													{voidReason && (
+														<p className="mt-1 text-xs text-muted-foreground">
+															{fill(t.adminService.voidedReason, {
+																reason: voidReason,
+															})}
+														</p>
+													)}
+													{voidFor?.id === row.id && (
+														<div className="mt-2 flex flex-col gap-1 border-t border-border/50 pt-2">
+															<Input
+																autoFocus
+																value={voidFor.value}
+																maxLength={200}
+																placeholder={
+																	t.adminService.voidReasonPlaceholder
+																}
+																aria-label={t.adminService.voidReason}
+																disabled={isSaving}
+																className="h-8 text-sm"
+																onChange={(e) =>
+																	setVoidFor({
+																		id: row.id,
+																		value: e.target.value,
+																	})
+																}
+																onKeyDown={(e) => {
+																	if (e.key === "Escape") setVoidFor(null);
+																}}
+															/>
+															<span className="text-xs text-muted-foreground">
+																{t.adminService.voidReasonHint}
+															</span>
+															<div className="flex justify-end gap-2 pt-1">
+																<Button
+																	size="sm"
+																	variant="outline"
+																	disabled={isSaving}
+																	onClick={() => setVoidFor(null)}
+																>
+																	{t.common.cancel}
+																</Button>
+																<Button
+																	size="sm"
+																	variant="destructive"
+																	disabled={
+																		isSaving ||
+																		voidFor.value.trim().length <
+																			VOID_REASON_MIN
+																	}
+																	onClick={() =>
+																		voidMutation.mutate({
+																			id: row.id,
+																			reason: voidFor.value.trim(),
+																		})
+																	}
+																>
+																	{t.adminService.voidInvoiceConfirm}
+																</Button>
+															</div>
+														</div>
+													)}
 													{referenceFor?.id === row.id && (
 														<div className="mt-2 flex flex-col gap-1 border-t border-border/50 pt-2">
 															<Input
@@ -848,9 +995,15 @@ export function InvoicePaymentSheet({
 									<span className="font-medium">
 										{methodTypeLabelOf(payment.methodType)}
 									</span>
-									<Badge className={paymentToneOf[payment.status]}>
-										{paymentStatusLabelOf(payment.status)}
-									</Badge>
+									{isRefundDue(payment) ? (
+										<Badge className={REFUND_DUE_TONE}>
+											{t.adminService.attemptRefundDue}
+										</Badge>
+									) : (
+										<Badge className={paymentToneOf[payment.status]}>
+											{paymentStatusLabelOf(payment.status)}
+										</Badge>
+									)}
 								</div>
 								<div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
 									<p>
@@ -871,7 +1024,17 @@ export function InvoicePaymentSheet({
 										</p>
 									)}
 									{payment.failureReason && (
-										<p className="text-red-300">{payment.failureReason}</p>
+										// Once refunded, the reason is history ("…refund due" is
+										// done), so it stops being red.
+										<p
+											className={
+												payment.status === "refunded"
+													? "text-muted-foreground"
+													: "text-red-300"
+											}
+										>
+											{payment.failureReason}
+										</p>
 									)}
 									<p>
 										{t.adminService.recordedBy}:{" "}

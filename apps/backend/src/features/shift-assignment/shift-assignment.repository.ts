@@ -13,7 +13,13 @@ import {
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
-import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
+// The seam a seating write runs its guard through — a leaf (pr-seating-rules.ts).
+import { ShiftWriteRefused, type ShiftWriteGuard } from '@/features/shift/shift-write-guard';
+import {
+  ShiftDrinkMenuTable,
+  ShiftTable,
+  ShiftPayTierTable,
+} from '@/features/shift/shift.model';
 import { ShiftTemplateTable } from '@/features/shift-template/shift-template.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
@@ -135,6 +141,34 @@ export type ResolvedDrinkItem = {
    * item appears under on the phone.
    */
   category: string;
+};
+
+/**
+ * Where a shift's price list came from — see `resolveDrinkMenusForShifts`.
+ * `event` = the special night's own list (`shift_drink_menu`, 0167);
+ * `workspace` = the outlet's everyday list (`outlet_drink_menu`).
+ */
+export type ShiftDrinkMenuSource = 'event' | 'workspace';
+
+/** The list ONE shift is priced from, and which of the two lists it is. */
+export type ResolvedShiftDrinkMenu = {
+  source: ShiftDrinkMenuSource;
+  items: ResolvedDrinkItem[];
+};
+
+/**
+ * A special night's SUB-TYPE and "Other" name (0167), carried on the PR's own
+ * feed as the SAME two pairs `GET /shift` serves: the shift's own pair, and
+ * the pair of the event card it was posted from. A shift posted before 0167
+ * holds NULL in its own pair, so the card's is the fallback; the reader picks
+ * a whole pair, never one field of each. Read through the FK joins the feed
+ * already makes — never copied onto the assignment.
+ */
+export type MineSpecialEventFields = {
+  specialEventType: string | null;
+  customSpecialEventName: string | null;
+  templateSpecialEventType: string | null;
+  templateCustomEventName: string | null;
 };
 
 /**
@@ -265,7 +299,12 @@ export type AssignmentShiftFacts = {
   cancelFeePct: number | null;
   /** Hours of notice given; NEGATIVE when the shift had already started. */
   cancelNoticeHours: string | null;
-};
+  /*
+   * WHICH special night (0167) — the same two sub-type pairs the /mine feed and
+   * `GET /shift` serve, so the PR's Payment claim list and evidence sheet can
+   * say "Special event · VIP night" rather than a bare "Special event".
+   */
+} & MineSpecialEventFields;
 
 /**
  * A shift already holds its `quantity` headcount, so the seat asked for does not
@@ -374,13 +413,20 @@ export class ShiftAssignmentRepositoryClass {
    * A row created directly in a NON_STAFFING status (cancelled / no_show /
    * leave_approved) takes no seat and is never refused — it records someone NOT
    * working.
+   *
+   * `guard` runs FIRST, before the shift's row lock (30 Sep 2026): the shift's
+   * and the PR's advisory locks, then the PR's other bookings re-read through
+   * this transaction (pr-seating-rules.ts). Advisory locks before row locks is
+   * the one order every lane keeps (shift-write-guard.ts).
    */
   async create(
     data: Omit<ShiftAssignmentInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction,
+    guard?: ShiftWriteGuard,
   ): Promise<ShiftAssignmentType> {
     try {
       const seat = async (client: DbTransaction) => {
+        await guard?.(client);
         const takesSeat = !NON_STAFFING_STATUSES.includes(
           data.status as (typeof NON_STAFFING_STATUSES)[number],
         );
@@ -533,7 +579,8 @@ export class ShiftAssignmentRepositoryClass {
         error instanceof ShiftFullError ||
         error instanceof ShiftGoneError ||
         error instanceof TierFullError ||
-        error instanceof PrUnavailableError
+        error instanceof PrUnavailableError ||
+        error instanceof ShiftWriteRefused
       ) {
         throw error;
       }
@@ -739,12 +786,14 @@ export class ShiftAssignmentRepositoryClass {
    *
    * Returns the refusal rather than throwing, because the caller has to turn it
    * into a 409 with the reason attached (headcount vs tier read very
-   * differently to an agency).
+   * differently to an agency). `guard` runs first, before the shift's row lock —
+   * the same seam and order as `create` (30 Sep 2026).
    */
   async updateIfSeatFree(
     id: string,
     data: Partial<ShiftAssignmentInsertType>,
     params: { shiftId: string; prId: string; agencyId: string },
+    guard?: ShiftWriteGuard,
   ): Promise<
     | { ok: true; assignment: ShiftAssignmentType | null }
     | {
@@ -756,6 +805,7 @@ export class ShiftAssignmentRepositoryClass {
   > {
     try {
       return await db.transaction(async (tx) => {
+        await guard?.(tx);
         const seat = await this.seatVerdict(tx, params.shiftId, {
           prId: params.prId,
           agencyId: params.agencyId,
@@ -765,6 +815,8 @@ export class ShiftAssignmentRepositoryClass {
         return { ok: true as const, assignment };
       });
     } catch (error) {
+      // A guard's refusal is the caller's answer, not a fault.
+      if (error instanceof ShiftWriteRefused) throw error;
       logger.error(
         '[ShiftAssignmentRepository.updateIfSeatFree] Error:',
         error,
@@ -1121,9 +1173,13 @@ export class ShiftAssignmentRepositoryClass {
     }
   }
 
-  async listByShift(shiftId: string): Promise<ShiftAssignmentType[]> {
+  /** `client`: the pool, or an edit guard's transaction (shift-edit-rules.ts). */
+  async listByShift(
+    shiftId: string,
+    client: DbTransaction | typeof db = db,
+  ): Promise<ShiftAssignmentType[]> {
     try {
-      return await db
+      return await client
         .select()
         .from(ShiftAssignmentTable)
         .where(eq(ShiftAssignmentTable.shiftId, shiftId))
@@ -1244,8 +1300,12 @@ export class ShiftAssignmentRepositoryClass {
    * Every shift assignment for one PR, with the shift + outlet context the PR
    * app renders (date, slot/time, event, pay). Outlet name is joined from the
    * FK, never copied onto the row. Chronological by shift date.
+   *
+   * `client`: the pool, or a guard's transaction holding this PR's booking lock
+   * (shift-write-guard.ts, 30 Sep 2026) — the double-booking re-checks read the
+   * PR's other bookings on the connection that holds it.
    */
-  async listForPr(prId: string): Promise<
+  async listForPr(prId: string, client: DbTransaction | typeof db = db): Promise<
     Array<
       ShiftAssignmentType & {
         shiftDate: string;
@@ -1284,10 +1344,10 @@ export class ShiftAssignmentRepositoryClass {
         /** WHO booked this shift — see the agency join in `listMineAssignments`. */
         agencyId: string;
         agencyName: string | null;
-      }
+      } & MineSpecialEventFields
     >
   > {
-    return this.listMineAssignments({ prId });
+    return this.listMineAssignments({ prId }, client);
   }
 
   /**
@@ -1331,16 +1391,16 @@ export class ShiftAssignmentRepositoryClass {
         /** WHO booked this shift — see the agency join in `listMineAssignments`. */
         agencyId: string;
         agencyName: string | null;
-      }
+      } & MineSpecialEventFields
     >
   > {
     return this.listMineAssignments({ userId });
   }
 
-  private async listMineAssignments(filter: {
-    prId?: string;
-    userId?: string;
-  }): Promise<
+  private async listMineAssignments(
+    filter: { prId?: string; userId?: string },
+    client: DbTransaction | typeof db = db,
+  ): Promise<
     Array<
       ShiftAssignmentType & {
         shiftDate: string;
@@ -1378,7 +1438,7 @@ export class ShiftAssignmentRepositoryClass {
         /** WHO booked this shift — see the agency join in `listMineAssignments`. */
         agencyId: string;
         agencyName: string | null;
-      }
+      } & MineSpecialEventFields
     >
   > {
     try {
@@ -1393,13 +1453,24 @@ export class ShiftAssignmentRepositoryClass {
           ? eq(ShiftAssignmentTable.prId, filter.prId)
           : sql`false`;
 
-      const rows = await db
+      const rows = await client
         .select({
           assignment: ShiftAssignmentTable,
           shiftDate: ShiftTable.shiftDate,
           slot: ShiftTable.slot,
           eventName: ShiftTable.eventName,
           eventKind: ShiftTable.eventKind,
+          /*
+           * WHICH special night — VIP night, a launch, "Other · Merdeka
+           * Celebration" (0167). Both pairs, as `GET /shift` serves them: the
+           * shift's own, and its event card's through the template join below
+           * (the fallback for a shift posted before 0167). The PR's phone
+           * described every one of these as a bare "Special event".
+           */
+          specialEventType: ShiftTable.specialEventType,
+          customSpecialEventName: ShiftTable.customSpecialEventName,
+          templateSpecialEventType: ShiftTemplateTable.specialEventType,
+          templateCustomEventName: ShiftTemplateTable.customSpecialEventName,
           // The venue's asks, off the shift row already joined here.
           dressCode: ShiftTable.dressCode,
           languages: ShiftTable.languages,
@@ -1488,6 +1559,10 @@ export class ShiftAssignmentRepositoryClass {
           slot: row.slot,
           eventName: row.eventName,
           eventKind: row.eventKind,
+          specialEventType: row.specialEventType,
+          customSpecialEventName: row.customSpecialEventName,
+          templateSpecialEventType: row.templateSpecialEventType,
+          templateCustomEventName: row.templateCustomEventName,
           dressCode: row.dressCode,
           languages: row.languages,
           payPerHour: row.payPerHour,
@@ -1570,6 +1645,17 @@ export class ShiftAssignmentRepositoryClass {
           // already selects it. NOT NULL, defaults to 'normal', so once the
           // shift row is reached the event TYPE always has a value.
           eventKind: ShiftTable.eventKind,
+          /*
+           * WHICH special night — both sub-type pairs, the same columns the /mine
+           * feed (`listMineAssignments`) and `GET /shift` select: the shift's own,
+           * and its event card's through the template join already made below
+           * for the cover picture. Read through the FKs, never copied. Without
+           * them the PR's Payment claim list printed a bare "Special event".
+           */
+          specialEventType: ShiftTable.specialEventType,
+          customSpecialEventName: ShiftTable.customSpecialEventName,
+          templateSpecialEventType: ShiftTemplateTable.specialEventType,
+          templateCustomEventName: ShiftTemplateTable.customSpecialEventName,
           outletName: OutletTable.name,
           outletLogo: OutletTable.logoImage,
           templateCoverImage: ShiftTemplateTable.coverImage,
@@ -1601,6 +1687,10 @@ export class ShiftAssignmentRepositoryClass {
         slot: row.slot,
         eventName: row.eventName,
         eventKind: row.eventKind,
+        specialEventType: row.specialEventType,
+        customSpecialEventName: row.customSpecialEventName,
+        templateSpecialEventType: row.templateSpecialEventType,
+        templateCustomEventName: row.templateCustomEventName,
         outletName: row.outletName,
         status: row.status,
         cancelFeeRm: row.cancelFeeRm,
@@ -1631,13 +1721,17 @@ export class ShiftAssignmentRepositoryClass {
    * lat/lng null means the outlet has never dropped its pin. That is "unknown", not
    * "here": the caller must not read it as a distance of zero.
    */
-  async getOutletPin(outletId: string): Promise<{
+  /** `client`: the pool, or a seating guard's transaction (pr-seating-rules.ts). */
+  async getOutletPin(
+    outletId: string,
+    client: DbTransaction | typeof db = db,
+  ): Promise<{
     outletId: string;
     lat: number | null;
     lng: number | null;
   } | null> {
     try {
-      const [row] = await db
+      const [row] = await client
         .select({
           outletId: OutletTable.id,
           lat: OutletTable.lat,
@@ -1712,12 +1806,21 @@ export class ShiftAssignmentRepositoryClass {
    * tie a money refusal to whether the outlet has dropped its map pin. Null when
    * the assignment (or its shift/outlet) is gone.
    */
-  async getOutletForAssignment(
-    assignmentId: string,
-  ): Promise<{ outletId: string; outletName: string } | null> {
+  async getOutletForAssignment(assignmentId: string): Promise<{
+    outletId: string;
+    outletName: string;
+    /** The shift, so its price list can be resolved (`resolveDrinkMenusForShifts`). */
+    shiftId: string;
+    eventKind: string;
+  } | null> {
     try {
       const [row] = await db
-        .select({ outletId: OutletTable.id, outletName: OutletTable.name })
+        .select({
+          outletId: OutletTable.id,
+          outletName: OutletTable.name,
+          shiftId: ShiftTable.id,
+          eventKind: ShiftTable.eventKind,
+        })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .innerJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
@@ -2261,6 +2364,80 @@ export class ShiftAssignmentRepositoryClass {
         '[ShiftAssignmentRepository.resolveDrinkMenusForOutlets] Error:',
         error,
       );
+      throw error;
+    }
+  }
+
+  /**
+   * THE LIST EACH SHIFT IS PRICED FROM (owner, 29 Sep 2026: "Use event prices"
+   * — "on a special night with its own price list, the PR's manual entries,
+   * the drinks/services split in sales and the voucher's item-name check all
+   * use that list. Normal shifts keep the Workspace list").
+   *
+   * A special shift with rows in `shift_drink_menu` (0167) is priced from them;
+   * every other shift — a normal night, or a special one that kept the everyday
+   * prices (`[]`) — from its venue's `outlet_drink_menu`. ONE resolver, used by
+   * the PR's feed (`/mine`) and by the voucher name check, so the phone and the
+   * agency hold a line to the same list. The sales split needs nothing: it reads
+   * each line's stored category, which came from this list.
+   *
+   * THROWS on a failed read, like its siblings: falling back to the everyday
+   * list would price a special night's lines from the wrong list.
+   */
+  async resolveDrinkMenusForShifts(
+    shifts: ReadonlyArray<{
+      shiftId: string;
+      outletId: string;
+      eventKind?: string | null;
+    }>,
+  ): Promise<Map<string, ResolvedShiftDrinkMenu>> {
+    const result = new Map<string, ResolvedShiftDrinkMenu>();
+    if (shifts.length === 0) return result;
+    try {
+      const specialIds = [
+        ...new Set(
+          shifts.filter((s) => s.eventKind === 'special').map((s) => s.shiftId),
+        ),
+      ];
+      const eventByShift = new Map<string, ResolvedDrinkItem[]>();
+      if (specialIds.length > 0) {
+        const rows = await db
+          .select({
+            shiftId: ShiftDrinkMenuTable.shiftId,
+            slug: ShiftDrinkMenuTable.slug,
+            name: ShiftDrinkMenuTable.name,
+            priceRm: ShiftDrinkMenuTable.priceRm,
+            category: ShiftDrinkMenuTable.category,
+          })
+          .from(ShiftDrinkMenuTable)
+          .where(inArray(ShiftDrinkMenuTable.shiftId, specialIds))
+          .orderBy(asc(ShiftDrinkMenuTable.sortOrder));
+        for (const row of rows) {
+          const list = eventByShift.get(row.shiftId) ?? [];
+          // The Workspace list's wire shape: the slug as `id`, money as a string.
+          list.push({ id: row.slug, name: row.name, priceRm: row.priceRm, category: row.category });
+          eventByShift.set(row.shiftId, list);
+        }
+      }
+      const everydayOutlets = shifts
+        .filter((s) => !eventByShift.get(s.shiftId)?.length)
+        .map((s) => s.outletId);
+      const everyday =
+        everydayOutlets.length > 0
+          ? await this.resolveDrinkMenusForOutlets(everydayOutlets)
+          : new Map<string, ResolvedDrinkItem[]>();
+      for (const shift of shifts) {
+        const own = eventByShift.get(shift.shiftId);
+        result.set(
+          shift.shiftId,
+          own?.length
+            ? { source: 'event', items: own }
+            : { source: 'workspace', items: everyday.get(shift.outletId) ?? [] },
+        );
+      }
+      return result;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.resolveDrinkMenusForShifts] Error:', error);
       throw error;
     }
   }

@@ -180,6 +180,29 @@ describe('only a refused REFRESH ends the session', () => {
   });
 });
 
+describe('which 401s renew — the web rule, judged by the endpoint', () => {
+  test('a 401 worded any other way is still a session refusal: renewed and sent again', async () => {
+    routes['GET /auth/me'] = (call) =>
+      call.auth === 'Bearer A2' ? ok(ME) : { status: 401, body: { message: 'Sign in again to continue.' } };
+    routes['POST /auth/refresh'] = renewsTo('A2');
+
+    await expect(fetchMe('A1')).resolves.toEqual(ME);
+
+    expect(count('POST', '/auth/refresh')).toBe(1);
+    expect(count('GET', '/auth/me')).toBe(2);
+  });
+
+  test('self-delete is a body-credential endpoint: its 401 is never renewed, whatever it says', async () => {
+    routes['POST /user/user-1/delete'] = () => UNAUTHORIZED;
+    routes['POST /auth/refresh'] = renewsTo('A2');
+
+    await expect(deleteOwnAccount('A1', 'user-1', 'pw')).rejects.toMatchObject({ status: 401 });
+
+    expect(count('POST', '/auth/refresh')).toBe(0);
+    expect(count('POST', '/user/user-1/delete')).toBe(1);
+  });
+});
+
 describe('what is never renewed', () => {
   test('401 "Incorrect password" is an answer about the password — no refresh, no retry', async () => {
     routes['POST /user/user-1/delete'] = () => ({ status: 401, body: { message: 'Incorrect password' } });
@@ -241,6 +264,9 @@ describe('refreshAccessToken — every answer sorted, never thrown', () => {
     ['200 without a token', () => ok({}), { kind: 'unavailable' }],
     ['401 "Please sign in again."', () => ({ status: 401, body: { message: 'Please sign in again.' } }), { kind: 'dead' }],
     ['404 — a server with no refresh route', () => ({ status: 404 }), { kind: 'dead' }],
+    ['400 — the server read the token and said no', () => ({ status: 400 }), { kind: 'dead' }],
+    ['403', () => ({ status: 403 }), { kind: 'dead' }],
+    ['408 — a timeout is not a verdict', () => ({ status: 408 }), { kind: 'unavailable' }],
     ['429 from the shared limiter', () => ({ status: 429 }), { kind: 'unavailable' }],
     ['503', () => ({ status: 503 }), { kind: 'unavailable' }],
     ['no connection', () => Promise.reject(new TypeError('Network request failed')), { kind: 'unavailable' }],

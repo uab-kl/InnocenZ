@@ -32,6 +32,16 @@ router.get('/', canRead, shiftController.list.bind(shiftController));
 router.get('/:id', canRead, shiftController.getById.bind(shiftController));
 // Posting a job is outletCan('postJob'), which Outlet Finance does not hold.
 router.post('/', canCreate, outletOwnerOrOps, shiftController.create.bind(shiftController));
+// Several shifts at once, ALL OR NOTHING — Post Job's composer. The SAME role and
+// lane as posting one: a batch is only a list of posts, and every item then runs
+// the single post's own checks in the controller. A fixed path, kept above the
+// `/:id` writes below so it can never be read as an id.
+router.post(
+  '/batch',
+  canCreate,
+  outletOwnerOrOps,
+  shiftController.createBatch.bind(shiftController),
+);
 // The SAME lane guard as POST. `requireRole('outlet')` admits every outlet lane,
 // so without this Finance and Director — who cannot post a job — could still
 // confirm staffing or seal a night by calling the API directly. The client has

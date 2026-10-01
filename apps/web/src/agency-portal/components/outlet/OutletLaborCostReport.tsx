@@ -1,4 +1,6 @@
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { useOutletEffectiveWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
+import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	OUTLET_LABOR_COST_SECTION_ID,
 	OUTLET_OPEN_LABOR_COST_EVENT,
@@ -132,17 +134,29 @@ function ReportRow({
 export function OutletLaborCostReport({
 	shift,
 	className,
+	agencyPrs: agencyPrsOverride,
 }: {
 	shift: ShiftRequest;
 	className?: string;
+	/**
+	 * The backend PR records on a real session (see useOutletToday). The store
+	 * slice is blank there, so every PR's tier went unknown and was costed at
+	 * the base rate. Omitted on demo sessions, which read the store.
+	 */
+	agencyPrs?: AgencyManagedPR[];
 }) {
 	const { t } = usePortalLocale();
-	const outletWorkspace = useStore((s) => s.outletWorkspace);
-	const agencyPRs = useStore((s) => s.agencyPRs);
+	// The venue's real rate card — see useOutletEffectiveWorkspace.
+	const outletWorkspace = useOutletEffectiveWorkspace();
+	const storeAgencyPRs = useStore((s) => s.agencyPRs);
+	const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
 	const [open, setOpen] = useState(false);
 	const [tiersExpanded, setTiersExpanded] = useState(true);
 
-	const tierRates = resolveShiftTierRates(shift, outletWorkspace);
+	const tierRates = useMemo(
+		() => resolveShiftTierRates(shift, outletWorkspace),
+		[shift, outletWorkspace],
+	);
 	const report = useMemo(
 		() => buildOutletLaborCostReport(shift, tierRates, agencyPRs),
 		[shift, tierRates, agencyPRs],

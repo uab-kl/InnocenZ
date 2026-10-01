@@ -62,12 +62,17 @@ export type AppTranslations = {
     signIn: string;
     signingIn: string;
     signInFailed: string;
-    /** Backend: "This account is not registered yet." */
-    accountNotRegistered: string;
-    /** Backend: "This account is inactive." */
+    /**
+     * Backend: "Wrong email or password" — ONE answer for an unknown account,
+     * an account with no password and a wrong password (owner, 29 Sep 2026:
+     * "General message, both"; account-answers.ts). It replaced "This account
+     * is not registered yet." and "Wrong password".
+     */
+    wrongEmailOrPassword: string;
+    /** Backend: "Wrong phone number or password" — the same answer for a phone sign-in. */
+    wrongPhoneOrPassword: string;
+    /** Backend: "This account is inactive." — said only once the password is right. */
     accountInactive: string;
-    /** Backend: "Wrong password" */
-    wrongPassword: string;
     /** Backend lockout — `{m}` = minutes */
     tooManyAttempts: string;
     newHere: string;
@@ -138,6 +143,17 @@ export type AppTranslations = {
     bankHint: string;
     /** Shown in amber when neither field is set — a transfer cannot be made. */
     noBankDetails: string;
+    /** Profile section shown ONLY while an ID photo side is missing (a failed sign-up upload). */
+    idPhotosTitle: string;
+    idPhotosHint: string;
+    /** The side of the card each row is about. A passport has one side: its photo page. */
+    idPhotoFront: string;
+    idPhotoBack: string;
+    idPhotoPassport: string;
+    /** Button: opens the camera for that side. */
+    idPhotoTake: string;
+    idPhotoSaved: string;
+    idPhotoFailed: string;
     securitySettings: string;
     signOut: string;
     appLanguage: string;
@@ -352,6 +368,14 @@ export type AppTranslations = {
     noEventName: string;
     normalShift: string;
     specialEvent: string;
+    /** A special shift WITH a sub-type. `{sub}` = a subtype* label below, or the name the venue typed for "Other" (its own text, never translated). One template, not glued fragments. */
+    specialEventWithSub: string;
+    /** The special SUB-TYPES (0167), keyed by the Post Job composer's ids: vip · launch · private_table · brand_activation · corporate. */
+    subtypeVip: string;
+    subtypeLaunch: string;
+    subtypePrivateTable: string;
+    subtypeBrandActivation: string;
+    subtypeCorporate: string;
     outletName: string;
     /** Who booked the night — a PR on two rosters cannot tell otherwise. */
     agency: string;
@@ -701,6 +725,8 @@ export type AppTranslations = {
     tabPayrollWeeks: string;
     /** Empty state under the Payroll tab before the PR has ever been issued a PV. */
     noPayrollWeeksYet: string;
+    /** Empty state under the Payroll tab when PVs exist but none carries a shift (e.g. a fee-only week). */
+    noPayrollShiftsYet: string;
     /** Heading of a past week's History card when the agency is unknown. {range} is the already-localized week range. */
     weekTitlePayroll: string;
   };
@@ -1028,6 +1054,8 @@ export type AppTranslations = {
     leavePendingNote: string;
     /** Day-detail sheet title when nothing on the day was missed. */
     shiftsThisDay: string;
+    /** Day sheet opened from a notification whose booking has since been removed — said plainly instead of opening on an empty month. */
+    shiftNoLongerOnSchedule: string;
     outcomeCancelled: string;
     outcomeNoShow: string;
     outcomeLeaveRequested: string;
@@ -1198,6 +1226,14 @@ export type AppTranslations = {
     loadFailed: string;
     /** Fallback only for a non-Error throw while answering; a 409 from the server is shown raw. */
     respondFailed: string;
+    /** A tapped swap notice whose request the PR already ACCEPTED — the bell stays open with this line rather than opening an empty To-do. */
+    alreadyAccepted: string;
+    /** …already DECLINED. */
+    alreadyDeclined: string;
+    /** …the agency took the request back before the PR answered. */
+    withdrawn: string;
+    /** …the request is gone (its shift or booking was removed), or on To-do: no longer waiting for an answer. */
+    noLongerOpen: string;
   };
   payHistory: {
     /** Section eyebrow above the payment-history list. */
@@ -1245,6 +1281,9 @@ export type AppTranslations = {
     /** Singular half of the shift count — Chinese has no plural, so both keys share one wording. */
     cardMetaOne: string;
     cardMetaMany: string;
+    /** The same count on a voucher the agency has NOT issued yet — no "Issued" date beside a line saying it is waiting to be issued. */
+    cardShiftsOne: string;
+    cardShiftsMany: string;
     signThisWeek: string;
     metricWages: string;
     metricCommission: string;
@@ -1390,12 +1429,39 @@ export type AppTranslations = {
     noVoucherTitle: string;
     /** Body of that alert. 'Payment' names the Payment tab. */
     noVoucherBody: string;
+    /** PV detail opened with an id that no loaded voucher carries — shown INSTEAD of some other voucher. */
+    notFoundTitle: string;
+    notFoundBody: string;
+    /** PV detail while the voucher lists it searches are still loading. */
+    loadingVoucher: string;
+    /** PV detail when a voucher list failed to load, so "not found" cannot honestly be said. */
+    loadFailedTitle: string;
+    loadFailedBody: string;
     /** Alert title when the sign request fails. */
     notSignedTitle: string;
     /** Body of that alert. {reason} is the server's own refusal, shown raw (backend English), or pv.couldNotReachAgency. One template, because Chinese would not take the tail sentence in the same place. */
     notSignedBody: string;
     /** Fallback for {reason} above when the thrown value carries no message of its own. */
     couldNotReachAgency: string;
+    /** Uppercase heading of the two-signature card: the agency's half first, then the PR's. */
+    signaturesHeading: string;
+    /** First signer's caption on that card; the agency's own name follows it and is never translated. */
+    signerAgency: string;
+    /** Second signer's caption — the PR herself. 'PR' stays English, as everywhere else in the dictionary. */
+    signerYou: string;
+    /** The agency's half while nobody at the agency has signed yet. */
+    agencyNotSigned: string;
+    /** Shown only when BOTH halves are on the document — never claimed from one of them. */
+    bothSignaturesOnFile: string;
+    /** Summary caption above the agency that owes the money. The PR is the payee; the agency pays. */
+    paidBy: string;
+    /** The capacity the agency signer signed in. The stored value is English ('Owner'…); an unknown one is shown as stored. */
+    roleOwner: string;
+    roleFinance: string;
+    roleDirector: string;
+    roleGuarantor: string;
+    /** Hint under the grid on a voucher that can no longer be disputed (signed or paid): inspect only, no promise of a dispute. */
+    tapHintInspect: string;
   };
   scan: {
     /** Page title when editId is set (either mode). */
@@ -1458,6 +1524,10 @@ export type AppTranslations = {
     ocrRawHint: string;
     notFoundOnScan: string;
     eachPriceNotRead: string;
+    /** Heading of a special night's OWN price card. `{event}` = its sub-type ("VIP night"), the "Other" name, or shifts.specialEvent. */
+    eventPricesTitle: string;
+    /** Under that card: tonight's amounts ARE priced from this list (owner, 29 Sep 2026: "Use event prices"). */
+    eventPricesNote: string;
     addItem: string;
     onlyAddWhatShows: string;
     /** {noun} is the plural form. */
@@ -1572,6 +1642,19 @@ export type AppTranslations = {
     samePhone: string;
     emailTaken: string;
     phoneTaken: string;
+    /**
+     * 409 from `/auth/register` — a taken email, phone or ID number, naming
+     * none of them (owner, 29 Sep 2026: "General message, both").
+     */
+    signupNotCompleted: string;
+    /** 409 from `/auth/register` — her phone has an account, said only because her code proved it. */
+    signupPhoneHasAccount: string;
+    /**
+     * 400 from `/auth/register` — the phone receipt she sent is dead: spent by
+     * an earlier answer (a success, or since 30 Sep 2026 ANY 409), expired, or
+     * never issued. Only a fresh code helps.
+     */
+    phoneVerificationExpired: string;
     /** 422 — nowhere to send the identity code. */
     noContactChannel: string;
     /**
@@ -1674,6 +1757,14 @@ export type AppTranslations = {
     pvIssuedTitle: string;
     /** {start} and {end} are the Sun–Sat week bounds, both locale-formatted. */
     pvIssuedBody: string;
+    /** The same row when the agency pressed "Resend to PR" (`payload.resent`). */
+    pvResentTitle: string;
+    /** `payment_voucher_paid` — the agency recorded the voucher paid. */
+    pvPaidTitle: string;
+    /** {voucherNo} is the stored PV number and {amount} arrives already formatted as RM x.xx — neither is translated. */
+    pvPaidBody: string;
+    /** The same without a number, for a row whose payload carries none. */
+    pvPaidBodyNoNumber: string;
     /** `shift_released_early` — an approved cut-loss sent the PR home and sealed their wages for the hours worked. TITLE ONLY: the stored body names the venue and the day and the payload carries neither, so the body stays as stored. Identical in both Chinese scripts. */
     releasedEarlyTitle: string;
     /** An `agency_broadcast` row carrying a `swapId` — the outlet-swap request, which reuses that kind rather than migrating the PG enum. TITLE ONLY: the body names the current and proposed slots, neither of which is in the payload. */
@@ -1741,9 +1832,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signIn: 'Sign in',
       signingIn: 'Signing in…',
       signInFailed: 'Sign in failed — please try again.',
-      accountNotRegistered: 'This account is not registered yet.',
+      wrongEmailOrPassword: 'Wrong email or password',
+      wrongPhoneOrPassword: 'Wrong phone number or password',
       accountInactive: 'This account is inactive.',
-      wrongPassword: 'Wrong password',
       tooManyAttempts: 'Too many failed attempts. Try again in {m} minutes.',
       newHere: 'New here?',
       createAccount: 'Create an account',
@@ -1804,6 +1895,14 @@ export const translations: Record<AppLocale, AppTranslations> = {
       bankHint:
         'Your agency transfers your weekly voucher to this account. Clear both boxes to remove them.',
       noBankDetails: 'Not set — your agency cannot transfer your pay without this.',
+      idPhotosTitle: 'ID photos',
+      idPhotosHint: 'Your agency needs a photo of your ID, and this side is missing. Take it here.',
+      idPhotoFront: 'Front',
+      idPhotoBack: 'Back',
+      idPhotoPassport: 'Photo page',
+      idPhotoTake: 'Take photo',
+      idPhotoSaved: 'ID photo saved',
+      idPhotoFailed: 'The ID photo did not upload — try again.',
       securitySettings: 'Security settings',
       signOut: 'Sign out',
       appLanguage: 'App language',
@@ -1972,6 +2071,12 @@ export const translations: Record<AppLocale, AppTranslations> = {
       noEventName: 'No event name',
       normalShift: 'Normal shift',
       specialEvent: 'Special event',
+      specialEventWithSub: 'Special event · {sub}',
+      subtypeVip: 'VIP night',
+      subtypeLaunch: 'Product launch',
+      subtypePrivateTable: 'Private table buyout',
+      subtypeBrandActivation: 'Brand activation',
+      subtypeCorporate: 'Corporate night',
       outletName: 'Outlet name',
       agency: 'Agency',
       off: 'Off',
@@ -2215,6 +2320,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tabCurrentWeek: 'Current week',
       tabPayrollWeeks: 'Payroll weeks',
       noPayrollWeeksYet: 'No payroll weeks yet — your first PV appears here once your agency issues it.',
+      noPayrollShiftsYet: 'No shifts on your payroll weeks yet.',
       weekTitlePayroll: 'PAYROLL WEEK · {range}',
     },
     signup: {
@@ -2469,6 +2575,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       leaveRejectedNote: 'Leave request rejected — you are still on this shift.',
       leavePendingNote: 'MC / Leave submitted — awaiting agency review.',
       shiftsThisDay: 'Shifts this day',
+      shiftNoLongerOnSchedule:
+        'The shift from this notification is no longer on your schedule — the booking was removed after the notice was sent.',
       outcomeCancelled: 'Cancelled',
       outcomeNoShow: 'Marked no-show',
       outcomeLeaveRequested: 'Leave requested',
@@ -2565,6 +2673,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       sending: 'Sending…',
       loadFailed: 'Could not load your swap requests',
       respondFailed: 'Could not send your answer',
+      alreadyAccepted: 'You already accepted this swap.',
+      alreadyDeclined: 'You already declined this swap.',
+      withdrawn: 'Your agency withdrew this swap request.',
+      noLongerOpen: 'This swap request is no longer open.',
     },
     payHistory: {
       heading: 'PAYMENT HISTORY',
@@ -2603,6 +2715,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       clearAndClose: 'Clear & close',
       cardMetaOne: '{n} shift · Issued {date}',
       cardMetaMany: '{n} shifts · Issued {date}',
+      cardShiftsOne: '{n} shift',
+      cardShiftsMany: '{n} shifts',
       signThisWeek: 'Sign this week',
       metricWages: 'Wages',
       metricCommission: 'Commission',
@@ -2671,8 +2785,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pendingAgencyVerify: 'Pending agency verify',
       yourSignature: 'YOUR SIGNATURE',
       signaturePending: 'Pending',
-      signedWithName: 'Signed · {name} — Dual-signed · transfer processing',
-      signedSealed: 'Signed — Dual-signed · transfer processing',
+      signedWithName: 'Signed · {name}',
+      signedSealed: 'Signed',
       notSentYet: 'Not sent to you yet — waiting for your agency',
       signVoucher: 'Sign payment voucher',
       paidInBank: 'PAID · {amount} in your bank',
@@ -2686,9 +2800,26 @@ export const translations: Record<AppLocale, AppTranslations> = {
       drawSignatureBody: 'Sign in the pad with your finger before confirming.',
       noVoucherTitle: 'No voucher to sign yet',
       noVoucherBody: 'This voucher is not on the server — go back, refresh Payment, and try again.',
+      notFoundTitle: 'Voucher not found',
+      notFoundBody:
+        'This payment voucher is not in your payment history or last week’s pay — it may have been replaced or removed. No other voucher is shown in its place.',
+      loadingVoucher: 'Loading voucher…',
+      loadFailedTitle: 'Could not load this voucher',
+      loadFailedBody: 'Your vouchers could not be loaded, so this one cannot be shown yet. Check your connection and try again.',
       notSignedTitle: 'Not signed',
       notSignedBody: '{reason}\n\nNothing was saved — try again when you have signal.',
       couldNotReachAgency: 'Could not reach the agency.',
+      signaturesHeading: 'SIGNATURES',
+      signerAgency: 'Agency',
+      signerYou: 'You (PR)',
+      agencyNotSigned: 'Not signed yet',
+      bothSignaturesOnFile: 'Both signatures on file',
+      paidBy: 'Paid by',
+      roleOwner: 'Owner',
+      roleFinance: 'Finance Head',
+      roleDirector: 'Director',
+      roleGuarantor: 'Guarantor',
+      tapHintInspect: 'Tap an amount to see the receipts, shift and items behind it.',
     },
     scan: {
       titleEdit: 'Edit self-log',
@@ -2735,6 +2866,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       ocrRawHint: 'An item is only found when its name is on one of these lines. If a name is missing or misspelt here, the paper or the photo is the problem — scan again, flatter and closer.',
       notFoundOnScan: 'NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER',
       eachPriceNotRead: '{price} each · OCR did not read this one',
+      eventPricesTitle: '{event} prices',
+      eventPricesNote:
+        'Tonight’s own price list — what you log tonight is priced from these.',
       addItem: '+ Add',
       onlyAddWhatShows: 'Only add what the receipt actually shows — the agency checks these against your photo.',
       pointOcrLists: 'Point at the receipt — OCR lists the {noun} it reads',
@@ -2809,6 +2943,11 @@ export const translations: Record<AppLocale, AppTranslations> = {
       samePhone: 'That is already your phone number',
       emailTaken: 'That email is already used by another account',
       phoneTaken: 'That phone number is already used by another account',
+      signupNotCompleted:
+        "We couldn't complete sign-up — if you already have an account, sign in or reset your password",
+      signupPhoneHasAccount:
+        'That phone number already has an account — sign in, or reset your password',
+      phoneVerificationExpired: 'Phone verification is missing or expired — verify again',
       noContactChannel: 'Your account has no phone or email we can send a code to',
       addContactBeforePasswordChange:
         'Add a phone number or an email to your account before changing your password',
@@ -2858,6 +2997,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       disputeBodyWithNote: '{component} on {date} — {note}',
       pvIssuedTitle: 'Your payment voucher is ready',
       pvIssuedBody: 'Week {start} to {end}. Check the amounts and raise a dispute if anything is wrong.',
+      pvResentTitle: 'Reminder: your payment voucher is waiting',
+      pvPaidTitle: 'You have been paid',
+      pvPaidBody: '{voucherNo} — {amount} has been transferred to your bank.',
+      pvPaidBodyNoNumber: '{amount} has been transferred to your bank.',
       releasedEarlyTitle: 'You were released early',
       swapRequestTitle: 'Outlet swap — your answer is needed',
       joinAcceptedTitle: 'You were accepted by the agency',
@@ -2918,9 +3061,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signIn: '登录',
       signingIn: '登录中…',
       signInFailed: '登录失败，请重试。',
-      accountNotRegistered: '此账号尚未注册。',
+      wrongEmailOrPassword: '邮箱或密码错误',
+      wrongPhoneOrPassword: '手机号码或密码错误',
       accountInactive: '此账号已停用。',
-      wrongPassword: '密码错误',
       tooManyAttempts: '尝试次数过多。请在 {m} 分钟后再试。',
       newHere: '还没有账号？',
       createAccount: '创建账号',
@@ -2978,6 +3121,14 @@ export const translations: Record<AppLocale, AppTranslations> = {
       bankSearchPlaceholder: '搜索你的银行',
       bankHint: '经纪公司会将每周付款单转账至此账户。两栏清空即可删除。',
       noBankDetails: '未填写 — 没有这项资料，经纪公司无法转账给你。',
+      idPhotosTitle: '证件照片',
+      idPhotosHint: '经纪公司需要你的证件照片，这一面尚未上传。请在此拍摄。',
+      idPhotoFront: '正面',
+      idPhotoBack: '背面',
+      idPhotoPassport: '资料页',
+      idPhotoTake: '拍照',
+      idPhotoSaved: '证件照片已保存',
+      idPhotoFailed: '证件照片上传失败，请重试。',
       securitySettings: '安全设置',
       signOut: '退出登录',
       appLanguage: '应用语言',
@@ -3145,6 +3296,12 @@ export const translations: Record<AppLocale, AppTranslations> = {
       noEventName: '未命名活动',
       normalShift: '常规班次',
       specialEvent: '特别活动',
+      specialEventWithSub: '特别活动 · {sub}',
+      subtypeVip: 'VIP 之夜',
+      subtypeLaunch: '产品发布',
+      subtypePrivateTable: '包桌',
+      subtypeBrandActivation: '品牌活动',
+      subtypeCorporate: '企业之夜',
       outletName: '门店名称',
       agency: '经纪公司',
       off: '休息',
@@ -3386,6 +3543,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tabCurrentWeek: '本周',
       tabPayrollWeeks: '薪资周',
       noPayrollWeeksYet: '暂无薪资周 — 代理开具首张付款凭证后会显示在这里。',
+      noPayrollShiftsYet: '薪资周中暂无班次。',
       weekTitlePayroll: '薪资周 · {range}',
     },
     signup: {
@@ -3640,6 +3798,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       leaveRejectedNote: '请假申请已被拒绝 — 你仍需出勤这个班次。',
       leavePendingNote: '病假 / 请假已提交 — 等待经纪公司审核。',
       shiftsThisDay: '当天班次',
+      shiftNoLongerOnSchedule: '此通知中的班次已不在你的排班上 — 通知发出后，该预订已被移除。',
       outcomeCancelled: '已取消',
       outcomeNoShow: '已标记为缺勤',
       outcomeLeaveRequested: '已提交请假',
@@ -3736,6 +3895,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       sending: '发送中…',
       loadFailed: '无法加载你的换班请求',
       respondFailed: '无法发送你的回复',
+      alreadyAccepted: '你已同意此换班请求。',
+      alreadyDeclined: '你已婉拒此换班请求。',
+      withdrawn: '经纪公司已撤回此换班请求。',
+      noLongerOpen: '此换班请求已失效。',
     },
     payHistory: {
       heading: '结算记录',
@@ -3774,6 +3937,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       clearAndClose: '清除并关闭',
       cardMetaOne: '{n} 个班次 · 签发于 {date}',
       cardMetaMany: '{n} 个班次 · 签发于 {date}',
+      cardShiftsOne: '{n} 个班次',
+      cardShiftsMany: '{n} 个班次',
       signThisWeek: '签署此周',
       metricWages: '工资',
       metricCommission: '提成',
@@ -3842,8 +4007,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pendingAgencyVerify: '待经纪公司核实',
       yourSignature: '你的签名',
       signaturePending: '待签名',
-      signedWithName: '已签名 · {name} — 双方已签 · 转账处理中',
-      signedSealed: '已签名 — 双方已签 · 转账处理中',
+      signedWithName: '已签名 · {name}',
+      signedSealed: '已签名',
       notSentYet: '尚未发送给你 — 等待经纪公司',
       signVoucher: '签署结算单',
       paidInBank: '已支付 · {amount} 已到账',
@@ -3857,9 +4022,25 @@ export const translations: Record<AppLocale, AppTranslations> = {
       drawSignatureBody: '请先用手指在签名区签名，再确认。',
       noVoucherTitle: '暂无可签署的结算单',
       noVoucherBody: '此结算单不在服务器上 — 请返回结算页刷新后重试。',
+      notFoundTitle: '找不到此结算单',
+      notFoundBody: '此结算单不在你的付款记录或上周薪资中 — 可能已被替换或移除。此处不会显示其他结算单。',
+      loadingVoucher: '正在加载结算单…',
+      loadFailedTitle: '无法加载此结算单',
+      loadFailedBody: '你的结算单未能加载，暂时无法显示此单。请检查网络后重试。',
       notSignedTitle: '未签名',
       notSignedBody: '{reason}\n\n未保存任何内容 — 有信号时请重试。',
       couldNotReachAgency: '无法连接经纪公司。',
+      signaturesHeading: '签署',
+      signerAgency: '经纪公司',
+      signerYou: '你（PR）',
+      agencyNotSigned: '尚未签署',
+      bothSignaturesOnFile: '双方签名均已存档',
+      paidBy: '付款方',
+      roleOwner: '东主',
+      roleFinance: '财务主管',
+      roleDirector: '总监',
+      roleGuarantor: '担保人',
+      tapHintInspect: '点按金额可查看其背后的收据、班次与项目。',
     },
     scan: {
       titleEdit: '编辑自行记录',
@@ -3906,6 +4087,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       ocrRawHint: '只有当项目名称出现在以上某一行时才会被识别。如果这里缺少名称或名称有误，问题出在纸质收据或照片上 — 请把收据放平、靠近后重新扫描。',
       notFoundOnScan: '扫描未识别 · 若收据上有请手动添加',
       eachPriceNotRead: '每件 {price} · OCR 未读到此项',
+      eventPricesTitle: '{event} 价目',
+      eventPricesNote: '今晚活动自己的价目 — 你今晚记录的金额按此价目计算。',
       addItem: '+ 添加',
       onlyAddWhatShows: '只添加收据上确实有的项目 — 经纪公司会对照你的照片核实。',
       pointOcrLists: '对准收据 — OCR 会列出读到的{noun}',
@@ -3980,6 +4163,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       samePhone: '这已经是你的手机号',
       emailTaken: '该电子邮箱已被其他账号使用',
       phoneTaken: '该手机号已被其他账号使用',
+      signupNotCompleted: '无法完成注册 —— 如果您已有账号，请直接登录或重设密码。',
+      signupPhoneHasAccount: '该手机号已有账号 —— 请直接登录，或重设密码。',
+      phoneVerificationExpired: '手机验证已失效或已过期 — 请重新验证',
       noContactChannel: '你的账号没有可接收验证码的手机号或电子邮箱',
       addContactBeforePasswordChange: '请先为账号添加手机号或电子邮箱，再修改密码',
       currentPasswordIncorrect: '当前密码不正确',
@@ -4028,6 +4214,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       disputeBodyWithNote: '{date} 的{component} — {note}',
       pvIssuedTitle: '你的结算单已就绪',
       pvIssuedBody: '{start} 至 {end} 这一周。请核对金额，如有出入请提出争议。',
+      pvResentTitle: '提醒：你的结算单正在等待你',
+      pvPaidTitle: '款项已支付',
+      pvPaidBody: '{voucherNo} — {amount} 已转入你的银行账户。',
+      pvPaidBodyNoNumber: '{amount} 已转入你的银行账户。',
       releasedEarlyTitle: '你被安排提前收工',
       swapRequestTitle: '换班请求 — 需要你的答复',
       joinAcceptedTitle: '经纪公司已接受你的申请',
@@ -4088,9 +4278,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signIn: '登入',
       signingIn: '登入中…',
       signInFailed: '登入失敗，請重試。',
-      accountNotRegistered: '此帳號尚未註冊。',
+      wrongEmailOrPassword: '電子郵箱或密碼錯誤',
+      wrongPhoneOrPassword: '手機號碼或密碼錯誤',
       accountInactive: '此帳號已停用。',
-      wrongPassword: '密碼錯誤',
       tooManyAttempts: '嘗試次數過多。請在 {m} 分鐘後再試。',
       newHere: '還沒有帳號？',
       createAccount: '建立帳號',
@@ -4148,6 +4338,14 @@ export const translations: Record<AppLocale, AppTranslations> = {
       bankSearchPlaceholder: '搜尋你的銀行',
       bankHint: '經紀公司會將每週付款單轉帳至此帳戶。兩欄清空即可刪除。',
       noBankDetails: '未填寫 — 沒有這項資料，經紀公司無法轉帳給你。',
+      idPhotosTitle: '證件照片',
+      idPhotosHint: '經紀公司需要你的證件照片，這一面尚未上傳。請在此拍攝。',
+      idPhotoFront: '正面',
+      idPhotoBack: '背面',
+      idPhotoPassport: '資料頁',
+      idPhotoTake: '拍照',
+      idPhotoSaved: '證件照片已儲存',
+      idPhotoFailed: '證件照片上傳失敗，請重試。',
       securitySettings: '安全設定',
       signOut: '登出',
       appLanguage: '應用語言',
@@ -4315,6 +4513,12 @@ export const translations: Record<AppLocale, AppTranslations> = {
       noEventName: '未命名活動',
       normalShift: '常規班次',
       specialEvent: '特別活動',
+      specialEventWithSub: '特別活動 · {sub}',
+      subtypeVip: 'VIP 之夜',
+      subtypeLaunch: '產品發布',
+      subtypePrivateTable: '包桌',
+      subtypeBrandActivation: '品牌活動',
+      subtypeCorporate: '企業之夜',
       outletName: '門店名稱',
       agency: '經紀公司',
       off: '休息',
@@ -4556,6 +4760,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       tabCurrentWeek: '本週',
       tabPayrollWeeks: '薪資週',
       noPayrollWeeksYet: '暫無薪資週 — 代理開具首張付款憑證後會顯示在這裡。',
+      noPayrollShiftsYet: '薪資週中暫無班次。',
       weekTitlePayroll: '薪資週 · {range}',
     },
     signup: {
@@ -4810,6 +5015,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       leaveRejectedNote: '請假申請已被拒絕 — 你仍需出勤這個班次。',
       leavePendingNote: '病假 / 請假已提交 — 等待經紀公司審核。',
       shiftsThisDay: '當天班次',
+      shiftNoLongerOnSchedule: '此通知中的班次已不在你的排班上 — 通知發出後，該預訂已被移除。',
       outcomeCancelled: '已取消',
       outcomeNoShow: '已標記為缺勤',
       outcomeLeaveRequested: '已提交請假',
@@ -4906,6 +5112,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       sending: '傳送中…',
       loadFailed: '無法載入你的換班請求',
       respondFailed: '無法傳送你的回覆',
+      alreadyAccepted: '你已同意此換班請求。',
+      alreadyDeclined: '你已婉拒此換班請求。',
+      withdrawn: '經紀公司已撤回此換班請求。',
+      noLongerOpen: '此換班請求已失效。',
     },
     payHistory: {
       heading: '結算紀錄',
@@ -4944,6 +5154,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       clearAndClose: '清除並關閉',
       cardMetaOne: '{n} 個班次 · 簽發於 {date}',
       cardMetaMany: '{n} 個班次 · 簽發於 {date}',
+      cardShiftsOne: '{n} 個班次',
+      cardShiftsMany: '{n} 個班次',
       signThisWeek: '簽署此週',
       metricWages: '工資',
       metricCommission: '提成',
@@ -5012,8 +5224,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       pendingAgencyVerify: '待經紀公司核實',
       yourSignature: '你的簽名',
       signaturePending: '待簽名',
-      signedWithName: '已簽名 · {name} — 雙方已簽 · 轉帳處理中',
-      signedSealed: '已簽名 — 雙方已簽 · 轉帳處理中',
+      signedWithName: '已簽名 · {name}',
+      signedSealed: '已簽名',
       notSentYet: '尚未傳送給你 — 等待經紀公司',
       signVoucher: '簽署結算單',
       paidInBank: '已支付 · {amount} 已到帳',
@@ -5027,9 +5239,25 @@ export const translations: Record<AppLocale, AppTranslations> = {
       drawSignatureBody: '請先用手指在簽名區簽名，再確認。',
       noVoucherTitle: '暫無可簽署的結算單',
       noVoucherBody: '此結算單不在伺服器上 — 請返回結算頁重新整理後再試。',
+      notFoundTitle: '找不到此結算單',
+      notFoundBody: '此結算單不在你的付款紀錄或上週薪資中 — 可能已被替換或移除。此處不會顯示其他結算單。',
+      loadingVoucher: '正在載入結算單…',
+      loadFailedTitle: '無法載入此結算單',
+      loadFailedBody: '你的結算單未能載入，暫時無法顯示此單。請檢查網路後再試。',
       notSignedTitle: '未簽名',
       notSignedBody: '{reason}\n\n未儲存任何內容 — 有訊號時請重試。',
       couldNotReachAgency: '無法連線經紀公司。',
+      signaturesHeading: '簽署',
+      signerAgency: '經紀公司',
+      signerYou: '你（PR）',
+      agencyNotSigned: '尚未簽署',
+      bothSignaturesOnFile: '雙方簽名均已存檔',
+      paidBy: '付款方',
+      roleOwner: '東主',
+      roleFinance: '財務主管',
+      roleDirector: '總監',
+      roleGuarantor: '擔保人',
+      tapHintInspect: '點按金額可查看其背後的收據、班次與項目。',
     },
     scan: {
       titleEdit: '編輯自行記錄',
@@ -5076,6 +5304,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       ocrRawHint: '只有當項目名稱出現在以上某一行時才會被辨識。如果這裡缺少名稱或名稱有誤，問題出在紙本收據或照片上 — 請把收據放平、靠近後重新掃描。',
       notFoundOnScan: '掃描未辨識 · 若收據上有請手動新增',
       eachPriceNotRead: '每件 {price} · OCR 未讀到此項',
+      eventPricesTitle: '{event} 價目',
+      eventPricesNote: '今晚活動自己的價目 — 你今晚記錄的金額按此價目計算。',
       addItem: '+ 新增',
       onlyAddWhatShows: '只新增收據上確實有的項目 — 經紀公司會對照你的照片核實。',
       pointOcrLists: '對準收據 — OCR 會列出讀到的{noun}',
@@ -5150,6 +5380,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       samePhone: '這已經是你的手機號',
       emailTaken: '此電子郵箱已被其他帳號使用',
       phoneTaken: '此手機號已被其他帳號使用',
+      signupNotCompleted: '無法完成註冊 —— 如果您已有帳號，請直接登入或重設密碼。',
+      signupPhoneHasAccount: '此手機號已有帳號 —— 請直接登入，或重設密碼。',
+      phoneVerificationExpired: '手機驗證已失效或已過期 — 請重新驗證',
       noContactChannel: '你的帳號沒有可接收驗證碼的手機號或電子郵箱',
       addContactBeforePasswordChange: '請先為帳號新增手機號或電子郵箱，再修改密碼',
       currentPasswordIncorrect: '目前密碼不正確',
@@ -5198,6 +5431,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       disputeBodyWithNote: '{date} 的{component} — {note}',
       pvIssuedTitle: '你的結算單已就緒',
       pvIssuedBody: '{start} 至 {end} 這一週。請核對金額，如有出入請提出爭議。',
+      pvResentTitle: '提醒：你的結算單正在等待你',
+      pvPaidTitle: '款項已支付',
+      pvPaidBody: '{voucherNo} — {amount} 已轉入你的銀行帳戶。',
+      pvPaidBodyNoNumber: '{amount} 已轉入你的銀行帳戶。',
       releasedEarlyTitle: '你被安排提前收工',
       swapRequestTitle: '換班請求 — 需要你的答覆',
       joinAcceptedTitle: '經紀公司已接受你的申請',
@@ -5233,9 +5470,9 @@ export function localizeLoginError(
   login: AppTranslations['login'],
 ): string {
   const trimmed = message.trim();
-  if (trimmed === 'This account is not registered yet.') return login.accountNotRegistered;
+  if (trimmed === 'Wrong email or password') return login.wrongEmailOrPassword;
+  if (trimmed === 'Wrong phone number or password') return login.wrongPhoneOrPassword;
   if (trimmed === 'This account is inactive.') return login.accountInactive;
-  if (trimmed === 'Wrong password') return login.wrongPassword;
   const lockout = /^Too many failed attempts\. Try again in (\d+) minutes?\.?$/i.exec(
     trimmed,
   );

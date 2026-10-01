@@ -689,8 +689,14 @@ export class PrRepositoryClass {
    * rejectReason) and `user` / `user_profile` (identity). Most callers have
    * already written the identity half directly before reaching here; this
    * re-applies the same fields, which is idempotent, and is what actually
-   * commits `agencyId`/`tier`/`status`/`rejectReason` for a caller that has
-   * not.
+   * commits `tier`/`status`/`rejectReason` for a caller that has not.
+   *
+   * ⚠️ A MEMBERSHIP WRITE MUST NAME ITS AGENCY (`data.agencyId`). This used to
+   * fall back to `getByUserId(id)` with no agency — the OLDEST membership — so
+   * an agency editing a PR who also works elsewhere wrote her tier and
+   * approval onto the OTHER agency's row as well as its own (28 Sep audit). A
+   * write that does not say which membership is refused, not guessed; the
+   * read-back speaks for the same membership.
    */
   async update(
     id: string,
@@ -699,13 +705,18 @@ export class PrRepositoryClass {
   ): Promise<PrType | null> {
     try {
       const dbClient = tx ?? db;
-      const current = await this.getByUserId(id);
+      const writesMembership =
+        data.tier !== undefined || data.status !== undefined || data.rejectReason !== undefined;
+      const agencyId = data.agencyId;
+      if (writesMembership && !agencyId) {
+        throw new Error('[PrRepository.update] a membership write must name its agency');
+      }
+      const current = await this.getByUserId(id, agencyId);
       if (!current) return null;
 
-      const agencyId = data.agencyId ?? current.agencyId;
       const actor = data.updatedBy ?? current.updatedBy;
 
-      if (agencyId && (data.tier !== undefined || data.status !== undefined || data.rejectReason !== undefined)) {
+      if (agencyId && writesMembership) {
         const approveStatus =
           data.status === 'active'
             ? ('approved' as const)
@@ -755,7 +766,7 @@ export class PrRepositoryClass {
 
       // Empty result below => row not found (a genuine null); a real DB error
       // from any of the writes above re-throws through the catch.
-      return await this.getByUserId(id);
+      return await this.getByUserId(id, agencyId);
     } catch (error) {
       logger.error('[PrRepository.update] Error:', safeErrorFields(error));
       throw error;

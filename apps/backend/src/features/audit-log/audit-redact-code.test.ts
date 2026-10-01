@@ -49,6 +49,15 @@ describe('audit redaction of account codes', () => {
       expect(isSensitiveAuditKey(key)).toBe(true);
     }
   });
+
+  it('blanks the emailed sign-up code and its id (30 Sep 2026) — `code` alone would not match them', () => {
+    const redacted = redactSensitive({
+      email: 'owner@venue.my',
+      emailCodeId: '11111111-2222-4333-8444-555555555555',
+      emailCode: '482913',
+    });
+    expect(redacted).toEqual({ email: 'owner@venue.my', emailCodeId: '[REDACTED]', emailCode: '[REDACTED]' });
+  });
 });
 
 /**

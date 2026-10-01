@@ -7,7 +7,13 @@ import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type HistoryMoneyKind = "received" | "payout";
 
-type BreakdownLine = { label: string; value: number; hint?: string };
+type BreakdownLine = {
+	label: string;
+	value: number;
+	hint?: string;
+	/** Money taken OFF the total — printed with a minus, in red (deductions). */
+	subtracted?: boolean;
+};
 
 function receivedLines(
 	b: ShiftHistoryMoneyBreakdown,
@@ -40,12 +46,22 @@ function payoutLines(
 	b: ShiftHistoryMoneyBreakdown,
 	t: PortalTranslations,
 ): BreakdownLine[] {
-	const lines = [
+	const lines: BreakdownLine[] = [
 		{ label: t.today.wages, value: b.wagesRm },
 		{ label: "OT", value: b.otRm },
 		{ label: t.today.drinkCommission, value: b.drinkCommissionRm },
 		{ label: t.today.tipCommission, value: b.tipCommissionRm },
 	].filter((l) => l.value > 0);
+	// A take-home carries what the vouchers took off — a line of its own, so
+	// the parts still add up to the total printed above them.
+	const deductions = b.deductionsRm ?? 0;
+	if (deductions > 0) {
+		lines.push({
+			label: t.payroll.deductions,
+			value: deductions,
+			subtracted: true,
+		});
+	}
 	return lines.length > 0
 		? lines
 		: [{ label: t.today.payout, value: b.totalPayout }];
@@ -121,8 +137,19 @@ export function ShiftHistoryMoneyBreakdownView({
 								{line.hint}
 							</span>
 						) : null}
-						<span className="iz-hist-money-breakdown__metric-value">
-							{formatRM(line.value)}
+						<span
+							className={cn(
+								"iz-hist-money-breakdown__metric-value",
+								// Red = deductions, the portal's status colour code. A theme
+								// modifier, not a Tailwind colour: the base rule is un-layered
+								// and would beat a utility class.
+								line.subtracted &&
+									"iz-hist-money-breakdown__metric-value--subtracted",
+							)}
+						>
+							{/* Taken OFF, so passed negative — the formatter prints the one
+							    sign, the same "−RM" a negative take-home above reads. */}
+							{formatRM(line.subtracted ? -line.value : line.value)}
 						</span>
 					</div>
 				))}

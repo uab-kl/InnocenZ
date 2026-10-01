@@ -135,6 +135,23 @@ export function shiftSpecialEventLabel(
 	return hit ? hit.label(t) : (type ?? "");
 }
 
+/**
+ * The gold pill a SPECIAL night wears — its sub-type ("VIP night", the "Other"
+ * name), or plain "Special" when it has none. A blank special post from before
+ * 0167 carries no type, and `shiftSpecialEventLabel` alone printed an EMPTY
+ * pill. One answer for Today's cards, the Calendar sheet and History.
+ */
+export function specialEventPillLabel(
+	type: string | undefined,
+	t: PortalTranslations,
+	customName?: string,
+): string {
+	return (
+		shiftSpecialEventLabel(type, t, customName) ||
+		SHIFT_EVENT_KIND_LABELS.special(t)
+	);
+}
+
 export function formatShiftEventTypeSummary(
 	eventKind: ShiftEventKind,
 	t: PortalTranslations,

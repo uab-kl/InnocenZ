@@ -47,3 +47,28 @@ export function memberQueueState(m: { status: string }): MemberQueueState {
 export function isMemberWaiting(m: { status: string }): boolean {
 	return memberQueueState(m) === "waiting";
 }
+
+/**
+ * Which title a REACTIVATION writes — never one the owner did not see.
+ *
+ * `agency_user.sub_role` survives removal (0160), so the row still says what
+ * the person held. The picker opens on that lane when it can be restored from
+ * the queue. It cannot for Owner or Guarantor — `approvable` withholds them, the
+ * same rule Approve and the server's invite paths follow — and the picker used
+ * to fall silently to the FIRST approvable title, so reactivating a former
+ * Guarantor quietly wrote Finance over their role. Now `lane` is null until the
+ * owner picks one, and the button waits for it.
+ *
+ * `picked` is the owner's choice for THIS person, if they have made one.
+ */
+export function reactivationLane(input: {
+	heldLane: string;
+	picked?: string | null;
+	approvable: readonly string[];
+}): { lane: string | null; heldRestorable: boolean } {
+	const heldRestorable = input.approvable.includes(input.heldLane);
+	if (input.picked && input.approvable.includes(input.picked)) {
+		return { lane: input.picked, heldRestorable };
+	}
+	return { lane: heldRestorable ? input.heldLane : null, heldRestorable };
+}

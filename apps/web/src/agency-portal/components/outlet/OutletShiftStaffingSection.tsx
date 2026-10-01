@@ -131,11 +131,20 @@ export function OutletShiftStaffingSection({
 		shift.dateIso,
 		DEFAULT_ROSTER_DATE_ISO,
 	);
+	// The venue's own agency names by id — what turns the shift's posted-to ids
+	// into names, and what the requested rows below are labelled with.
+	const agencyLinks = useOutletAgencyLinks();
+	const agencyNameById = useMemo(
+		() => new Map(agencyLinks.links.map((l) => [l.agencyId, l.agencyName])),
+		[agencyLinks.links],
+	);
+	// The agencies this shift was SENT to — the demand row's honest source.
 	const agencyName = agencyNameForShift(
 		shift,
 		agencyRoster,
 		dateIso,
 		fallbackAgency,
+		agencyNameById,
 	);
 	const demandRows = shiftDemandBreakdown(shift, agencyName);
 	const { demand, supplied, pendingCount } = shiftStaffingSummary(
@@ -145,11 +154,6 @@ export function OutletShiftStaffingSection({
 	// WHO the venue asked for, with their comcards — the owner: "this demand
 	// need show that the pr comcard which pr in demand". Booked is derived
 	// from the assignment rows (`shift.prs`), never stored on the request.
-	const agencyLinks = useOutletAgencyLinks();
-	const agencyNameById = useMemo(
-		() => new Map(agencyLinks.links.map((l) => [l.agencyId, l.agencyName])),
-		[agencyLinks.links],
-	);
 	// ONE ROW PER PERSON. One pick now writes a request to every invited agency
 	// holding that PR, and the venue reads them ALL — so without this the face it
 	// picked once would appear once per agency.

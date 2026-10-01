@@ -10,7 +10,7 @@
  * `session.tsx` registers a TokenProvider — the pair it holds, read from a ref
  * so a render closure can never answer with a stale one. `api.ts` asks
  * `renewSession` what to do when a request that carried a Bearer token is
- * refused as a SESSION (401 'Unauthorized', see `isSessionRefusal`), and sends
+ * refused as a SESSION (see `isSessionRefusalAt`, the web's rule), and sends
  * that request once more with the token it gets back.
  *
  * React-free, and it never imports api.ts: the HTTP exchange is handed in, which
@@ -37,6 +37,49 @@ export type RefreshOutcome =
   | { kind: 'unavailable' };
 
 export type RefreshExchange = (refreshToken: string) => Promise<RefreshOutcome>;
+
+/**
+ * Endpoints whose 401 is a verdict on a credential carried in the request BODY
+ * — a password, the refresh token itself — which a new access token cannot
+ * change. The web's list, verbatim (apps/web/src/lib/auth/token-refresh.ts).
+ */
+const BODY_CREDENTIAL_401: readonly RegExp[] = [
+  /(^|\/)auth\/login$/,
+  /(^|\/)auth\/refresh$/,
+  /(^|\/)user\/[^/]+\/delete$/,
+];
+
+/**
+ * WHICH 401s THE APP RENEWS AND SENDS AGAIN — the web's `isSessionRefusal`,
+ * the same rule on both clients.
+ *
+ * Every 401 except the three body-credential endpoints above: login (wrong
+ * password), refresh ("Please sign in again." — renewing on that would answer a
+ * refused refresh with another refresh) and self-delete ("Incorrect password").
+ *
+ * ⚠️ Judged by the ENDPOINT, not the sentence. The app used to renew only on
+ * the bare 'Unauthorized', so a 401 worded any other way — a gateway's, or a
+ * route's own "Sign in to …" — left a PR on a screen that could never work,
+ * while the web renewed the same answer and carried on.
+ */
+export function isSessionRefusalAt(
+  status: number | undefined,
+  url: string | undefined,
+): boolean {
+  if (status !== 401) return false;
+  const path = (url ?? '').split(/[?#]/)[0].replace(/\/+$/, '');
+  return !BODY_CREDENTIAL_401.some((pattern) => pattern.test(path));
+}
+
+/**
+ * The server read the refresh token and said no — the web's `refusedByServer`:
+ * any 4xx except a timeout (408) or the limiter (429). A 400, 403 or 404 is no
+ * more renewable than a 401, and calling it "try later" would leave a dead
+ * session on screen with nothing to end it.
+ */
+export function refreshRefusedByServer(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
 
 /** What `session.tsx` lends this module. */
 export type TokenProvider = {

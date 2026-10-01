@@ -4,8 +4,8 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,8 +31,10 @@ import {
 } from '../lib/receipt-review';
 import { buildCellEvidence } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
+import { PhoneSheet } from '../components/PhoneSheet';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePaymentHistory } from '../lib/payment-history';
+import { pvLookupState } from '../lib/pv-lookup';
 import { useSession } from '../lib/session';
 import {
   signMyVoucher,
@@ -43,6 +45,12 @@ import {
 import { usePrNav } from '../lib/pr-nav';
 import { formatMessage, useLocale, type AppTranslations } from '../i18n';
 import { useSignedPvs } from '../lib/signed-pv';
+import {
+  agencySignatureOf,
+  bothSigned,
+  signedDayLabel,
+  signerRoleLabel,
+} from '../lib/pv-signatures';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pill } from '../components/ui';
@@ -52,6 +60,7 @@ import {
   ChevronLeft,
   Flag,
   Pencil,
+  Search,
   Shield,
   Wallet,
   XIcon,
@@ -185,7 +194,7 @@ function formatCell(value: number): string {
 }
 
 export function PvDetailScreen({ pvId }: { pvId: string }) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { goBack, setTab } = usePrNav();
   // Detail screens render outside the tab shell, so the back row must clear
   // the phone's own status bar or it becomes untouchable.
@@ -195,12 +204,19 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const {
     weeks: apiWeeks,
     vouchers: apiVouchers,
+    loaded: historyLoaded,
+    error: historyError,
     refresh: refreshHistory,
   } = usePaymentHistory();
   const { token, me } = useSession();
   // The real last-week voucher — the only PV a PR can still sign ("one week,
   // one PV"). Signed/paid weeks arrive through payment history instead.
-  const { lastWeek } = useAwaitingLastWeekPv();
+  const {
+    lastWeek,
+    loaded: lastWeekLoaded,
+    failed: lastWeekFailed,
+    refresh: refreshLastWeek,
+  } = useAwaitingLastWeekPv();
 
   const hist = apiWeeks.find((p) => p.id === pvId);
   const histVoucher = apiVouchers.find((v) => v.voucherId === pvId) ?? null;
@@ -227,6 +243,14 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   /** Whose voucher this is — history row first, then the live week's own entry. */
   const pvAgencyName =
     histVoucher?.agencyName ?? liveVoucher?.agencyName ?? null;
+
+  /**
+   * THIS voucher's signing facts and payee — never the week's headline, for the
+   * same two-agency reason as everything above. Null when neither source has
+   * the voucher (a backend that has not restarted sends no signature fields).
+   */
+  const signatures = histVoucher ?? liveVoucher ?? null;
+  const agencySig = agencySignatureOf(signatures);
 
   /**
    * This voucher's OWN lines out of the merged week.
@@ -490,6 +514,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   );
   // The signer IS the signed-in account, so this is derived, not typed.
   const sigName = me?.username?.trim() ?? '';
+  // The payee as the voucher itself names her; the account's name only when
+  // the voucher does not say (a backend that has not restarted).
+  const payeeName = signatures?.prName?.trim() || sigName || null;
   const [signOpen, setSignOpen] = useState(false);
   /*
    * Red cells come from the SERVER's open claims, not local state.
@@ -503,6 +530,14 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     () => openDisputeKeys(weekForGrid),
     [weekForGrid],
   );
+  /*
+   * CAN THIS VOUCHER STILL BE DISPUTED AT ALL? A signed or paid one cannot — the
+   * server refuses a claim once the PR has signed or the money has moved — yet
+   * every cell carried a dispute flag and the hint under the grid said "tap to
+   * dispute", on a PAID voucher too. Asked through the same `weekDisputable`
+   * the Payment page's own flags use, scoped to this one voucher.
+   */
+  const voucherDisputable = weekDisputable(weekForGrid);
   /** Which cell's evidence is open — the same sheet the Payment page uses. */
   const [evidenceTarget, setEvidenceTarget] = useState<{
     day: WeeklyDayPay;
@@ -626,17 +661,81 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    */
   const tapHintParts = t.pv.tapHint.split('{red}');
 
+  const topRow = (
+    <View style={styles.topRow}>
+      <Pressable style={styles.back} onPress={goBack} hitSlop={10}>
+        <ChevronLeft size={20} color={C.goldL} />
+        <Text style={styles.backText}>{t.nav.payment}</Text>
+      </Pressable>
+      <Pressable onPress={goBack} hitSlop={10}>
+        <XIcon size={18} color={C.muted} />
+      </Pressable>
+    </View>
+  );
+
+  /*
+   * ⚠️ ONLY THE VOUCHER IT WAS OPENED WITH — never a stand-in.
+   *
+   * Everything above falls back to `lastWeek` when the id matches nothing, and
+   * this page used to render that fallback: a stale link opened LAST WEEK's
+   * voucher, headed with its number and carrying a live Sign button, under the
+   * one the PR had tapped. The id must now be held by a list that has answered
+   * — payment history, or last week's own vouchers — and when it is not, the
+   * page says which of "still loading", "could not load" or "not found" is true
+   * (`pv-lookup.ts`). "Not found" is only said once BOTH lists have answered.
+   */
+  const lookup = pvLookupState({
+    pvId,
+    historyIds: historyLoaded ? apiVouchers.map((v) => v.voucherId) : null,
+    historyFailed: !!historyError,
+    lastWeekIds: lastWeekLoaded
+      ? [
+          ...(lastWeek?.voucherId ? [lastWeek.voucherId] : []),
+          ...(lastWeek?.vouchers ?? []).map((v) => v.id),
+        ]
+      : null,
+    lastWeekFailed,
+  });
+  if (lookup !== 'found') {
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
+        {topRow}
+        {lookup === 'loading' ? (
+          <View style={styles.lookupCard}>
+            <ActivityIndicator color={C.violetL} />
+            <Text style={styles.lookupBody}>{t.pv.loadingVoucher}</Text>
+          </View>
+        ) : (
+          <View style={styles.lookupCard} testID="pv-lookup-card">
+            <Text style={styles.lookupTitle} role="heading">
+              {lookup === 'notFound' ? t.pv.notFoundTitle : t.pv.loadFailedTitle}
+            </Text>
+            <Text style={styles.lookupBody}>
+              {lookup === 'notFound' ? t.pv.notFoundBody : t.pv.loadFailedBody}
+            </Text>
+            {lookup === 'unavailable' ? (
+              <Pressable
+                style={styles.soft}
+                onPress={() => {
+                  void refreshHistory();
+                  void refreshLastWeek();
+                }}
+              >
+                <Text style={styles.softText}>{t.common.retry}</Text>
+              </Pressable>
+            ) : null}
+            <Pressable style={styles.soft} onPress={goBack}>
+              <Text style={styles.softText}>{t.common.back}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
-      <View style={styles.topRow}>
-        <Pressable style={styles.back} onPress={goBack} hitSlop={10}>
-          <ChevronLeft size={20} color={C.goldL} />
-          <Text style={styles.backText}>{t.nav.payment}</Text>
-        </Pressable>
-        <Pressable onPress={goBack} hitSlop={10}>
-          <XIcon size={18} color={C.muted} />
-        </Pressable>
-      </View>
+      {topRow}
 
       {/*
        * The BODY scrolls; only the back row above stays fixed.
@@ -786,13 +885,24 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                           >
                             {formatCell(amount)}
                           </Text>
-                          {canTap && (
-                            <Flag
-                              size={9}
-                              color={isDisputed ? C.red : C.muted2}
-                              style={{ marginTop: 2 }}
-                            />
-                          )}
+                          {/* A flag promises a dispute — only where one is
+                              possible; otherwise the inspect glyph, as on the
+                              Payment page, because the tap still opens the
+                              evidence. */}
+                          {canTap &&
+                            (kindDisputable(row.key) && voucherDisputable ? (
+                              <Flag
+                                size={9}
+                                color={isDisputed ? C.red : C.muted2}
+                                style={{ marginTop: 2 }}
+                              />
+                            ) : (
+                              <Search
+                                size={9}
+                                color={C.muted2}
+                                style={{ marginTop: 2 }}
+                              />
+                            ))}
                         </Pressable>
                       );
                     })}
@@ -866,20 +976,39 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             </View>
           </ScrollView>
 
-          <Text style={styles.tapHint}>
-            {tapHintParts[0]}
-            <Text style={{ color: C.red }}>{t.pv.tapHintRed}</Text>
-            {tapHintParts[1]}
-          </Text>
+          {voucherDisputable ? (
+            <Text style={styles.tapHint}>
+              {tapHintParts[0]}
+              <Text style={{ color: C.red }}>{t.pv.tapHintRed}</Text>
+              {tapHintParts[1]}
+            </Text>
+          ) : (
+            <Text style={styles.tapHint}>{t.pv.tapHintInspect}</Text>
+          )}
         </View>
 
         <View style={styles.summaryCard}>
           <Text style={styles.summaryK}>{t.pv.netPayable}</Text>
           <Text style={styles.summaryV}>{formatRM(netDisplay)}</Text>
+          {/* THE PR IS THE PAYEE and the agency pays. This read "PR Personnel ·
+              <venue>", naming the venue where the payee belongs — the venue
+              neither receives this money nor pays it. */}
           <Text style={[styles.summaryK, { marginTop: 10 }]}>{t.pv.payee}</Text>
           <Text style={styles.summaryBody}>
-            {t.pv.prPersonnel} · {pv.outlet}
+            {payeeName ? `${payeeName} · ${t.pv.prPersonnel}` : t.pv.prPersonnel}
           </Text>
+          {pvAgencyName ? (
+            <>
+              <Text style={[styles.summaryK, { marginTop: 10 }]}>
+                {t.pv.paidBy}
+              </Text>
+              <Text style={styles.summaryBody}>{pvAgencyName}</Text>
+            </>
+          ) : null}
+          <Text style={[styles.summaryK, { marginTop: 10 }]}>
+            {t.common.outlet}
+          </Text>
+          <Text style={styles.summaryBody}>{pv.outlet}</Text>
         </View>
 
         {linkedReceipts.length > 0 && (
@@ -921,18 +1050,56 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           </View>
         )}
 
+        {/*
+         * BOTH HALVES OF THE DUAL SIGNATURE — the agency's first, because the
+         * send needs it, then hers. The card used to show her own alone, under
+         * "Dual-signed · transfer processing" the moment she signed: a second
+         * signature it had never seen, and a transfer nobody had recorded.
+         * "Both" is now said only when both are on the document.
+         */}
         <View style={styles.sigCard}>
-          <Text style={styles.sectionLabel}>{t.pv.yourSignature}</Text>
-          <Text style={styles.sigRole}>{t.pv.prPersonnel}</Text>
+          <Text style={styles.sectionLabel}>{t.pv.signaturesHeading}</Text>
+          <Text style={styles.sigRole}>
+            {pvAgencyName
+              ? `${t.pv.signerAgency} · ${pvAgencyName}`
+              : t.pv.signerAgency}
+          </Text>
+          {agencySig ? (
+            <View style={styles.signedRow}>
+              <Check size={16} color={C.green} />
+              <Text style={styles.signedText}>
+                {[
+                  agencySig.name
+                    ? formatMessage(t.pv.signedWithName, { name: agencySig.name })
+                    : t.pv.signedSealed,
+                  agencySig.role ? signerRoleLabel(agencySig.role, t) : null,
+                  signedDayLabel(agencySig.signedAt, locale),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.pendingSig}>{t.pv.agencyNotSigned}</Text>
+          )}
+
+          <Text style={[styles.sigRole, { marginTop: 12 }]}>
+            {t.pv.signerYou}
+          </Text>
           {isSealed ? (
             <View style={styles.signedRow}>
               <Check size={16} color={C.green} />
               {/* Two whole sentences, not one with a fragment spliced in — the
                   name sits in a different place in Chinese. */}
               <Text style={styles.signedText}>
-                {sigName
-                  ? formatMessage(t.pv.signedWithName, { name: sigName })
-                  : t.pv.signedSealed}
+                {[
+                  sigName
+                    ? formatMessage(t.pv.signedWithName, { name: sigName })
+                    : t.pv.signedSealed,
+                  signedDayLabel(signatures?.prSignedAt, locale),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </Text>
             </View>
           ) : awaitingMySignature ? (
@@ -943,6 +1110,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             // Names whose move it is. "Pending" alone read as "yours to do" beside a
             // Sign button that the server would have refused.
             <Text style={styles.pendingSig}>{t.pv.notSentYet}</Text>
+          )}
+          {bothSigned(signatures, isSealed) && (
+            <Text style={styles.bothSigned}>{t.pv.bothSignaturesOnFile}</Text>
           )}
         </View>
 
@@ -1029,10 +1199,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         />
       )}
 
-      {/* Receipt details sheet */}
-      <Modal
+      {/* Receipt details sheet. Both sheets here are PhoneSheets, not bare
+          Modals: on the web build a Modal covers the browser window outside
+          the phone frame. A phone still gets the same Modal. */}
+      <PhoneSheet
         visible={receiptDetail != null}
-        transparent
         animationType="slide"
         onRequestClose={() => setReceiptDetail(null)}
       >
@@ -1101,12 +1272,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
 
       {/* Signature sheet */}
-      <Modal
+      <PhoneSheet
         visible={signOpen}
-        transparent
         animationType="slide"
         onRequestClose={() => setSignOpen(false)}
       >
@@ -1149,7 +1319,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
             </Pressable>
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
     </View>
   );
 }
@@ -1365,6 +1535,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   signedText: { flex: 1, ...font(), fontSize: 13, color: C.green },
+  bothSigned: {
+    marginTop: 12,
+    ...font(700),
+    fontSize: 12,
+    color: C.green,
+  },
   pendingSig: {
     marginTop: 8,
     ...font(700),
@@ -1390,6 +1566,30 @@ const styles = StyleSheet.create({
     ...font(600),
     fontSize: 14,
     color: C.goldL,
+  },
+  /** Not found / could not load / loading — in place of a voucher, never over one. */
+  lookupCard: {
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.glass,
+    padding: 18,
+    alignItems: 'center',
+    gap: 8,
+  },
+  lookupTitle: {
+    ...font(800),
+    fontSize: 18,
+    color: C.txt,
+    textAlign: 'center',
+  },
+  lookupBody: {
+    ...font(),
+    fontSize: 13,
+    lineHeight: 20,
+    color: C.prMuted,
+    textAlign: 'center',
   },
   paidBox: {
     marginTop: 14,

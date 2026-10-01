@@ -6,6 +6,7 @@ import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { splitCardLanguages } from "@agency-portal/lib/agency-demo";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import type { getAgencyPrFlags } from "@agency-portal/lib/agency-pr-flags";
+import { prKpiScoreLabel } from "@agency-portal/lib/pr-personnel-map";
 import { cn } from "@agency-portal/lib/utils";
 import { Check, Star } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -213,8 +214,10 @@ export function ManagePrGridCard({
 						<span className="iz-pr-manage-card__metric-label">
 							{t.managePr.metricKpi}
 						</span>
+						{/* The server's score, or an em-dash while there is none — the
+						    number alone, with nothing beside it saying how it is made. */}
 						<span className="iz-pr-manage-card__metric-value">
-							{pr.kpiScore ?? "—"}
+							{prKpiScoreLabel(pr)}
 						</span>
 					</div>
 				</div>

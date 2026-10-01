@@ -61,6 +61,18 @@ export interface ShiftAssignment {
 	leaveStatus?: "pending" | "approved" | "rejected" | null;
 	leaveDecidedAt?: string | null;
 	leaveDecidedBy?: string | null;
+	/**
+	 * The agency's overtime decision (migration 0077). Null = no overtime on
+	 * this shift, which is most rows. The LIST route returns the whole
+	 * assignment row, so this rides on every row it sends.
+	 */
+	overtimeStatus?: "pending" | "approved" | "rejected" | null;
+	/**
+	 * The frozen overtime figure — numeric(12,2), serialized as a string. A
+	 * REJECTED claim keeps its figure too, so it is money owed only beside
+	 * `overtimeStatus === "approved"`.
+	 */
+	overtimeAmount?: string | null;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;

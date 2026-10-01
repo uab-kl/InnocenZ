@@ -2,6 +2,7 @@ import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
 import { NotificationRepositoryClass } from './notification.repository.js';
 import { Notification, NotificationKind } from './notification.model.js';
+import { REPEAT_WINDOW_MS } from './repeat-delivery.js';
 
 const repository = new NotificationRepositoryClass();
 
@@ -38,11 +39,17 @@ export interface NotifyInput {
  * exception is a caller passing `tx`: inside a transaction the insert runs on the
  * caller's connection, so a genuine DB fault will still surface to them, which is
  * the correct behaviour when they have explicitly tied the two writes together.
+ *
+ * **Never delivers the same notice twice in a row.** When the recipient's latest
+ * notification, raised within `REPEAT_WINDOW_MS` and still unread, already says
+ * exactly this, it is returned instead of writing a second — see
+ * `isRepeatDelivery`. That is the dedupe the Sunday jobs lacked when two
+ * backends ran them against one database.
  */
 export async function notify(input: NotifyInput): Promise<Notification | null> {
   const actor = input.actor ?? SYSTEM_ACTOR;
   try {
-    const row = await repository.create(
+    const row = await repository.createUnlessRepeat(
       {
         userId: input.userId,
         kind: input.kind,
@@ -52,7 +59,7 @@ export async function notify(input: NotifyInput): Promise<Notification | null> {
         createdBy: actor,
         updatedBy: actor,
       },
-      input.tx,
+      { windowMs: REPEAT_WINDOW_MS, tx: input.tx },
     );
     if (!row) {
       logger.error(`[notify] ${input.kind} for user ${input.userId} was not written`);

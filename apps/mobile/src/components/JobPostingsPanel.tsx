@@ -4,7 +4,6 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -37,6 +36,7 @@ import {
   Clock,
   Plus,
 } from './icons';
+import { PhoneSheet } from './PhoneSheet';
 
 type Filters = {
   date: string;
@@ -473,9 +473,10 @@ export function JobPostingsPanel({
         )}
       </Pressable>
 
-      <Modal
+      {/* PhoneSheet, not a bare Modal: on the web build a Modal covers the
+          browser window outside the phone frame. */}
+      <PhoneSheet
         visible={orderOpen}
-        transparent
         animationType="slide"
         onRequestClose={() => setOrderOpen(false)}
       >
@@ -563,7 +564,7 @@ export function JobPostingsPanel({
             </ScrollView>
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
     </View>
   );
 }

@@ -148,3 +148,97 @@ export async function fetchPaymentGateways(
 	}>("/subscription-payment/gateways");
 	return response.data.data ?? [];
 }
+
+/**
+ * WHY a refund is owed: money landed on a bill that was VOIDED, or on one that
+ * was already PAID. Read off the payment's refund-due marker server-side.
+ */
+export type RefundDueReason = "voided" | "paid_twice";
+
+/** One payment InnocenZ owes back — `GET /subscription-payment/refunds-due`. */
+export interface RefundDue {
+	paymentId: string;
+	invoiceId: string;
+	invoiceNo: string;
+	subscriberType: "outlet" | "agency";
+	/** The org's name NOW (joined live) — null only if the org row is gone. */
+	subscriberName: string | null;
+	amount: string;
+	currency: string;
+	methodType: PaymentMethodType;
+	gateway: string | null;
+	paidAt: string | null;
+	reason: RefundDueReason;
+}
+
+/**
+ * Every payment owed back and not yet refunded, oldest first (admin only).
+ *
+ * A failed request THROWS rather than answering `[]`: this list exists to say
+ * money is owed, so "could not look" must never render as "nothing owed".
+ */
+export async function fetchRefundsDue(
+	onRefreshFail: () => void,
+): Promise<RefundDue[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: RefundDue[];
+	}>("/subscription-payment/refunds-due");
+	return response.data.data ?? [];
+}
+
+/** The refunds-due list's cache key — the card reads it, "Mark refunded" refreshes it. */
+export const REFUNDS_DUE_QUERY_KEY = [
+	"subscription-payment",
+	"refunds-due",
+] as const;
+
+/** The server's own bound on a refund reference (`REFUND_REFERENCE_MAX` in refund-message.ts). */
+export const REFUND_REFERENCE_MAX = 60;
+
+/**
+ * The two refund-due markers the server writes at the START of a payment's
+ * `failureReason` (`REFUND_DUE_*_PREFIX` in refund-due.repository.ts). The
+ * payment panel reads them, so an attempt whose money arrived on a voided or
+ * already-paid bill is badged "Refund due" rather than as a pending payment.
+ * Its test reads the backend file and fails if the spelling there moves.
+ */
+export const REFUND_DUE_PREFIXES = [
+	"PAID FOR A VOIDED BILL — ",
+	"PAID TWICE — ",
+] as const;
+
+/** Money that arrived, settled nothing, and has not been refunded yet. */
+export function isRefundDue(
+	payment: Pick<SubscriptionPayment, "status" | "failureReason">,
+): boolean {
+	return (
+		payment.status !== "refunded" &&
+		REFUND_DUE_PREFIXES.some(
+			(prefix) => payment.failureReason?.startsWith(prefix) === true,
+		)
+	);
+}
+
+/**
+ * The money went back: `POST /subscription-payment/:id/refunded` (admin only).
+ *
+ * `message` is the server's confirmation sentence, which the dialog shows
+ * (translated by `localiseRefundMessage`). Only a row still owed back moves,
+ * once — a second call answers 409 in words, never a second write.
+ */
+export async function markPaymentRefunded(
+	paymentId: string,
+	reference: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: SubscriptionPayment }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: SubscriptionPayment;
+	}>(`/subscription-payment/${paymentId}/refunded`, { reference });
+	return response.data;
+}

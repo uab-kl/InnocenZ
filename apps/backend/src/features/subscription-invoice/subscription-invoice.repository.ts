@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, inArray, lte, or, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, inArray, lte, ne, or, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -8,8 +8,24 @@ import {
 } from '@/features/member-subscription/member-subscription.model.js';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
 import { SubscriptionCreditTable } from './subscription-credit.model.js';
+import { SubscriptionPaymentTable } from '@/features/subscription-payment/subscription-payment.model.js';
+import { type VoidRefusal, voidNote, voidRefusal } from './invoice-void.js';
 import { klToday } from '@/features/payment-voucher/payment-voucher-week.js';
-import { billingPeriodsFor, klDayOf } from './subscription-period.js';
+import {
+  billingPeriodsFor,
+  klDayOf,
+  lanePeriodShare,
+  type PeriodShare,
+  spanHoldsPeriod,
+} from './subscription-period.js';
+import {
+  chargeForPeriod,
+  joinNotes,
+  parseProRataNote,
+  proRataNote,
+  switchDifference,
+  type ProRata,
+} from './pro-rata.js';
 import {
   SubscriptionInvoice,
   SubscriptionInvoiceFilter,
@@ -45,9 +61,18 @@ export type OpenedInvoice = {
   /** Calendar days, YYYY-MM-DD — a billing period has no time of day. */
   periodStart: string;
   periodEnd: string;
-  /** numeric(12,2), so a string. */
+  /**
+   * What is OWED for the period — numeric(12,2), so a string — i.e. net of any
+   * credit taken off as it was minted. It used to be the INSERT's figure, read
+   * back before `applyOpenCredits` took a credit off it, so the notice quoted
+   * a bill larger than the one the org was actually asked to pay.
+   */
   amount: string;
   currency: string;
+  /** A partial first period billed by the day, so the notice can say why the figure is short of the plan price. */
+  proRata: ProRata | null;
+  /** The credit taken off as the period was minted (numeric string), or null when none was. */
+  creditApplied: string | null;
 };
 
 type JoinedRow = {
@@ -67,6 +92,9 @@ function flatten(row: JoinedRow): SubscriptionInvoiceWithSubscriber {
     subscriberName: row.subscriberName,
     planName: row.planName,
     billingCycle: row.billingCycle,
+    // Every read goes through here — the lists, the org cards, the payment
+    // panel and the receipt — so all of them get the numbers, not the sentence.
+    proRata: parseProRataNote(row.invoice.note),
   };
 }
 
@@ -319,6 +347,80 @@ export class SubscriptionInvoiceRepositoryClass {
   }
 
   /**
+   * VOID AN UNPAID BILL — the admin's "Void invoice" (owner, 29 Sep 2026: "Add
+   * Void"). The rules are `voidRefusal` (invoice-void.ts); this reads the facts
+   * they need and writes the one UPDATE, in ONE transaction:
+   *
+   *  - the bill is locked FOR UPDATE first, so a settlement or a checkout that
+   *    arrives meanwhile (`recordAttempt` takes the same lock) waits and then
+   *    finds it void, instead of racing past the read below;
+   *  - its attempts and the credits tied to it are read under that lock;
+   *  - the UPDATE re-asserts `status = 'unpaid'` in its WHERE, so it cannot
+   *    land on anything else, and a write that matched nothing THROWS — never
+   *    an "ok" over nothing.
+   *
+   * The row stays: status `void`, and its `note` gains "Voided: <reason>" after
+   * whatever it already said. Its (member_subscription_id, period_start) slot
+   * stays taken, so `generateMissing` never mints the period again.
+   *
+   * THROWS on a database error: the controller's 500 is the honest answer, and
+   * a swallowed error here would read as "refused" or "voided" — both false.
+   */
+  async voidUnpaid(input: { id: string; reason: string; actor: string }): Promise<
+    | { ok: true; before: SubscriptionInvoice; after: SubscriptionInvoice }
+    | { ok: false; notFound: true }
+    | { ok: false; refusal: VoidRefusal }
+  > {
+    return db.transaction(async (tx) => {
+      const [invoice] = await tx
+        .select()
+        .from(SubscriptionInvoiceTable)
+        .where(eq(SubscriptionInvoiceTable.id, input.id))
+        .limit(1)
+        .for('update');
+      if (!invoice) return { ok: false as const, notFound: true as const };
+
+      const attempts = await tx
+        .select({ status: SubscriptionPaymentTable.status })
+        .from(SubscriptionPaymentTable)
+        .where(eq(SubscriptionPaymentTable.subscriptionInvoiceId, invoice.id));
+      const [credits] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(SubscriptionCreditTable)
+        .where(
+          or(
+            eq(SubscriptionCreditTable.sourceInvoiceId, invoice.id),
+            eq(SubscriptionCreditTable.appliedToInvoiceId, invoice.id),
+          ),
+        );
+
+      const refusal = voidRefusal({
+        invoiceNo: invoice.invoiceNo,
+        status: invoice.status,
+        creditApplied: invoice.creditApplied,
+        attempts: attempts.map((attempt) => attempt.status),
+        creditRefs: Number(credits?.n ?? 0),
+      });
+      if (refusal) return { ok: false as const, refusal };
+
+      const [after] = await tx
+        .update(SubscriptionInvoiceTable)
+        .set({
+          status: 'void',
+          note: voidNote(invoice.note, input.reason),
+          updatedAt: new Date(),
+          updatedBy: input.actor,
+        })
+        .where(and(eq(SubscriptionInvoiceTable.id, invoice.id), eq(SubscriptionInvoiceTable.status, 'unpaid')))
+        .returning();
+      if (!after) {
+        throw new Error(`[SubscriptionInvoiceRepository.voidUnpaid] ${invoice.invoiceNo}: the void matched no unpaid row`);
+      }
+      return { ok: true as const, before: invoice, after };
+    });
+  }
+
+  /**
    * Write an invoice row for every billing period that has been reached and does
    * not have one yet.
    *
@@ -349,7 +451,10 @@ export class SubscriptionInvoiceRepositoryClass {
    *
    * Full-period difference, not day-prorated: that is the rule the owner stated
    * ("the plan in the period must follow the highest"), and it is what makes an
-   * upgrade and a later downgrade net to zero instead of to a day-count.
+   * upgrade and a later downgrade net to zero instead of to a day-count. The
+   * switch DAY never matters — and neither does a pro-rated FIRST period: the
+   * owner, 29 Sep 2026, "Charge the full weekly price difference as in any
+   * other week" (see `switchDifference` for what that means for a downgrade).
    * Amounts move in integer cents.
    */
   async prorateLaneSwitch(input: {
@@ -373,9 +478,11 @@ export class SubscriptionInvoiceRepositoryClass {
   }): Promise<'upgrade_invoiced' | 'repriced' | 'credited' | 'none'> {
     try {
       const today = input.today ?? klToday();
-      const diffCents =
-        Math.round(Number(input.toAmount) * 100) - Math.round(Number(input.fromAmount) * 100);
-      if (diffCents === 0) return 'none';
+      // The WHOLE-period difference, whatever the period was billed — a switch
+      // is never pro-rated, not even inside a pro-rated first week (owner,
+      // 29 Sep 2026: "as in any other week").
+      const priced = switchDifference(input.fromAmount, input.toAmount);
+      if (!priced || priced.diffSen === 0) return 'none';
 
       // The period that contains today on this org's PLAN lane (add-ons keep
       // their own lanes and are never touched by a plan switch).
@@ -392,6 +499,9 @@ export class SubscriptionInvoiceRepositoryClass {
             eq(MemberSubscriptionTable.subscriberType, input.subscriberType),
             eq(MemberSubscriptionTable.subscriberId, input.subscriberId),
             eq(SubscriptionInvoiceTable.kind, 'period'),
+            // A VOIDED period was never owed (29 Sep 2026): there is nothing to
+            // top up with an upgrade line, and nothing billed to credit back.
+            ne(SubscriptionInvoiceTable.status, 'void'),
             lte(SubscriptionInvoiceTable.periodStart, today),
             gte(SubscriptionInvoiceTable.periodEnd, today),
             input.laneSubscriptionId
@@ -404,6 +514,15 @@ export class SubscriptionInvoiceRepositoryClass {
       if (!current) return 'none';
       const invoice = current.invoice;
       const money = (cents: number) => (cents / 100).toFixed(2);
+
+      /*
+       * ONE RULE FOR EVERY PERIOD. A pro-rated first week briefly switched at
+       * the two plans' SHARES of its days (29 Sep 2026, morning); the owner
+       * chose the whole difference instead — "Charge the full weekly price
+       * difference as in any other week" — so its lines read exactly as any
+       * other week's do. Its own pro-rated CHARGE is untouched.
+       */
+      const diffCents = priced.diffSen;
 
       if (diffCents > 0) {
         // Dearer plan, paid OR unpaid: the EXTRA is its own line, never a
@@ -459,75 +578,109 @@ export class SubscriptionInvoiceRepositoryClass {
    * the ids the INSERT returned, so a re-run of the job cannot apply a credit
    * twice — the invoice it applied to already exists and is skipped by the
    * conflict target.
+   *
+   * Returns what each credited invoice now OWES, keyed by its id, so the "New
+   * bill" notice quotes the figure after the credit rather than the one the
+   * INSERT returned before it (29 Sep 2026). Only an invoice whose own UPDATE
+   * landed is in the map — a row that failed keeps its minted figure, and so
+   * does its notice.
    */
   private async applyOpenCredits(
-    inserted: { id: string; memberSubscriptionId: string; amount: string }[],
+    inserted: { id: string; memberSubscriptionId: string; amount: string; note?: string | null }[],
     // Lane matching now happens in the query itself; kept positional so the
     // one call site is unchanged.
     _laneKindOf: Map<string, string | null>,
     actor: string,
-  ): Promise<void> {
+  ): Promise<Map<string, { amount: string; creditApplied: string }>> {
+    const credited = new Map<string, { amount: string; creditApplied: string }>();
     for (const row of inserted) {
       try {
-        // A credit follows its OWN lane: a plan credit comes off the next plan
-        // period, a POS credit off the next POS period — matched on the lane's
-        // kind and, for add-ons, the product. Money paid for POS never quietly
-        // discounts the plan, or the reverse.
-        const credits = await db.execute<{ id: string; remaining: string; reason: string | null }>(sql`
-          SELECT c.id, c.remaining, c.reason
-          FROM main.subscription_credit c
-          JOIN main.member_subscription cm ON cm.id = c.member_subscription_id
-          LEFT JOIN main.subscription cs ON cs.id = cm.subscription_id
-          JOIN main.member_subscription im ON im.id = ${row.memberSubscriptionId}
-          LEFT JOIN main.subscription isub ON isub.id = im.subscription_id
-          WHERE c.status = 'open'
-            AND cm.subscriber_type = im.subscriber_type
-            AND cm.subscriber_id = im.subscriber_id
-            AND coalesce(cs.kind, 'plan') = coalesce(isub.kind, 'plan')
-            AND (coalesce(isub.kind, 'plan') <> 'addon' OR cm.subscription_id = im.subscription_id)
-          ORDER BY c.created_at ASC
-        `);
-        if (credits.rows.length === 0) continue;
+        /*
+         * ONE TRANSACTION PER INVOICE, THE CREDITS LOCKED (security review,
+         * 29 Sep 2026). Two `generateMissing` runs at once — the nightly job and
+         * the admin's "Refresh periods", or two admins — could each read the
+         * same open credit before either wrote it back, and spend it twice on
+         * two new periods of one lane. `FOR UPDATE OF c` makes the second run
+         * WAIT; when it gets the rows, Postgres re-checks `status = 'open'` and
+         * hands back the remaining balance the first run left, so a credit is
+         * never spent past what it holds. The invoice's own figure is written in
+         * the same transaction, so a failure rolls both back together.
+         */
+        const outcome = await db.transaction(async (tx) => {
+          // A credit follows its OWN lane: a plan credit comes off the next plan
+          // period, a POS credit off the next POS period — matched on the lane's
+          // kind and, for add-ons, the product. Money paid for POS never quietly
+          // discounts the plan, or the reverse.
+          const credits = await tx.execute<{ id: string; remaining: string; reason: string | null }>(sql`
+            SELECT c.id, c.remaining, c.reason
+            FROM main.subscription_credit c
+            JOIN main.member_subscription cm ON cm.id = c.member_subscription_id
+            LEFT JOIN main.subscription cs ON cs.id = cm.subscription_id
+            JOIN main.member_subscription im ON im.id = ${row.memberSubscriptionId}
+            LEFT JOIN main.subscription isub ON isub.id = im.subscription_id
+            WHERE c.status = 'open'
+              AND cm.subscriber_type = im.subscriber_type
+              AND cm.subscriber_id = im.subscriber_id
+              AND coalesce(cs.kind, 'plan') = coalesce(isub.kind, 'plan')
+              AND (coalesce(isub.kind, 'plan') <> 'addon' OR cm.subscription_id = im.subscription_id)
+            ORDER BY c.created_at ASC
+            FOR UPDATE OF c
+          `);
+          if (credits.rows.length === 0) return null;
 
-        const baseCents = Math.round(Number(row.amount) * 100);
-        let leftCents = baseCents;
-        let usedCents = 0;
-        const notes: string[] = [];
-        for (const credit of credits.rows) {
-          if (leftCents <= 0) break;
-          const remainingCents = Math.round(Number(credit.remaining) * 100);
-          const take = Math.min(remainingCents, leftCents);
-          if (take <= 0) continue;
-          usedCents += take;
-          leftCents -= take;
-          const stillOpen = remainingCents - take;
-          await db
-            .update(SubscriptionCreditTable)
+          const baseCents = Math.round(Number(row.amount) * 100);
+          let leftCents = baseCents;
+          let usedCents = 0;
+          const notes: string[] = [];
+          for (const credit of credits.rows) {
+            if (leftCents <= 0) break;
+            const remainingCents = Math.round(Number(credit.remaining) * 100);
+            const take = Math.min(remainingCents, leftCents);
+            if (take <= 0) continue;
+            usedCents += take;
+            leftCents -= take;
+            const stillOpen = remainingCents - take;
+            await tx
+              .update(SubscriptionCreditTable)
+              .set({
+                remaining: (stillOpen / 100).toFixed(2),
+                status: stillOpen === 0 ? 'applied' : 'open',
+                appliedToInvoiceId: row.id,
+                updatedAt: new Date(),
+                updatedBy: actor,
+              })
+              .where(
+                and(
+                  eq(SubscriptionCreditTable.id, credit.id),
+                  eq(SubscriptionCreditTable.status, 'open'),
+                ),
+              );
+            if (credit.reason) notes.push(credit.reason);
+          }
+          if (usedCents === 0) return null;
+          const creditApplied = (usedCents / 100).toFixed(2);
+          const owed = ((baseCents - usedCents) / 100).toFixed(2);
+          await tx
+            .update(SubscriptionInvoiceTable)
             .set({
-              remaining: (stillOpen / 100).toFixed(2),
-              status: stillOpen === 0 ? 'applied' : 'open',
-              appliedToInvoiceId: row.id,
+              creditApplied,
+              amount: owed,
+              // KEEPS the note the row was minted with — today only a pro-rated
+              // first period's — ahead of the credit's reason. Overwriting it
+              // would leave a short figure with no sentence saying why.
+              note: joinNotes(row.note, notes[0]),
               updatedAt: new Date(),
               updatedBy: actor,
             })
-            .where(eq(SubscriptionCreditTable.id, credit.id));
-          if (credit.reason) notes.push(credit.reason);
-        }
-        if (usedCents === 0) continue;
-        await db
-          .update(SubscriptionInvoiceTable)
-          .set({
-            creditApplied: (usedCents / 100).toFixed(2),
-            amount: ((baseCents - usedCents) / 100).toFixed(2),
-            note: notes[0] ?? null,
-            updatedAt: new Date(),
-            updatedBy: actor,
-          })
-          .where(eq(SubscriptionInvoiceTable.id, row.id));
+            .where(eq(SubscriptionInvoiceTable.id, row.id));
+          return { amount: owed, creditApplied };
+        });
+        if (outcome) credited.set(row.id, outcome);
       } catch (error) {
         logger.error('[SubscriptionInvoiceRepository.applyOpenCredits] Error:', error);
       }
     }
+    return credited;
   }
 
   async generateMissing(params?: {
@@ -613,7 +766,12 @@ export class SubscriptionInvoiceRepositoryClass {
 
       const winners = new Map<
         string,
-        { row: BillableSubscription; period: { periodStart: string; periodEnd: string } }
+        {
+          row: BillableSubscription;
+          period: { periodStart: string; periodEnd: string };
+          /** How much of the period the lane held — less than all of it only in a partial first period. */
+          share: PeriodShare;
+        }
       >();
       for (const [lane, rowsInLane] of lanes) {
         const ordered = [...rowsInLane].sort(
@@ -722,15 +880,20 @@ export class SubscriptionInvoiceRepositoryClass {
         for (const period of periods) {
           // Priced by the subscription actually LIVE in that period — the last
           // one to start within it, which is the tier the org settled on then.
-          const live =
-            [...ordered]
-              .reverse()
-              .find(
-                (row) =>
-                  klDayOf(row.startedAt) <= period.periodEnd &&
-                  (!row.endedAt || klDayOf(row.endedAt) > period.periodStart),
-              ) ?? latest;
-          winners.set(`${lane}|${period.periodStart}`, { row: live, period });
+          const live = [...ordered].reverse().find((row) => spanHoldsPeriod(row, period));
+          /*
+           * ⚠️ NEVER A PERIOD THE LANE DID NOT HOLD (29 Sep 2026 follow-up). This
+           * fell back `?? latest` — so a lane LEFT and later RE-JOINED billed
+           * every week in between at the plan it came back on: five RM 125 weeks
+           * for agency cd50e9f6, which held nothing from 30 Jun to 12 Aug. The
+           * calendar still walks from the earliest anchor (one calendar per
+           * lane); a period nobody held is simply not on the bill, and the one
+           * the lane came back in is billed from the day it came back
+           * (`lanePeriodShare`, beside `periodShareFor`).
+           */
+          const share = lanePeriodShare(period, anchoredAt, ordered);
+          if (!live || !share) continue;
+          winners.set(`${lane}|${period.periodStart}`, { row: live, period, share });
         }
       }
 
@@ -771,15 +934,27 @@ export class SubscriptionInvoiceRepositoryClass {
       const rows: SubscriptionInvoiceInsertType[] = [];
       for (const [key, winner] of winners) {
         if (billed.has(key)) continue;
+        /**
+         * A FIRST PARTIAL PERIOD IS NOT BILLED IN FULL (owner, 29 Sep 2026).
+         * The period keeps its calendar dates; the charge is the plan price
+         * times the days held over the days in the period, in sen. Every whole
+         * period gets the price exactly as before and no note. The stored
+         * figure is what everything downstream reads — the notice, the
+         * checkout, auto-charge, the receipt — so nothing recomputes it.
+         */
+        const charge = chargeForPeriod(winner.row.amount, winner.share);
         rows.push({
           memberSubscriptionId: winner.row.id,
           periodStart: winner.period.periodStart,
           periodEnd: winner.period.periodEnd,
-          amount: winner.row.amount,
+          amount: charge.amount,
           // Gross = net at mint; a downgrade credit, if one is open, is taken
           // off right after the insert (see applyOpenCredits below).
-          baseAmount: winner.row.amount,
+          baseAmount: charge.amount,
           currency: winner.row.currency,
+          // The sentence behind a short figure, printed on the row and the
+          // receipt; read back into numbers by `parseProRataNote`.
+          note: charge.proRata ? proRataNote(charge.proRata) : null,
           createdBy: actor,
           updatedBy: actor,
         });
@@ -838,25 +1013,33 @@ export class SubscriptionInvoiceRepositoryClass {
             periodEnd: SubscriptionInvoiceTable.periodEnd,
             amount: SubscriptionInvoiceTable.amount,
             currency: SubscriptionInvoiceTable.currency,
+            // Read back so a credit taken off below keeps it, and so the
+            // notice can say a short first week is pro-rated.
+            note: SubscriptionInvoiceTable.note,
           });
         created += inserted.length;
         // Only rows this run actually inserted — a re-run returns none here, so
         // a credit can never be applied twice.
-        await this.applyOpenCredits(inserted, laneKindOf, actor);
+        const credited = await this.applyOpenCredits(inserted, laneKindOf, actor);
         for (const row of inserted) {
           const owner = ownerOf.get(row.memberSubscriptionId);
           // A lane whose owner cannot be resolved is still BILLED — it is in the
           // table — it simply cannot be announced to anybody. Dropping it here
           // keeps the notification honest rather than addressing it to nobody.
           if (!owner) continue;
+          // What the org OWES now: the credit, if one was taken off above, is
+          // already out of it. The INSERT's own figure is the gross.
+          const afterCredit = credited.get(row.id);
           opened.push({
             subscriberType: owner.subscriberType,
             subscriberId: owner.subscriberId,
             subscriberName: owner.subscriberName,
             periodStart: row.periodStart,
             periodEnd: row.periodEnd,
-            amount: row.amount,
+            amount: afterCredit?.amount ?? row.amount,
             currency: row.currency,
+            proRata: parseProRataNote(row.note),
+            creditApplied: afterCredit?.creditApplied ?? null,
           });
         }
       }

@@ -39,7 +39,7 @@
  * refresh afterwards never turns a change that SUCCEEDED into an error message.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, GRADIENTS, grad } from '../theme/theme';
 import { font } from '../theme/fonts';
 import { usePrNav } from '../lib/pr-nav';
@@ -81,6 +81,7 @@ import {
   savePhoneCountryCode,
 } from '../lib/phone-prefs';
 import { ChevronLeft, Eye, EyeOff, Lock, Mail, Phone, Shield, Trash2 } from '../components/icons';
+import { PhoneSheet } from '../components/PhoneSheet';
 import { COUNTRY_BY_CODE, COUNTRY_DIAL_OPTIONS } from './sign-up/constants';
 import { Picker } from './sign-up/fields';
 import { normalizeOtpInput } from './sign-up/step-6';
@@ -788,9 +789,11 @@ export function SecurityScreen() {
         </View>
       </Pressable>
 
-      <Modal
+      {/* PhoneSheet, not a bare Modal: on the web build a Modal covers the
+          browser window outside the phone frame, and the dial-code picker it
+          opens (a PhoneSheet too) would land behind it. */}
+      <PhoneSheet
         visible={sheet !== null}
-        transparent
         animationType="slide"
         onRequestClose={requestCloseSheet}
       >
@@ -1209,7 +1212,7 @@ export function SecurityScreen() {
             )}
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
     </View>
   );
 }

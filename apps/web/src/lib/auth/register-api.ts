@@ -6,6 +6,7 @@ import {
 } from "@/lib/geo/country-state-city";
 import type { ApiResponse } from "./auth-api";
 import type { SignupInput } from "./register-schemas";
+import type { SignupEmailProof } from "./signup-email-code-api";
 
 export interface RegisterResponse {
 	id: string;
@@ -51,8 +52,14 @@ async function fileToBase64(file: File): Promise<string> {
 	return btoa(binary);
 }
 
+/**
+ * `proof` is the email code (owner, 30 Sep 2026): the server creates nothing
+ * until the code sent to `email` — the LOGIN email — comes back with it. An
+ * accepted code is spent by whatever the answer is, so a retry needs a new one.
+ */
 export async function registerUser(
 	input: SignupInput,
+	proof: SignupEmailProof,
 ): Promise<RegisterApiResponse> {
 	// No roleId. The server derives the role from `accountType` below — a public
 	// caller naming its own role was the escalation hole, and the two VITE_*
@@ -64,6 +71,8 @@ export async function registerUser(
 
 	const payload: Record<string, unknown> = {
 		email: input.loginEmail,
+		emailCodeId: proof.emailCodeId,
+		emailCode: proof.emailCode,
 		phoneNum: toSignupPhoneE164(input.phoneNum),
 		// Account display name = PIC; company name lives on agency/outlet only.
 		username: input.personInCharge,

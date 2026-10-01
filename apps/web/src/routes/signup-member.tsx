@@ -12,9 +12,15 @@ import {
 	User,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import { SignupEmailCodeBox } from "@/components/auth/signup-email-code";
 import { HandoffLanguageSwitcher } from "@/components/landing/handoff/HandoffLanguageSwitcher";
 import { LoginAmbience } from "@/components/landing/LoginDecor";
 import { env } from "@/env";
+import type { SignupEmailProof } from "@/lib/auth/signup-email-code-api";
+import {
+	isPlausibleSignupEmail,
+	useSignupEmailCode,
+} from "@/lib/auth/use-signup-email-code";
 import { getPublicClient } from "@/lib/axios-v1";
 import { LandingLocaleProvider, useLandingLocale } from "@/lib/landing-i18n";
 import {
@@ -49,15 +55,8 @@ type OrgKind = "agency" | "outlet";
 type OrgOption = { id: string; name: string };
 type RoleKey = "roleFinance" | "roleDirector" | "roleOpsHead";
 
-/**
- * Deliberately permissive — one `@`, a dot in the domain, no spaces.
- *
- * It is a TYPO CATCH, not an address validator: the only thing that proves an
- * email real is mail arriving at it, and a strict pattern reliably rejects
- * addresses that genuinely work (plus-tags, long TLDs, apostrophes). The server
- * runs zod's own `.email()` behind this anyway.
- */
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** The email field — "Change email" in the code box puts the caret back here. */
+const EMAIL_INPUT_ID = "member-signup-email";
 
 /**
  * Which titles a person may ASK FOR, per portal.
@@ -121,6 +120,12 @@ function MemberSignupPage() {
 	const [subRole, setSubRole] = useState("");
 	const [formError, setFormError] = useState("");
 	const [done, setDone] = useState<{ orgName: string | null } | null>(null);
+	/*
+	 * NO CODE, NO ACCOUNT (owner, 30 Sep 2026): the email typed here is the
+	 * login, and it is proved with a 6-digit code sent to it before anything is
+	 * created. Typing a different address clears the code.
+	 */
+	const emailCode = useSignupEmailCode(email);
 
 	/*
 	 * Only fetched once a kind is picked — both lists are public, but there is
@@ -138,7 +143,7 @@ function MemberSignupPage() {
 	});
 
 	const submitMutation = useMutation({
-		mutationFn: async () => {
+		mutationFn: async (proof: SignupEmailProof) => {
 			/*
 			 * FormData, not JSON — the photo is a file. `fetch` rather than the
 			 * axios client so the BROWSER sets the multipart boundary; axios
@@ -148,6 +153,9 @@ function MemberSignupPage() {
 			const form = new FormData();
 			form.append("name", name.trim());
 			form.append("email", email.trim());
+			// The proof that `email` is theirs — form fields, like the rest.
+			form.append("emailCodeId", proof.emailCodeId);
+			form.append("emailCode", proof.emailCode);
 			if (phoneNum.trim()) form.append("phoneNum", phoneNum.trim());
 			form.append("password", password);
 			form.append("confirmPassword", confirmPassword);
@@ -179,6 +187,16 @@ function MemberSignupPage() {
 			return body.data;
 		},
 		onSuccess: (data) => setDone({ orgName: data?.requestedOrgName ?? null }),
+		/*
+		 * An accepted code is spent by ANY 409, and a dead or missing one is
+		 * refused outright: the box goes back to "send code" and everything
+		 * else typed stays. A wrong code only clears the digits.
+		 */
+		onError: (error) => {
+			if (error instanceof MemberSignupRefusal) {
+				emailCode.afterRefusal(error.message, error.status);
+			}
+		},
 	});
 
 	function onPhotoPicked(file: File | null) {
@@ -213,8 +231,23 @@ function MemberSignupPage() {
 			setFormError(t.signup.validation.emailRequired);
 			return;
 		}
-		if (!EMAIL_RE.test(email.trim())) {
+		/*
+		 * Deliberately permissive — a TYPO CATCH, not an address validator: the
+		 * only thing that proves an email real is mail arriving at it, which is
+		 * now exactly what the code below does.
+		 */
+		if (!isPlausibleSignupEmail(email)) {
 			setFormError(t.signup.validation.emailInvalid);
+			return;
+		}
+		// In page order: the code box sits right under the email.
+		const proof = emailCode.proof;
+		if (!proof) {
+			setFormError(
+				emailCode.sentTo
+					? t.signup.emailCode.codeIncomplete
+					: t.signup.emailCode.sendFirst,
+			);
 			return;
 		}
 		if (password.length < 6) {
@@ -237,7 +270,7 @@ function MemberSignupPage() {
 			setFormError(copy.chooseOrg);
 			return;
 		}
-		submitMutation.mutate();
+		submitMutation.mutate(proof);
 	}
 
 	if (done) {
@@ -343,12 +376,25 @@ function MemberSignupPage() {
 							autoComplete="name"
 						/>
 						<TextField
+							id={EMAIL_INPUT_ID}
 							label={copy.email}
 							value={email}
 							onChange={setEmail}
 							required
 							type="email"
 							autoComplete="email"
+						/>
+						<SignupEmailCodeBox
+							id="member-signup-email-code"
+							email={email}
+							state={emailCode}
+							copy={t.signup}
+							disabled={submitMutation.isPending}
+							onSend={() => void emailCode.send()}
+							onChangeEmail={() => {
+								emailCode.changeEmail();
+								document.getElementById(EMAIL_INPUT_ID)?.focus();
+							}}
 						/>
 						<TextField
 							label={copy.phone}
@@ -521,6 +567,7 @@ const INPUT_CLASS =
 	"login-input-group flex h-11 w-full items-center rounded-md border border-royal-gold/20 bg-background/40 px-3 text-base leading-normal text-foreground";
 
 function TextField({
+	id,
 	label,
 	hint,
 	value,
@@ -529,6 +576,7 @@ function TextField({
 	required,
 	autoComplete,
 }: {
+	id?: string;
 	label: string;
 	hint?: string;
 	value: string;
@@ -543,6 +591,7 @@ function TextField({
 				{label}
 			</FieldLabel>
 			<input
+				id={id}
 				type={type}
 				required={required}
 				value={value}

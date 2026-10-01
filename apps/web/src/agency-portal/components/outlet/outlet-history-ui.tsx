@@ -1,4 +1,4 @@
-import { formatRM } from "@agency-portal/components/iz/ui";
+import { formatRM, IzPill } from "@agency-portal/components/iz/ui";
 import { ShiftMetricIconLabel } from "@agency-portal/components/outlet/outlet-history-metrics";
 import { ShiftHistoryMoneyBreakdownView } from "@agency-portal/components/outlet/ShiftHistoryMoneyBreakdownView";
 import {
@@ -6,6 +6,7 @@ import {
 	findAgencyManagedPr,
 	resolveAgencyPrPhoto,
 } from "@agency-portal/lib/agency-demo";
+import { specialEventPillLabel } from "@agency-portal/lib/outlet-demo";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { shiftHistorySubline } from "@agency-portal/lib/shift-history";
 import {
@@ -253,7 +254,21 @@ export function OutletShiftLogShiftCard({ row }: { row: ShiftHistoryRow }) {
 		<article className="iz-outlet-shift-log-card">
 			<div className="iz-outlet-shift-log-card__head">
 				<div>
-					<p className="iz-outlet-shift-log-card__date">{row.dateDisplay}</p>
+					<div className="flex flex-wrap items-center gap-1.5">
+						<p className="iz-outlet-shift-log-card__date">{row.dateDisplay}</p>
+						{/* A special night names its type — "VIP night", the "Other"
+						    name, or plain "Special" — in the same gold pill the
+						    Calendar and Today wear. A normal night wears none. */}
+						{row.eventKind === "special" && (
+							<IzPill variant="gold" className="shrink-0 !py-0.5">
+								{specialEventPillLabel(
+									row.specialEventType,
+									t,
+									row.customSpecialEventName,
+								)}
+							</IzPill>
+						)}
+					</div>
 					<p className="iz-outlet-shift-log-card__sub">
 						{shiftHistorySubline(row, "outlet")}
 					</p>
@@ -407,6 +422,16 @@ export function OutletShiftLogSummaryCard({
 	);
 }
 
+/**
+ * What the agency History's card states for one PR (history-take-home.ts).
+ * `takeHomeRm` is null while the take-home's other parts are loading or
+ * failed — the card then states the wage, labelled as one.
+ */
+export type PrHistoryCardMoney = {
+	takeHomeRm: number | null;
+	wagesRm: number;
+};
+
 export function OutletPrHistoryCard({
 	rollup,
 	rank,
@@ -415,6 +440,7 @@ export function OutletPrHistoryCard({
 	onTap,
 	portal = "outlet",
 	agencyPRs,
+	money,
 }: {
 	rollup: ShiftHistoryPrRollup;
 	rank: number;
@@ -423,8 +449,22 @@ export function OutletPrHistoryCard({
 	onTap?: () => void;
 	portal?: "agency" | "outlet";
 	agencyPRs?: AgencyManagedPR[];
+	/**
+	 * Agency History only: the PR's take-home with the wage part beside it — the
+	 * header's own sum, cut per PR. Omitted, the card shows `rollup.totalPayout`
+	 * under the plain payout label, as the outlet History does.
+	 */
+	money?: PrHistoryCardMoney;
 }) {
 	const { t } = usePortalLocale();
+	const payoutFigure = money
+		? (money.takeHomeRm ?? money.wagesRm)
+		: rollup.totalPayout;
+	const payoutText = money
+		? money.takeHomeRm !== null
+			? t.history.metricTakeHome
+			: t.history.metricWages
+		: undefined;
 	const venueKind = portal === "agency" ? "outlet" : "agency";
 	const subtitle =
 		rollup.venues.length === 1
@@ -437,8 +477,7 @@ export function OutletPrHistoryCard({
 						{ n: rollup.venues.length },
 					)
 				: "—";
-	const pct =
-		topPayout > 0 ? Math.round((rollup.totalPayout / topPayout) * 100) : 0;
+	const pct = topPayout > 0 ? Math.round((payoutFigure / topPayout) * 100) : 0;
 	const pctLabel = fill(t.reports.pctOfTopEarner, {
 		pct: rank === 1 ? 100 : pct,
 	});
@@ -515,11 +554,23 @@ export function OutletPrHistoryCard({
 				</div>
 				<div className="iz-outlet-hist-metric iz-outlet-hist-metric--payout">
 					<span className="iz-outlet-hist-metric__label">
-						<ShiftMetricIconLabel kind="payout" total size="lg" />
+						<ShiftMetricIconLabel
+							kind="payout"
+							total
+							size="lg"
+							text={payoutText}
+						/>
 					</span>
 					<span className="iz-outlet-hist-metric__value">
-						{formatRM(rollup.totalPayout)}
+						{formatRM(payoutFigure)}
 					</span>
+					{money && money.takeHomeRm !== null && (
+						<span className="iz-tiny iz-muted2 mt-0.5 block">
+							{fill(t.history.wagesBeside, {
+								amount: formatRM(money.wagesRm),
+							})}
+						</span>
+					)}
 				</div>
 			</div>
 
