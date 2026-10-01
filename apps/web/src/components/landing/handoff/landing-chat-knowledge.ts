@@ -2072,14 +2072,35 @@ export type ChatReply =
 	| { kind: "intro"; role: ChatRole }
 	| { kind: "topic"; id: string }
 	| { kind: "small"; id: SmallTalkId }
-	| { kind: "fallback"; question: string };
+	| { kind: "fallback"; question: string }
+	/* Gemini's answer, written from `factSheet()` — only these verified facts,
+	 * never its own knowledge — in the same shape as a written answer, so it
+	 * renders with the same page headings and numbered steps. */
+	| {
+			kind: "ai";
+			question: string;
+			/** Typed by the visitor (not a chip), so it goes into the WhatsApp text. */
+			typed: boolean;
+			/** The language it was written in; after a switch the backup shows. */
+			locale: LandingLocale;
+			answer: ChatAnswer;
+			/** One follow-up the visitor can tap ("How do I sign my voucher?"). */
+			more?: string;
+			/** The written answer for the same question, for a language switch. */
+			backup: WrittenReply;
+	  };
+
+/** A reply this file can write by itself — everything but the AI's. */
+export type WrittenReply = Exclude<ChatReply, { kind: "ai" }>;
 
 export type ChatChip =
 	| { kind: "role"; role: ChatRole }
-	| { kind: "topic"; id: string };
+	| { kind: "topic"; id: string }
+	/** The AI's "tell me more" — tapping it asks this question. */
+	| { kind: "ask"; text: string };
 
 export interface Understanding {
-	reply: ChatReply;
+	reply: WrittenReply;
 	/** The role the conversation is about after this message. */
 	role: ChatRole | null;
 	next: ChatChip[];
@@ -2092,7 +2113,7 @@ export const ROLE_CHIPS: ChatChip[] = [
 	{ kind: "role", role: "general" },
 ];
 
-const MAX_CHIPS = 4;
+export const MAX_CHIPS = 4;
 
 /**
  * What to offer next: close matches first, then this role's topics, then
@@ -2294,4 +2315,102 @@ export function understand(
 		role,
 		next: nextChips(role, asked),
 	};
+}
+
+/* ------------------------------------------------------------ AI fact sheet -- */
+
+const FOR_WHOM: Record<LandingLocale, Record<ChatRole | "any", string>> = {
+	en: {
+		pr: "for PRs",
+		agency: "for PR agencies",
+		outlet: "for outlets",
+		general: "for everyone",
+		any: "for everyone",
+	},
+	zh: {
+		pr: "适用于 PR",
+		agency: "适用于 PR 经纪公司",
+		outlet: "适用于场所 (Outlet)",
+		general: "适用于所有人",
+		any: "适用于所有人",
+	},
+};
+
+/* The model is told to answer "I run an agency" with the matching Overview. */
+const OVERVIEW: Record<LandingLocale, string> = {
+	en: "Overview",
+	zh: "总览 Overview",
+};
+
+function answerLines(
+	answer: ChatAnswer,
+	role: ChatRole | "any",
+	locale: LandingLocale,
+): string[] {
+	const lines = [answer.text];
+	answer.steps?.forEach((s, i) => {
+		const mark = answer.ordered === false ? "-" : `${i + 1})`;
+		lines.push(`${mark} ${placeHeading(s.where, role, locale)}: ${s.what}`);
+	});
+	if (answer.note) lines.push(answer.note);
+	return lines;
+}
+
+/**
+ * Every verified answer, as plain text, for the AI model to answer from when the
+ * keywords cannot match a question. It is built from the same topics the keyword
+ * bot shows, so the two can never disagree, and nothing outside this file reaches
+ * the model. The visitor's own side comes first, so the closest facts lead.
+ */
+export function factSheet(
+	locale: LandingLocale,
+	role: ChatRole | null,
+): string {
+	const order = (r: ChatRole | "any") =>
+		r === role ? 0 : r === "any" || r === "general" ? 1 : 2;
+	const sections: string[] = [];
+	for (const r of ["pr", "agency", "outlet", "general"] as ChatRole[]) {
+		sections.push(
+			`## ${OVERVIEW[locale]} (${FOR_WHOM[locale][r]})\n${answerLines(CHAT_INTROS[locale][r], r, locale).join("\n")}`,
+		);
+	}
+	const topics = [...CHAT_TOPICS].sort((a, b) => order(a.role) - order(b.role));
+	for (const t of topics) {
+		const local = t[locale];
+		sections.push(
+			`## ${local.chip} (${FOR_WHOM[locale][t.role]})\n${answerLines(local.answer, t.role, locale).join("\n")}`,
+		);
+	}
+	return sections.join("\n\n");
+}
+
+/** The roles a visitor can be in, plus "none" before they have said. */
+export const FACT_SHEET_ROLES = [
+	"pr",
+	"agency",
+	"outlet",
+	"general",
+	"none",
+] as const;
+
+/**
+ * Every fact sheet the AI can be given, per language and role. The BACKEND
+ * builds its prompt from a generated copy of this (`pnpm chat:facts` →
+ * apps/backend/src/features/landing-chat/landing-chat-facts.generated.ts), so a
+ * caller can no longer send the model its own "facts". ⚠️ After editing any
+ * answer in this file, run `pnpm chat:facts` — `pnpm chat:facts:check` and
+ * landing-chat-facts.test.ts fail while the copy is stale.
+ */
+export function allFactSheets(): Record<
+	LandingLocale,
+	Record<(typeof FACT_SHEET_ROLES)[number], string>
+> {
+	const sheets = (locale: LandingLocale) =>
+		Object.fromEntries(
+			FACT_SHEET_ROLES.map((r) => [
+				r,
+				factSheet(locale, r === "none" ? null : r),
+			]),
+		) as Record<(typeof FACT_SHEET_ROLES)[number], string>;
+	return { en: sheets("en"), zh: sheets("zh") };
 }

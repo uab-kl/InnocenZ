@@ -45,6 +45,10 @@ export interface LandingTranslations {
 		otherMsg: string;
 		/** Appended to the WhatsApp message when the bot could not answer. */
 		questionMsg: string;
+		/** Under an AI-written answer: say so, briefly. */
+		aiNote: string;
+		/** Above the input: answers come from Google's Gemini; no personal details. */
+		aiDisclosure: string;
 		panelLabel: string;
 	};
 	hero: {
@@ -437,6 +441,9 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			outletMsg: "Hi InnocenZ, I run an outlet and I'd like to book a demo.",
 			otherMsg: "Hi InnocenZ, I have a question.",
 			questionMsg: "My question:",
+			aiNote: "AI answer from InnocenZ's own guide.",
+			aiDisclosure:
+				"Answers are written by Google Gemini AI. Please don't share personal details.",
 			panelLabel: "Chat with InnocenZ",
 		},
 		hero: {
@@ -802,6 +809,8 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			outletMsg: "你好 InnocenZ，我经营门店，想预约演示。",
 			otherMsg: "你好 InnocenZ，我有一个问题。",
 			questionMsg: "我的问题：",
+			aiNote: "AI 根据 InnocenZ 官方说明生成的回答。",
+			aiDisclosure: "回答由 Google Gemini AI 生成，请勿分享个人资料。",
 			panelLabel: "与 InnocenZ 聊天",
 		},
 		hero: {
