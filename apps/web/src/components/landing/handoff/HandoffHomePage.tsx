@@ -9,6 +9,7 @@ import {
 import { LandingLocaleProvider } from "@/lib/landing-i18n";
 import { HandoffHero } from "./HandoffHero";
 import { HandoffNav } from "./HandoffNav";
+import { LandingChatButton } from "./LandingChatButton";
 import { LandingBackground } from "./primitives";
 
 const HandoffChallenges = lazy(() =>
@@ -118,6 +119,9 @@ export function HandoffHomePage() {
 						<HandoffFooter />
 					</LazyMount>
 				</div>
+				{/* Bottom-left chat — WhatsApp's twin. Inside .landing-page for the
+				    --hz-* tokens and the Sign in gold; see LandingChatButton. */}
+				<LandingChatButton />
 			</div>
 		</LandingLocaleProvider>
 	);
