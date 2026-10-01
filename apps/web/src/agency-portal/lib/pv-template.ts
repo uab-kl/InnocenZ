@@ -33,6 +33,7 @@ import {
 	type PrSubRole,
 	resolvePrAccountFields,
 } from "@agency-portal/lib/pr-demo";
+import { rosterPrForVoucher } from "@agency-portal/lib/pv-roster-pr";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 
 /** Issuer block — matches PV Template.xlsx (Atmosphere Event Planner) */
@@ -267,12 +268,12 @@ export function buildAgencyPayee(
 	} | null,
 ): PvPayeeProfile {
 	const isRealSession = getPortalSessionKind() === "real";
-	const managed = agencyPRs.find(
-		(p) =>
-			p.name === pv.prName ||
-			p.id === pv.prName ||
-			(pv.prIc && p.ic === pv.prIc),
-	);
+	// The voucher's own FK first (`rosterPrForVoucher`): matching on the copied
+	// IC missed every voucher written before a profile correction, and the payee
+	// then printed the voucher's stale IC — and a payee code built from it.
+	const managed =
+		rosterPrForVoucher(pv, agencyPRs) ??
+		agencyPRs.find((p) => p.name === pv.prName || p.id === pv.prName);
 	// Not consulted at all on a real session — see the note above.
 	const demo = isRealSession ? undefined : findDemoProfileForPv(pv);
 	// The fixture used to supply the working name and the phone as well as the

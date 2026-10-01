@@ -12,9 +12,19 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 export function ShiftHistoryExpandableMoneyBlock({
 	breakdown,
 	className,
+	payoutLabel,
+	payoutNote,
 }: {
 	breakdown: ShiftHistoryMoneyBreakdown;
 	className?: string;
+	/**
+	 * Already-translated words for the payout tile when "Total payout" would
+	 * misname the figure — the agency History's "Take-home", or "Wages" while
+	 * the take-home cannot be stated yet.
+	 */
+	payoutLabel?: string;
+	/** A line under the payout figure — the wage part beside a take-home. */
+	payoutNote?: string;
 }) {
 	const { t } = usePortalLocale();
 	const [openKind, setOpenKind] = useState<HistoryMoneyKind | null>(null);
@@ -54,11 +64,14 @@ export function ShiftHistoryExpandableMoneyBlock({
 					aria-expanded={openKind === "payout"}
 				>
 					<span className="iz-outlet-shift-log-summary__metric-label">
-						{t.history.metricTotalPayout}
+						{payoutLabel ?? t.history.metricTotalPayout}
 					</span>
 					<span className="iz-outlet-shift-log-summary__metric-value">
 						{formatRM(breakdown.totalPayout)}
 					</span>
+					{payoutNote ? (
+						<span className="iz-tiny iz-muted2 mt-0.5 block">{payoutNote}</span>
+					) : null}
 				</button>
 			</div>
 			{openKind ? (

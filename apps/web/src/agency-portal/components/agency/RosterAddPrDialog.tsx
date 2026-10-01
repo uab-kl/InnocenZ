@@ -41,7 +41,10 @@ export function RosterAddPrDialog({ open, onClose }: RosterAddPrDialogProps) {
 		onClose();
 	};
 
-	const isValid = name.trim() !== "";
+	// The mobile number is required (owner default, 29 Sep 2026): a new PR is a
+	// stub account, and the only way a stub is ever claimed is the PR's own
+	// sign-up proving this number — without it the invite reaches nobody.
+	const isValid = name.trim() !== "" && phone.trim() !== "";
 
 	const handleSubmit = (e: FormEvent) => {
 		e.preventDefault();
@@ -114,14 +117,19 @@ export function RosterAddPrDialog({ open, onClose }: RosterAddPrDialogProps) {
 
 				<div className="mt-4 grid grid-cols-2 gap-3">
 					<div>
-						<span className="iz-field-label">{t.agencyRoster.phone}</span>
+						<span className="iz-field-label">{t.agencyRoster.phone} *</span>
 						<input
 							type="tel"
 							className="iz-select iz-select-block"
 							value={phone}
 							onChange={(e) => setPhone(e.target.value)}
 							aria-label={t.agencyRoster.phone}
+							aria-required="true"
+							aria-describedby="roster-add-pr-phone-hint"
 						/>
+						<p id="roster-add-pr-phone-hint" className="iz-tiny iz-muted2 mt-1">
+							{t.agencyRoster.phoneRequiredHint}
+						</p>
 					</div>
 					<div>
 						<span className="iz-field-label">{t.managePr.email}</span>

@@ -183,6 +183,22 @@ export function isPayrollCommissionReceiptScan(scan: PrReceiptScan): boolean {
 	return Boolean(scan.pvId && scan.pvLineDesc);
 }
 
+/**
+ * One PR's floor sales on one shift AS THE SERVER RECORDED THEM (`shift_sale`,
+ * mirrored from the PR's approved receipts).
+ *
+ * A real session has no receipt scans or roster counters on the client — the
+ * demo store is blanked at login — so without this every live-sales figure on
+ * a real venue's Today read RM 0 while the server held the actual night. When
+ * supplied it WINS over scans and counters; demo callers never pass it.
+ */
+export type RecordedFloorSales = {
+	salesRm: number;
+	drinkSalesRm: number;
+	drinkUnits: number;
+	tipRm: number;
+};
+
 export type OutletShiftLiveSalesContext = {
 	outletName: string;
 	drinkMenu?: OutletDrinkPrice[];
@@ -190,6 +206,8 @@ export type OutletShiftLiveSalesContext = {
 	receiptScans?: PrReceiptScan[];
 	/** Included in total when matching the tonight summary grand total. */
 	specialServiceRm?: number;
+	/** Server-recorded sales per PR — see {@link RecordedFloorSales}. */
+	recordedByPrId?: Map<string, RecordedFloorSales>;
 	now?: Date;
 };
 
@@ -197,7 +215,11 @@ export function outletShiftLiveSalesTotal(
 	shift: ShiftRequest,
 	ctx: OutletShiftLiveSalesContext,
 ): number {
+	const recorded = (shift.prs ?? []).some((prId) =>
+		ctx.recordedByPrId?.has(prId),
+	);
 	if (
+		!recorded &&
 		!outletShiftFloorSalesStarted(shift, ctx.now, {
 			outletName: ctx.outletName,
 			rosterSlots: ctx.rosterSlots,
@@ -214,6 +236,7 @@ export function outletShiftLiveSalesTotal(
 		rosterSlots: ctx.rosterSlots,
 		prIds: shift.prs ?? [],
 		receiptScans: ctx.receiptScans,
+		recordedByPrId: ctx.recordedByPrId,
 	});
 	return roundRm(floor.totalSalesRm + (ctx.specialServiceRm ?? 0));
 }
@@ -247,6 +270,8 @@ export function outletPrLiveFloorSales(opts: {
 	 */
 	happyHourStart?: string;
 	happyHourEnd?: string;
+	/** This PR's server-recorded sales — wins over scans and counters. */
+	recorded?: RecordedFloorSales;
 }): OutletPrLiveSales {
 	const empty = {
 		salesRm: 0,
@@ -255,6 +280,18 @@ export function outletPrLiveFloorSales(opts: {
 		tipRm: 0,
 		hhDrinkSalesRm: null,
 	};
+	if (opts.recorded) {
+		// No per-receipt timestamps travel with the recorded row, so the
+		// happy-hour split cannot be measured — null sends the caller to its
+		// estimate, exactly as roster counters do below.
+		return {
+			salesRm: roundRm(opts.recorded.salesRm),
+			drinkSalesRm: roundRm(opts.recorded.drinkSalesRm),
+			drinkUnits: opts.recorded.drinkUnits,
+			tipRm: roundRm(opts.recorded.tipRm),
+			hhDrinkSalesRm: null,
+		};
+	}
 	if (
 		!outletShiftFloorSalesStarted(opts.shift, opts.now, {
 			outletName: opts.outletName,
@@ -557,6 +594,8 @@ export function outletTonightFloorTotals(opts: {
 	rosterSlots: AgencyRosterSlot[];
 	prIds: string[];
 	receiptScans?: PrReceiptScan[];
+	/** Server-recorded sales per PR — see {@link RecordedFloorSales}. */
+	recordedByPrId?: Map<string, RecordedFloorSales>;
 }): OutletTonightFloorTotals {
 	const rosterByPr = new Map(opts.rosterSlots.map((s) => [s.prId, s]));
 	let totalSalesRm = 0;
@@ -571,6 +610,7 @@ export function outletTonightFloorTotals(opts: {
 			slot: rosterByPr.get(prId),
 			drinkMenu: opts.drinkMenu,
 			receiptScans: opts.receiptScans,
+			recorded: opts.recordedByPrId?.get(prId),
 		});
 		totalSalesRm += sales.salesRm;
 		totalDrinksRm += sales.drinkSalesRm;
@@ -619,6 +659,8 @@ export function outletPrLiveEarningsBreakdown(opts: {
 	happyHourStart: string;
 	happyHourEnd: string;
 	receiptScans?: PrReceiptScan[];
+	/** This PR's server-recorded sales — see {@link RecordedFloorSales}. */
+	recorded?: RecordedFloorSales;
 }): OutletPrLiveEarningsBreakdown {
 	const tier = resolveOutletPrTier(opts.trainingLevel);
 	const tierRate = opts.tierRates[tier] ?? opts.tierRates[OUTLET_BASE_TIER];
@@ -646,6 +688,7 @@ export function outletPrLiveEarningsBreakdown(opts: {
 		// receipt's own timestamp rather than apportioned by shift hours.
 		happyHourStart: opts.happyHourStart,
 		happyHourEnd: opts.happyHourEnd,
+		recorded: opts.recorded,
 	});
 
 	const shiftHours = shiftHoursFromLabel(opts.shift.shift);
@@ -726,6 +769,8 @@ export function outletTonightLiveEarningsRows(opts: {
 	happyHourStart: string;
 	happyHourEnd: string;
 	receiptScans?: PrReceiptScan[];
+	/** Server-recorded sales per PR — see {@link RecordedFloorSales}. */
+	recordedByPrId?: Map<string, RecordedFloorSales>;
 }): OutletPrLiveEarningsBreakdown[] {
 	const rosterByPr = new Map(opts.rosterSlots.map((s) => [s.prId, s]));
 	return opts.prIds.flatMap((prId) => {
@@ -746,6 +791,7 @@ export function outletTonightLiveEarningsRows(opts: {
 				happyHourStart: opts.happyHourStart,
 				happyHourEnd: opts.happyHourEnd,
 				receiptScans: opts.receiptScans,
+				recorded: opts.recordedByPrId?.get(prId),
 			}),
 		];
 	});

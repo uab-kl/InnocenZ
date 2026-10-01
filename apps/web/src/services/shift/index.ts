@@ -38,6 +38,29 @@ export interface Shift {
 	templateId?: string | null;
 	/** That template's cover picture (R2 key), joined server-side. */
 	templateCoverImage?: string | null;
+	/**
+	 * That template's special sub-type ('vip', 'launch', … 'other') and its
+	 * custom name, joined server-side. The FALLBACK since 0167: a shift posted
+	 * before then kept no type of its own, and one posted from a card carried
+	 * the card's type locked. Null on blank posts and normal cards.
+	 */
+	templateSpecialEventType?: string | null;
+	templateCustomEventName?: string | null;
+	/**
+	 * The shift's OWN special sub-type and "Other" name (0167), stored on the
+	 * shift so a blank post keeps them. Always null on a normal shift, and on
+	 * shifts posted before 0167 — readers then fall back to the template pair
+	 * (`specialEventFieldsFromShift`). Absent on an older backend.
+	 */
+	specialEventType?: string | null;
+	customSpecialEventName?: string | null;
+	/**
+	 * The special event's OWN price list (`shift_drink_menu`, 0167), on both
+	 * list and getById. EMPTY means the night is priced from the venue's
+	 * Workspace list — every normal shift, and a special one that kept the
+	 * everyday prices. Absent on an older backend.
+	 */
+	eventDrinkMenu?: ShiftEventDrinkMenuItem[];
 	languages: string | null;
 	/** What the venue asked people to wear (0132); null when it gave no answer. */
 	dressCode?: string | null;
@@ -67,6 +90,12 @@ export interface Shift {
 	 * carry none.
 	 */
 	requestedPrs?: { userId: string; agencyId: string }[];
+	/**
+	 * Which agencies the venue sent this shift to (0124). Served to the venue
+	 * and admin only — an agency caller never receives it, since who else a
+	 * venue asked is not its business. Absent on an older backend.
+	 */
+	agencyIds?: string[];
 }
 
 /**
@@ -87,6 +116,30 @@ export interface ShiftPayTierDemand {
 	drinkPct?: string | number | null;
 	tipPct?: string | number | null;
 	targetSalesRm?: string | number | null;
+}
+
+/** One stored line of a special event's own price list (0167). */
+export interface ShiftEventDrinkMenuItem {
+	id: string;
+	shiftId: string;
+	/** The composer's item id — a Workspace row's own slug when it was copied. */
+	slug: string;
+	name: string;
+	/** numeric(12,2), serialized as a string by the backend. */
+	priceRm: string;
+	/** 'drink' | 'service' | 'tip' — the Workspace list's own vocabulary. */
+	category: string;
+	sortOrder: number;
+}
+
+/** One line of the event price list as Post Job sends it (0167). */
+export interface ShiftEventDrinkMenuInput {
+	slug: string;
+	name: string;
+	priceRm: number;
+	/** Verbatim, 'tip' included — see `saveInputFromWorkspaceSettings`. */
+	category: "drink" | "service" | "tip";
+	sortOrder: number;
 }
 
 export interface ShiftsQueryParams {
@@ -154,6 +207,19 @@ export interface CreateShiftInput {
 	eventKind?: ShiftEventKind;
 	/** The event template this shift was posted from (0128). */
 	templateId?: string;
+	/**
+	 * The special sub-type ('vip' … 'other') and the "Other" name, max 120
+	 * (0167). The server stores them only on a special shift, and the name only
+	 * for 'other'.
+	 */
+	specialEventType?: string;
+	customSpecialEventName?: string;
+	/**
+	 * The special event's own price list (0167), max 100 lines. Omit to keep
+	 * what is stored; an empty array clears it on update — the `payTiers`
+	 * contract. Ignored (and cleared) on a shift that is not special.
+	 */
+	eventDrinkMenu?: ShiftEventDrinkMenuInput[];
 	languages?: string;
 	/** Max 60 — the column's own width, and the template's (0132). */
 	dressCode?: string;
@@ -209,17 +275,33 @@ export async function fetchShift(
 	return response.data.data;
 }
 
-export async function createShift(
-	input: CreateShiftInput,
+/**
+ * `POST /shift/batch` — several shifts in ONE request, all or nothing (Post
+ * Job's composer, the web's only way to post a shift).
+ *
+ * Each item is exactly the body `POST /shift` takes. The server checks every
+ * one as a single post would — counting the earlier items as already posted, so
+ * two items that clash, or that together pass the plan's daily cap, are refused
+ * — and then writes all of them in one transaction, or none. A refusal rejects
+ * with the server's own sentence and names the item it stopped on
+ * (`response.data.data = { index, shiftDate }`, read by `refusedBatchItem`);
+ * NOTHING was posted then. Resolves with the server's confirmation sentence —
+ * "Posted 3 shifts", which the screen shows translated — and the new shifts.
+ */
+export async function createShiftsBatch(
+	items: CreateShiftInput[],
 	onRefreshFail: () => void,
-): Promise<Shift> {
+): Promise<{ message: string; shifts: Shift[] }> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<{
 		success: boolean;
 		message: string;
-		data: Shift;
-	}>("/shift", input);
-	return response.data.data;
+		data: Shift[];
+	}>("/shift/batch", { items });
+	return {
+		message: response.data.message ?? "",
+		shifts: response.data.data ?? [],
+	};
 }
 
 export async function updateShift(
@@ -234,6 +316,25 @@ export async function updateShift(
 		data: Shift;
 	}>(`/shift/${id}`, input);
 	return response.data.data;
+}
+
+/**
+ * `PUT /shift/:id` for a status change, answering with the SERVER's sentence —
+ * the confirm-every-action rule wants that shown, not a silent repaint. Sealing
+ * a night answers "Shift sealed — no one else can be added to it".
+ */
+export async function updateShiftStatus(
+	id: string,
+	status: "confirmed" | "sealed",
+	onRefreshFail: () => void,
+): Promise<string> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<{
+		success: boolean;
+		message: string;
+		data: Shift;
+	}>(`/shift/${id}`, { status });
+	return response.data.message ?? "";
 }
 
 export async function removeShift(

@@ -426,7 +426,7 @@ describe("a refresh that cannot be decided signs NOBODY out", () => {
 
 describe("a 401 that judges the BODY is not the session's", () => {
 	it.each([
-		["/auth/login", "Wrong password"],
+		["/auth/login", "Wrong email or password"],
 		["/user/u1/delete", "Incorrect password"],
 	])(
 		"%s — reaches the caller untouched: no refresh, no sign-out",

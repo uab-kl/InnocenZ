@@ -25,6 +25,10 @@ import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { NavAlertBadge } from "@agency-portal/components/portal/NavAlertBadge";
 import { PrSignaturePad } from "@agency-portal/components/pr/PrSignaturePad";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
+import {
+	agencyLivePlanLabel,
+	useAgencyLivePlan,
+} from "@agency-portal/hooks/use-agency-live-plan";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
 import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-review";
 import {
@@ -36,6 +40,7 @@ import {
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { useMySignature } from "@agency-portal/hooks/use-my-signature";
 import { usePvIssuer } from "@agency-portal/hooks/use-pv-issuer";
+import { useVoucherRoster } from "@agency-portal/hooks/use-voucher-roster";
 import {
 	agencySubscriptionBillingForWeeklyPv,
 	ownedByAgency,
@@ -85,6 +90,7 @@ import {
 	pvWorkflowStepIndex,
 	summarizePv,
 } from "@agency-portal/lib/pv-breakdown";
+import { pvMatchesSearch } from "@agency-portal/lib/pv-list-filters";
 import {
 	canEditDisputedLines,
 	canResendToPr,
@@ -92,6 +98,7 @@ import {
 	canSendToPr,
 } from "@agency-portal/lib/pv-money-actions";
 import { downloadPvBreakdownCsv } from "@agency-portal/lib/pv-pdf";
+import { voucherPayeeIc } from "@agency-portal/lib/pv-roster-pr";
 import {
 	buildAgencyPayee,
 	formatPvSignStamp,
@@ -107,6 +114,7 @@ import {
 	Filter,
 	Pencil,
 	Receipt,
+	Search,
 	Send,
 	Sheet,
 	Shield,
@@ -117,6 +125,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { createVoucherExportTicket } from "@/services/payment-voucher";
 export const Route = createFileRoute("/agency/pv")({
@@ -365,6 +374,9 @@ function AgencyPV() {
 		() => ownedByAgency(allAgencyPRs, activeAgencyId),
 		[allAgencyPRs, activeAgencyId],
 	);
+	// Who each VOUCHER is for — its name, IC and filter label — comes from the
+	// server's roster; the store's is empty on a real session (see the hook).
+	const voucherRoster = useVoucherRoster();
 	// Vouchers come from the backend (already agency-scoped server-side); the
 	// Receipts sub-tab stays on the demo store — no backend for receipt scans.
 	const {
@@ -390,6 +402,11 @@ function AgencyPV() {
 	   spelling. */
 	const [prFilter, setPrFilter] = useState<string>("");
 	const [statusFilter, setStatusFilter] = useState<PvStatusFilter>("all");
+	/* Free text — a PV number, a name, an IC or a venue. See `pvMatchesSearch`. */
+	const [search, setSearch] = useState("");
+	// The plan the agency is actually billed on, for the header. A demo session
+	// has no plan row and keeps the demo line.
+	const livePlan = useAgencyLivePlan();
 	// Count only — the panel below runs the same query and React Query dedupes it.
 	const { receipts: backendReceipts } = useAgencyReceipts();
 
@@ -878,7 +895,7 @@ function AgencyPV() {
 	const activeWeekStats = useMemo(() => {
 		const signed = weekTabPvs.filter((p) => p.status === "SIGNED");
 		const prCount = new Set(
-			weekTabPvs.map((p) => resolvePvPrName(p, agencyPRs)),
+			weekTabPvs.map((p) => resolvePvPrName(p, voucherRoster)),
 		).size;
 		return {
 			prCount,
@@ -887,7 +904,7 @@ function AgencyPV() {
 				Math.round(signed.reduce((sum, p) => sum + getPvNetTotal(p), 0) * 100) /
 				100,
 		};
-	}, [weekTabPvs, agencyPRs]);
+	}, [weekTabPvs, voucherRoster]);
 
 	const activeWeekBilling = useMemo(
 		() => agencySubscriptionBillingForWeeklyPv(activeWeekStats.pvCount, t),
@@ -940,10 +957,10 @@ function AgencyPV() {
 	const prOptions = useMemo(() => {
 		const byId = new Map<string, string>();
 		for (const p of weekTabPvs) {
-			if (p.prId) byId.set(p.prId, resolvePvPrLabel(p, agencyPRs));
+			if (p.prId) byId.set(p.prId, resolvePvPrLabel(p, voucherRoster));
 		}
 		return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-	}, [weekTabPvs, agencyPRs]);
+	}, [weekTabPvs, voucherRoster]);
 
 	// A PR who has no voucher on the week just switched to cannot stay selected,
 	// or the list empties and reads as a week with no work in it.
@@ -952,9 +969,16 @@ function AgencyPV() {
 	}, [prFilter, prOptions]);
 
 	const statusFilteredPvs = useMemo(() => {
-		const rows = prFilter
-			? weekTabPvs.filter((p) => p.prId === prFilter)
-			: weekTabPvs;
+		const rows = (
+			prFilter ? weekTabPvs.filter((p) => p.prId === prFilter) : weekTabPvs
+		).filter((p) =>
+			// Searched on the IC the card PRINTS (the profile's), not the voucher's copy.
+			pvMatchesSearch(
+				{ ...p, prIc: voucherPayeeIc(p, voucherRoster) },
+				search,
+				resolvePvPrLabel(p, voucherRoster),
+			),
+		);
 		if (statusFilter === "all") return rows;
 		if (statusFilter === "TO_PAY" || statusFilter === "SIGNED") {
 			return rows.filter((p) => p.status === "SIGNED");
@@ -965,7 +989,7 @@ function AgencyPV() {
 			);
 		}
 		return rows.filter((p) => p.status === statusFilter);
-	}, [weekTabPvs, statusFilter, prFilter]);
+	}, [weekTabPvs, statusFilter, prFilter, search, voucherRoster]);
 
 	/**
 	 * What is still owed on the vouchers being LOOKED AT — the header tile's
@@ -1183,11 +1207,13 @@ function AgencyPV() {
 		return counts;
 	}, [weekTabPvs]);
 
-	const hasActiveFilters = statusFilter !== "all" || prFilter !== "";
+	const hasActiveFilters =
+		statusFilter !== "all" || prFilter !== "" || search.trim() !== "";
 
 	const clearFilters = () => {
 		setStatusFilter("all");
 		setPrFilter("");
+		setSearch("");
 	};
 
 	const detail = prPaymentVouchers.find((p) => p.id === detailId);
@@ -1307,12 +1333,25 @@ function AgencyPV() {
 							}`}
 				{" · "}
 				{activeWeekStats.pvCount} {t.agencyHome.pvs} ·{" "}
-				{activeWeekBilling.plan.label} · {activeWeekBilling.priceLabel}
-				{activeWeekBilling.plan.renegotiate && (
-					<span className="text-[var(--iz-amber)]">
-						{" "}
-						· {t.payroll.contactAdminPricing}
-					</span>
+				{/* The plan row on a real session — never the demo table priced by
+				    this tab's count, which the catch-all payment week can push past
+				    the agency's real tier. Nothing while it loads or if the read
+				    failed: a wrong plan for a second is still a wrong plan, and a
+				    failed read is not "no plan". */}
+				{livePlan.backed ? (
+					livePlan.isLoading || livePlan.isError ? null : (
+						agencyLivePlanLabel(livePlan, t)
+					)
+				) : (
+					<>
+						{activeWeekBilling.plan.label} · {activeWeekBilling.priceLabel}
+						{activeWeekBilling.plan.renegotiate && (
+							<span className="text-[var(--iz-amber)]">
+								{" "}
+								· {t.payroll.contactAdminPricing}
+							</span>
+						)}
+					</>
 				)}
 			</p>
 
@@ -1584,6 +1623,22 @@ function AgencyPV() {
 							)}
 						</div>
 
+						{/* Same field the Receipts tab uses, so the two lists search alike. */}
+						<div className="relative mt-2">
+							<Search
+								className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--iz-muted)]"
+								aria-hidden
+							/>
+							<input
+								type="search"
+								className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
+								placeholder={t.agencyPv.searchVouchersPlaceholder}
+								value={search}
+								onChange={(e) => setSearch(e.target.value)}
+								aria-label={t.agencyPv.searchVouchers}
+							/>
+						</div>
+
 						<div className="iz-filter-groups">
 							<div className="iz-filter-group">
 								<p className="iz-filter-group-label">{t.table.pr}</p>
@@ -1791,7 +1846,7 @@ function AgencyPV() {
 							<p className="iz-sm iz-muted">
 								{pvsFailed
 									? t.payroll.couldNotLoadVouchers
-									: payrollWeekTab === "last_last_week"
+									: payrollWeekTab === "last_last_week" && !hasActiveFilters
 										? t.payroll.noSignedVouchersThisWeek
 										: t.payroll.noVouchersMatch}
 							</p>
@@ -1855,7 +1910,7 @@ function AgencyPV() {
 										>
 											<PvCardSummary
 												pv={pv}
-												agencyPRs={agencyPRs}
+												agencyPRs={voucherRoster}
 												latestIssuedMs={latestIssuedMs}
 											/>
 											<div className="shrink-0 text-right">
@@ -2258,7 +2313,7 @@ function PvDetail({
 	const [signError, setSignError] = useState<string | null>(null);
 	const [bankRef, setBankRef] = useState("");
 	const deductId = useId();
-	const agencyPRs = useStore((s) => s.agencyPRs);
+	const voucherRoster = useVoucherRoster();
 	const toast = useStore((s) => s.toast);
 	// The letterhead the printed voucher carries — the signed-in agency, so this
 	// document names the same company the PR's copy of it does. Undefined on a
@@ -2365,7 +2420,7 @@ function PvDetail({
 	// The printed voucher needs the REAL account, not a demo fixture — see the
 	// note on buildAgencyPayee. Blank when the PR has not entered one.
 	const payeeBank = useVoucherPayeeBank(v.id);
-	const payee = buildAgencyPayee(v, agencyPRs, payeeBank.data);
+	const payee = buildAgencyPayee(v, voucherRoster, payeeBank.data);
 	const { logout } = useAuth();
 	const [pdfOpening, setPdfOpening] = useState(false);
 	/**
@@ -2426,7 +2481,13 @@ function PvDetail({
 					<IzPill variant={statusPill(pv.status)}>
 						{agencyPvStatusLabel(pv.status, t)}
 					</IzPill>
-					<span className="iz-pv-detail-id">{pv.id}</span>
+					{/* The printed number — the name every document, PDF and PR
+					    screen uses. The uuid is a database key, one unbreakable
+					    token that tells the reader nothing; it stays the fallback
+					    only for a voucher that was never numbered. */}
+					<span className="iz-pv-detail-id">
+						{pv.voucherNo?.trim() || pv.id}
+					</span>
 				</div>
 				<button type="button" className="iz-chip" onClick={onClose}>
 					{t.common.close}
@@ -2453,7 +2514,10 @@ function PvDetail({
 				*/}
 				<p className="iz-tiny mt-1">
 					{t.agencyPv.signerFirst} ·{" "}
-					{[v.financeHeadRole, pvIssuer.issuer?.name]
+					{[
+						v.financeHeadRole ? portalRoleLabel(v.financeHeadRole, t) : null,
+						pvIssuer.issuer?.name,
+					]
 						.filter((part): part is string => Boolean(part?.trim()))
 						.join(" · ") || FINANCE_HEAD_LABEL}
 					: <b className="text-[var(--iz-txt)]">{v.financeHeadName}</b>

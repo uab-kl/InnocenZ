@@ -1,8 +1,9 @@
 import { redirect } from "@tanstack/react-router";
+import { env } from "@/env";
 import { clearAuthTokens, getAccessToken } from "@/lib/auth/auth-storage";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { readTabScoped } from "@/lib/auth/tab-scoped-storage";
-import { getClient } from "@/lib/axios-v1";
+import { fetchWithSession, isSessionRefusal } from "@/lib/auth/token-refresh";
 import { hardNavigate } from "@/lib/hard-navigate";
 import { deLocalizeHref } from "@/paraglide/runtime";
 
@@ -116,32 +117,55 @@ function demoPortal(): PortalCode | null {
 	return null;
 }
 
-async function signedInPortals(): Promise<{
-	portals: PortalCode[];
-	names: string[];
-}> {
+/**
+ * What `/auth/me` said about this tab's session — three answers, kept apart.
+ *
+ * ⚠️ `unavailable` IS NOT `session-over` (28 Sep 2026 follow-up). This used to
+ * sign the tab out on ANY failure of `/auth/me` — a 429 from the refresh
+ * limiter, a 5xx, being offline for a moment — which is what cleared people's
+ * browser sessions on 28 Sep. Only a session REFUSAL ends it: the refresh was
+ * refused, or the fresh token was refused too (`fetchWithSession` refreshes
+ * and replays once). Anything else could not be decided, and a session that is
+ * not known to be over is not ended.
+ */
+type PortalAnswer =
+	| { kind: "ok"; portals: PortalCode[]; names: string[] }
+	| { kind: "session-over" }
+	| { kind: "unavailable" };
+
+async function readSignedInPortals(): Promise<PortalAnswer> {
 	const demo = demoPortal();
 	if (demo) {
-		return { portals: [demo], names: [demo] };
+		return { kind: "ok", portals: [demo], names: [demo] };
 	}
 
 	const token = getAccessToken() as string;
 	if (portalCache?.token === token) {
-		return { portals: portalCache.portals, names: portalCache.names };
+		return {
+			kind: "ok",
+			portals: portalCache.portals,
+			names: portalCache.names,
+		};
 	}
-	let roles: MeRole[] = [];
-	let portalsFromApi: string[] = [];
+	let response: Response;
 	try {
-		const res = await getClient(kickToLogin).get<{
-			data?: { roles?: MeRole[]; portals?: string[] };
-		}>("/auth/me");
-		roles = res.data?.data?.roles ?? [];
-		portalsFromApi = res.data?.data?.portals ?? [];
+		response = await fetchWithSession(`${env.VITE_API_URL}/v1/auth/me`);
 	} catch {
-		clearPortalCache();
-		clearAuthTokens();
-		throw redirect({ to: "/login" });
+		// Offline, or a refresh that could not be decided (RefreshUnavailableError).
+		return { kind: "unavailable" };
 	}
+	if (isSessionRefusal(response.status, "/auth/me")) {
+		return { kind: "session-over" };
+	}
+	if (!response.ok) return { kind: "unavailable" };
+	let body: { data?: { roles?: MeRole[]; portals?: string[] } } | null;
+	try {
+		body = await response.json();
+	} catch {
+		return { kind: "unavailable" };
+	}
+	const roles = body?.data?.roles ?? [];
+	const portalsFromApi = body?.data?.portals ?? [];
 	const names = roles.map((r) => (r.roleName ?? "").toLowerCase());
 	const fromRolePortal = roles
 		.map((r) => r.portalCode)
@@ -159,8 +183,44 @@ async function signedInPortals(): Promise<{
 	// Admin portal requires the canonical admin role — never via a stray portalCode.
 	const hasAdminRole = names.some((n) => n === "admin");
 	const gated = hasAdminRole ? portals : portals.filter((p) => p !== "admin");
-	portalCache = { token, portals: gated, names };
-	return { portals: gated, names };
+	// Keyed on the token held NOW — a refresh on the way replaced the old one.
+	portalCache = { token: getAccessToken() ?? token, portals: gated, names };
+	return { kind: "ok", portals: gated, names };
+}
+
+/** A session that is over leaves no token, no cached answer and no chosen org. */
+function endSession(): void {
+	clearPortalCache();
+	clearAuthTokens();
+}
+
+/**
+ * For the route gates (`beforeLoad`): the portals, or `null` when `/auth/me`
+ * could not be reached — in which case the gate lets the navigation proceed,
+ * and the layout's `guardPortalClient` holds its splash until it can decide.
+ * Nothing renders on an undecided answer, and nobody is signed out by one.
+ */
+async function portalsForGate(): Promise<{
+	portals: PortalCode[];
+	names: string[];
+} | null> {
+	const answer = await readSignedInPortals();
+	if (answer.kind === "ok") return answer;
+	if (answer.kind === "unavailable") return null;
+	endSession();
+	const next = attemptedPath();
+	throw redirect({ to: "/login", search: next ? { next } : {} });
+}
+
+/**
+ * How long `guardPortalClient` waits between asks while `/auth/me` cannot be
+ * reached — about half a minute in all, then it stops asking and leaves the
+ * splash up (and the person signed in) rather than guess.
+ */
+const GATE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000];
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -209,8 +269,8 @@ function homePath(portals: PortalCode[], names: string[]): string {
 export async function ensurePortal(portal: PortalCode) {
 	if (typeof window === "undefined") return;
 	ensureAuthenticated();
-	const { portals } = await signedInPortals();
-	if (portals.includes(portal)) return;
+	const answer = await portalsForGate();
+	if (!answer || answer.portals.includes(portal)) return;
 
 	throw redirect({ to: "/no-access", search: wrongPortalSearch(portal) });
 }
@@ -220,42 +280,59 @@ export async function ensureAdminPortal() {
 	if (typeof window === "undefined") return;
 	ensureAuthenticated();
 	if (demoPortal()) {
-		const { portals, names } = await signedInPortals();
-		throw redirect({ to: homePath(portals, names) });
+		// A demo session never asks `/auth/me`, so this is always decided.
+		const answer = await portalsForGate();
+		throw redirect({
+			to: answer ? homePath(answer.portals, answer.names) : "/no-access",
+		});
 	}
-	const { names } = await signedInPortals();
-	if (names.some((n) => n === "admin")) return;
+	const answer = await portalsForGate();
+	if (!answer || answer.names.some((n) => n === "admin")) return;
 	throw redirect({ to: "/no-access", search: wrongPortalSearch("admin") });
 }
 
 /**
  * Client-side portal check for layouts (SSR cannot read sessionStorage).
- * Returns true when access is allowed; otherwise hard-navigates away.
+ * Returns true when access is allowed; otherwise hard-navigates away — to
+ * /login ONLY when the session is over.
+ *
+ * While `/auth/me` cannot be reached it asks again (`GATE_RETRY_DELAYS_MS`),
+ * keeping the layout on its splash, and finally returns false WITHOUT
+ * signing anybody out. A navigation decided late is dropped if the person has
+ * moved on meanwhile, so a slow answer cannot pull them off another page.
  */
 export async function guardPortalClient(
 	portal: PortalCode | "admin",
 ): Promise<boolean> {
 	if (typeof window === "undefined") return false;
 	if (!getAccessToken()) {
-		clearPortalCache();
-		clearAuthTokens();
+		endSession();
 		hardNavigate(loginHrefWithNext());
 		return false;
 	}
-	try {
-		const { portals, names } = await signedInPortals();
-		if (portal === "admin") {
-			if (names.some((n) => n === "admin") && !demoPortal()) return true;
-		} else if (portals.includes(portal)) {
-			return true;
+	const startedOn = window.location.pathname;
+	for (let attempt = 0; ; attempt += 1) {
+		const answer = await readSignedInPortals();
+		const stillHere = window.location.pathname === startedOn;
+		if (answer.kind === "session-over") {
+			endSession();
+			if (stillHere) hardNavigate(loginHrefWithNext());
+			return false;
 		}
-		hardNavigate(wrongPortalHref(portal));
-		return false;
-	} catch {
-		clearPortalCache();
-		clearAuthTokens();
-		hardNavigate(loginHrefWithNext());
-		return false;
+		if (answer.kind === "ok") {
+			if (portal === "admin") {
+				if (answer.names.some((n) => n === "admin") && !demoPortal()) {
+					return true;
+				}
+			} else if (answer.portals.includes(portal)) {
+				return true;
+			}
+			if (stillHere) hardNavigate(wrongPortalHref(portal));
+			return false;
+		}
+		const delay = GATE_RETRY_DELAYS_MS[attempt];
+		if (delay === undefined || !stillHere) return false;
+		await sleep(delay);
 	}
 }
 

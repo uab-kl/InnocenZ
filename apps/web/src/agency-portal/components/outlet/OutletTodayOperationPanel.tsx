@@ -21,6 +21,9 @@ import {
 	workforceStatusVariant,
 } from "@agency-portal/components/portal/LiveWorkforceTable";
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
+import { useSubmitOutletRating } from "@agency-portal/hooks/use-outlet-ratings";
+import { useOutletShiftSales } from "@agency-portal/hooks/use-outlet-shift-sales";
+import { useOutletEffectiveWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -47,7 +50,10 @@ import {
 	outletShiftFloorSalesStarted,
 	outletTonightFloorTotals,
 	outletTonightLiveEarningsRows,
+	type RecordedFloorSales,
 } from "@agency-portal/lib/outlet-financial-sync";
+import { todayPrPanelAccess } from "@agency-portal/lib/outlet-today-access";
+import { outletWriteRefusalText } from "@agency-portal/lib/outlet-write-refusal";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import {
 	getPrAgencyById,
@@ -67,6 +73,9 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
 type FloorDisplayStatus = "on-duty" | "en-route" | "scheduled" | "checked-out";
+
+/** A real session with nothing recorded yet — one stable empty map, so memos hold. */
+const NO_RECORDED_SALES = new Map<string, RecordedFloorSales>();
 
 type StaffEntry = {
 	pr: PR;
@@ -177,7 +186,10 @@ export function OutletTodayOperationPanel({
 }) {
 	const { t } = usePortalLocale();
 	const outletSubRole = useStore((s) => s.outletSubRole);
-	const outletWorkspace = useStore((s) => s.outletWorkspace);
+	// The venue's REAL rate card and price list on a real session — the store
+	// slice is a placeholder ladder there, and it priced every PR's wage and
+	// commission in this table at demo money.
+	const outletWorkspace = useOutletEffectiveWorkspace();
 	const prReceiptScans = useStore((s) => s.prReceiptScans ?? []);
 	const {
 		prs,
@@ -186,7 +198,16 @@ export function OutletTodayOperationPanel({
 		agencyPRs: storeAgencyPRs,
 		postSealRatePrompt,
 		clearPostSealRatePrompt,
+		toast,
 	} = useStore();
+	const ratingSubmit = useSubmitOutletRating();
+	// What the server has RECORDED for tonight, per PR (approved receipts). A
+	// real session has no receipt scans on the client, so without this every
+	// live-sales figure below read RM 0. Undefined on a demo session.
+	const shiftSales = useOutletShiftSales();
+	const recordedByPrId = shiftSales.backed
+		? (shiftSales.byShift.get(shift.id)?.byPr ?? NO_RECORDED_SALES)
+		: undefined;
 	const agencyRoster = rosterOverride ?? storeRoster;
 	const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
 	const prSubRole = useStore((s) => s.prSubRole);
@@ -197,7 +218,10 @@ export function OutletTodayOperationPanel({
 	const syncLivePrCheckInToRoster = useStore(
 		(s) => s.syncLivePrCheckInToRoster,
 	);
-	const canRate = useOutletCan()("ratePrs");
+	// Each part of the panel asks for the permission its OWN data needs — see
+	// `todayPrPanelAccess`. Rating is the one write here and keeps its gate.
+	const access = todayPrPanelAccess(useOutletCan());
+	const canRate = access.canRate;
 	const [openPr, setOpenPr] = useState<string | null>(null);
 	const [comcardPreviewId, setComcardPreviewId] = useState<string | null>(null);
 	// A comcard at sheet size is too small to read the PR's stats off; tapping it
@@ -499,6 +523,7 @@ export function OutletTodayOperationPanel({
 				happyHourStart: outletWorkspace.happyHourStart,
 				happyHourEnd: outletWorkspace.happyHourEnd,
 				receiptScans: prReceiptScans,
+				recordedByPrId,
 			}),
 		[
 			shift,
@@ -512,6 +537,7 @@ export function OutletTodayOperationPanel({
 			agencyPRs,
 			tierRates,
 			prReceiptScans,
+			recordedByPrId,
 		],
 	);
 
@@ -519,12 +545,15 @@ export function OutletTodayOperationPanel({
 		? (liveEarningsRows.find((row) => row.prId === liveSalesPrId) ?? null)
 		: null;
 
-	const floorSalesStarted = outletShiftFloorSalesStarted(shift, new Date(), {
-		outletName,
-		rosterSlots: rosterTonight,
-		receiptScans: prReceiptScans,
-		prIds: shift.prs ?? [],
-	});
+	// Recorded sales are proof the floor opened, whatever the clock says.
+	const floorSalesStarted =
+		(recordedByPrId?.size ?? 0) > 0 ||
+		outletShiftFloorSalesStarted(shift, new Date(), {
+			outletName,
+			rosterSlots: rosterTonight,
+			receiptScans: prReceiptScans,
+			prIds: shift.prs ?? [],
+		});
 
 	const liveDrinkUnitsByPrId = useMemo(() => {
 		if (!floorSalesStarted) return new Map<string, number>();
@@ -538,6 +567,7 @@ export function OutletTodayOperationPanel({
 				slot: rosterByPr.get(prId),
 				drinkMenu: outletWorkspace.drinkMenu ?? [],
 				receiptScans: prReceiptScans,
+				recorded: recordedByPrId?.get(prId),
 			});
 			if (drinkUnits > 0) map.set(prId, drinkUnits);
 		}
@@ -549,6 +579,7 @@ export function OutletTodayOperationPanel({
 		rosterTonight,
 		outletWorkspace.drinkMenu,
 		prReceiptScans,
+		recordedByPrId,
 	]);
 
 	const tonightFloorTotals = useMemo(() => {
@@ -567,6 +598,7 @@ export function OutletTodayOperationPanel({
 			rosterSlots: rosterTonight,
 			prIds: shift.prs ?? [],
 			receiptScans: prReceiptScans,
+			recordedByPrId,
 		});
 	}, [
 		floorSalesStarted,
@@ -575,6 +607,7 @@ export function OutletTodayOperationPanel({
 		outletWorkspace.drinkMenu,
 		rosterTonight,
 		prReceiptScans,
+		recordedByPrId,
 	]);
 
 	const toggleTag = (tag: string) => {
@@ -603,7 +636,14 @@ export function OutletTodayOperationPanel({
 					.filter(Boolean)
 					.join(" · ");
 
-	if (!canRate) return null;
+	/*
+	 * ⚠️ NOT `canRate`. This returned null for any lane without `rating:create`,
+	 * so a Director — view-only, but granted `dashboard:read`, `booking:read`,
+	 * `sales:read` and `history:read` — saw tonight's shift cards and nobody on
+	 * them. The panel is READ; only its Rate button writes, and that button (and
+	 * its sheet and prompt) still asks `canRate` below.
+	 */
+	if (!access.show) return null;
 
 	return (
 		<div className={cn("!mb-0", className)}>
@@ -776,27 +816,34 @@ export function OutletTodayOperationPanel({
 										</p>
 									)}
 
-									<button
-										type="button"
-										onClick={() => setLiveSalesPrId(pr.id)}
-										className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
-									>
-										<TitleWithIcon icon={iconForNav("Live sales")}>
-											{t.today.liveSales}
-										</TitleWithIcon>
-									</button>
+									{access.canSeeSales && (
+										<button
+											type="button"
+											onClick={() => setLiveSalesPrId(pr.id)}
+											className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
+										>
+											<TitleWithIcon icon={iconForNav("Live sales")}>
+												{t.today.liveSales}
+											</TitleWithIcon>
+										</button>
+									)}
 
-									<button
-										type="button"
-										onClick={() => setHistoryPrId(pr.id)}
-										className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
-									>
-										<TitleWithIcon icon={iconForNav("Shift history")}>
-											{t.today.shiftHistory}
-										</TitleWithIcon>
-									</button>
+									{access.canSeeHistory && (
+										<button
+											type="button"
+											onClick={() => setHistoryPrId(pr.id)}
+											className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
+										>
+											<TitleWithIcon icon={iconForNav("Shift history")}>
+												{t.today.shiftHistory}
+											</TitleWithIcon>
+										</button>
+									)}
 
-									{displayStatus === "checked-out" && (
+									{/* The one WRITE on a card. It used to render for every lane
+									    that could see the panel, while the sheet it opens was
+									    gated on `canRate` — a button that did nothing. */}
+									{canRate && displayStatus === "checked-out" && (
 										<button
 											type="button"
 											onClick={() => setOpenPr(pr.id)}
@@ -812,36 +859,38 @@ export function OutletTodayOperationPanel({
 						})}
 					</div>
 				)}
-				<OutletSection
-					id={OUTLET_LIVE_SALES_SECTION_ID}
-					title={t.today.liveSales}
-					iconKey="Live sales"
-					collapsible
-					open={liveSalesOpen}
-					onOpenChange={setLiveSalesOpen}
-					className="iz-outlet-live-sales-section !mt-3"
-					collapsedPreview={
+				{access.canSeeSales && (
+					<OutletSection
+						id={OUTLET_LIVE_SALES_SECTION_ID}
+						title={t.today.liveSales}
+						iconKey="Live sales"
+						collapsible
+						open={liveSalesOpen}
+						onOpenChange={setLiveSalesOpen}
+						className="iz-outlet-live-sales-section !mt-3"
+						collapsedPreview={
+							<OutletTonightSummaryTable
+								floorTotals={tonightFloorTotals}
+								outletSubRole={outletSubRole}
+								drinkMenu={outletWorkspace.drinkMenu ?? []}
+								shift={shift}
+								variant="collapsed"
+							/>
+						}
+					>
 						<OutletTonightSummaryTable
 							floorTotals={tonightFloorTotals}
 							outletSubRole={outletSubRole}
 							drinkMenu={outletWorkspace.drinkMenu ?? []}
 							shift={shift}
-							variant="collapsed"
+							variant="embedded"
 						/>
-					}
-				>
-					<OutletTonightSummaryTable
-						floorTotals={tonightFloorTotals}
-						outletSubRole={outletSubRole}
-						drinkMenu={outletWorkspace.drinkMenu ?? []}
-						shift={shift}
-						variant="embedded"
-					/>
-					<OutletPrLiveSalesFloorTable
-						rows={liveEarningsRows}
-						onRowClick={(prId) => setLiveSalesPrId(prId)}
-					/>
-				</OutletSection>
+						<OutletPrLiveSalesFloorTable
+							rows={liveEarningsRows}
+							onRowClick={(prId) => setLiveSalesPrId(prId)}
+						/>
+					</OutletSection>
+				)}
 			</OutletSection>
 
 			<IzSheet
@@ -998,9 +1047,45 @@ export function OutletTodayOperationPanel({
 						/>
 						<button
 							type="button"
-							onClick={() => {
-								ratePr(openPr, stars, note, tags.length > 0 ? tags : undefined);
-								setOpenPr(null);
+							disabled={ratingSubmit.isSubmitting}
+							onClick={async () => {
+								const picked = tags.length > 0 ? tags : undefined;
+								// A demo session keeps the store's rating.
+								if (!ratingSubmit.backed) {
+									ratePr(openPr, stars, note, picked);
+									setOpenPr(null);
+									return;
+								}
+								// A real one posts it — the store's `ratePr` looks the PR up
+								// in the demo `prs` slice, which a real login blanks, so it
+								// returned on its first line and nothing was ever sent. The
+								// sheet stays open on a refusal: closing it would look like
+								// a rating that landed.
+								try {
+									await ratingSubmit.submit({
+										prId: openPr,
+										prName: openPrData.name,
+										stars,
+										note,
+										tags: picked ?? [],
+										// Names the rated night — it decides which agency may read it.
+										shiftId: shift.id,
+									});
+									toast(
+										fill(t.today.ratingSaved, { name: openPrData.name }),
+										"success",
+									);
+									setOpenPr(null);
+								} catch (error) {
+									toast(
+										outletWriteRefusalText(
+											error,
+											t,
+											t.today.couldNotSaveRating,
+										),
+										"warn",
+									);
+								}
 							}}
 							className="iz-btn iz-btn-primary mt-4 w-full"
 						>

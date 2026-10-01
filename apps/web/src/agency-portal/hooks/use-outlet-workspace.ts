@@ -4,6 +4,7 @@ import {
 	saveInputFromWorkspaceSettings,
 	workspaceSettingsFromBackend,
 } from "@agency-portal/lib/outlet-workspace-map";
+import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useMemo } from "react";
@@ -88,4 +89,21 @@ export function useOutletWorkspace() {
 		isSaving: saveMut.isPending,
 		save: (ws: OutletWorkspaceSettings) => saveMut.mutateAsync(ws),
 	};
+}
+
+/**
+ * The rate card and price list a READ-ONLY screen should price with: the
+ * venue's real workspace once it has loaded, the demo store otherwise.
+ *
+ * ⚠️ The Today cards, the live-sales table, the labour-cost report and the
+ * cut-loss block all read the store slice directly. On a real login that slice
+ * is a placeholder ladder (RM 50/55/65/80, drink 0/1/2/3/4), so every tier a
+ * shift did not name was priced at demo money — "RM 50–500/shift" beside a
+ * shift that pays RM 500. The shift sheet and Post Job already picked the
+ * backed copy this way; this is that one rule, so the screens cannot disagree.
+ */
+export function useOutletEffectiveWorkspace(): OutletWorkspaceSettings {
+	const storeWorkspace = useStore((s) => s.outletWorkspace);
+	const { backed, workspace } = useOutletWorkspace();
+	return backed && workspace ? workspace : storeWorkspace;
 }

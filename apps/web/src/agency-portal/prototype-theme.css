@@ -10241,6 +10241,10 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 	line-height: 1.1;
 }
+/* Money a take-home subtracts (voucher deductions) — red, the status colour code. */
+.iz-hist-money-breakdown__metric-value--subtracted {
+	color: var(--iz-red);
+}
 .iz-outlet-shift-log-rating {
 	border-radius: 14px;
 	border: 1px solid rgba(251, 146, 60, 0.28);

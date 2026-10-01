@@ -1,4 +1,4 @@
-import { useForm } from "@tanstack/react-form";
+import { useForm, useSelector } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
 import axios from "axios";
 import {
@@ -29,6 +29,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SignupAcknowledgements } from "@/components/auth/signup-acknowledgements";
+import { SignupEmailCodeBox } from "@/components/auth/signup-email-code";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -74,6 +75,7 @@ import {
 } from "@/constants/signup-types";
 import { registerUser } from "@/lib/auth/register-api";
 import { createSignupSchema } from "@/lib/auth/register-schemas";
+import { useSignupEmailCode } from "@/lib/auth/use-signup-email-code";
 import {
 	DEFAULT_COUNTRY_CODE,
 	listCities,
@@ -81,7 +83,14 @@ import {
 } from "@/lib/geo/country-state-city";
 import { ageFromDob, dobFromNric, genderFromNric } from "@/lib/ic-identity";
 import { useLandingLocale } from "@/lib/landing-i18n";
+import {
+	localiseSignupEmailCodeAnswer,
+	localiseSignupRefusal,
+} from "@/lib/landing-i18n/member-signup-refusal";
 import { cn } from "@/lib/utils";
+
+/** The email-code box — the anchor a "verify first" refusal scrolls to. */
+const EMAIL_CODE_BOX_ID = "signup-email-code";
 
 /**
  * The wizard's steps, in page order, and the fields each one owns.
@@ -127,7 +136,9 @@ const SIGNUP_STEPS = [
 	{
 		id: "login",
 		section: "loginCredentials",
-		fields: ["loginEmail", "password", "confirmPassword"],
+		// `emailCode` is not a form field — it is the email-code box, and the
+		// rail learns whether it is done from `emailVerified`.
+		fields: ["loginEmail", "emailCode", "password", "confirmPassword"],
 	},
 	{ id: "package", section: "packageEnrollment", fields: ["packageId"] },
 	{ id: "branding", section: "branding", fields: ["logoFile"] },
@@ -154,10 +165,13 @@ function SignupProgressRail({
 	copy,
 	schema,
 	values,
+	emailVerified,
 }: {
 	copy: SignupCopy;
 	schema: ReturnType<typeof createSignupSchema>;
 	values: Record<string, unknown>;
+	/** A code is live for the login email and six digits are typed. */
+	emailVerified: boolean;
 }) {
 	const failed = useMemo(() => {
 		const result = schema.safeParse(values);
@@ -172,8 +186,9 @@ function SignupProgressRail({
 		 */
 		if (values.password !== values.confirmPassword)
 			paths.add("confirmPassword");
+		if (!emailVerified) paths.add("emailCode");
 		return paths;
-	}, [schema, values]);
+	}, [schema, values, emailVerified]);
 
 	const completed = SIGNUP_STEPS.map((step) =>
 		step.fields.every((name) => !failed.has(name)),
@@ -260,6 +275,16 @@ export function SignupForm() {
 	const { t } = useLandingLocale();
 	const copy = t.signup;
 	const fields = copy.fields;
+	/*
+	 * A refused sign-up in the reader's words. The one sentence the server
+	 * answers a taken email, phone or ID number with — naming none of them
+	 * (owner, 29 Sep 2026) — is translated, and so is every answer about the
+	 * email code (30 Sep 2026); any other refusal is shown as the server wrote
+	 * it, and no sentence at all says the registration failed. The list is
+	 * `SIGNUP_SHARED_SENTENCES`, which the member form reads too.
+	 */
+	const refusalText = (message: string | undefined): string =>
+		localiseSignupRefusal(message, copy);
 	const signupSchema = useMemo(
 		() => createSignupSchema(copy.validation),
 		[copy.validation],
@@ -334,13 +359,32 @@ export function SignupForm() {
 				toast.error(copy.validation.logoRequired);
 				return;
 			}
+			/*
+			 * NO CODE, NO ACCOUNT (owner, 30 Sep 2026). The server refuses a
+			 * sign-up without one too; this says so before a round trip, and
+			 * takes the person to the box that fixes it. Checked AFTER the
+			 * schema, so every field problem is named first.
+			 */
+			const proof = emailCode.proof;
+			if (!proof) {
+				toast.error(
+					emailCode.sentTo
+						? copy.emailCode.codeIncomplete
+						: copy.emailCode.sendFirst,
+				);
+				document
+					.getElementById(EMAIL_CODE_BOX_ID)
+					?.scrollIntoView({ behavior: "smooth", block: "center" });
+				return;
+			}
 			try {
-				const result = await registerUser({
-					...value,
-					logoFile: value.logoFile,
-				});
+				const result = await registerUser(
+					{ ...value, logoFile: value.logoFile },
+					proof,
+				);
 				if (!result.success) {
-					toast.error(result.message || copy.errors.registrationFailed);
+					emailCode.afterRefusal(result.message, null);
+					toast.error(refusalText(result.message));
 					return;
 				}
 				// The account exists either way — still show the success dialog.
@@ -360,16 +404,59 @@ export function SignupForm() {
 						toast.error(copy.errors.internalServerError);
 						return;
 					}
-					toast.error(
-						(err.response?.data as { message?: string })?.message ||
-							copy.errors.registrationFailed,
-					);
+					const message = (err.response?.data as { message?: string })?.message;
+					/*
+					 * An accepted code is spent by ANY 409 (and a dead or missing
+					 * one is refused outright): the box goes back to "send code",
+					 * everything else typed stays. A wrong code only clears the
+					 * digits — see `signupCodeOutcome`.
+					 */
+					emailCode.afterRefusal(message, status);
+					toast.error(refusalText(message));
 					return;
 				}
 				toast.error(copy.errors.unexpected);
 			}
 		},
 	});
+
+	/*
+	 * The LOGIN email is the one the code proves: it is what `register` sends as
+	 * `email`, and the address a 409 "already has an account" is about. The
+	 * company contact email is correspondence, not identity.
+	 */
+	const loginEmail = useSelector(
+		form.store,
+		(state) => state.values.loginEmail,
+	);
+	const emailCode = useSignupEmailCode(loginEmail);
+
+	/** Send, and confirm it the way this form confirms everything — a toast. */
+	const sendEmailCode = async () => {
+		const outcome = await emailCode.send();
+		if (!outcome) return;
+		if (!outcome.ok) {
+			toast.error(localiseSignupEmailCodeAnswer(outcome.message, copy));
+			return;
+		}
+		toast.success(
+			outcome.message.trim()
+				? localiseSignupEmailCodeAnswer(outcome.message, copy)
+				: copy.emailCode.sentTo.replace("{email}", loginEmail.trim()),
+		);
+	};
+
+	/*
+	 * Back to "send code", with the caret in the field that holds the address.
+	 * While "same as company email" is ticked the login field is read-only and
+	 * copies the company one, so that is the field to change.
+	 */
+	const changeEmail = () => {
+		emailCode.changeEmail();
+		document
+			.getElementById(sameAsCompanyEmail ? "email" : "loginEmail")
+			?.focus();
+	};
 
 	// Client-only load from `main.subscription` (avoid SSR empty dehydrate).
 	// biome-ignore lint/correctness/useExhaustiveDependencies(packagesTick): the retry counter is the re-run TRIGGER of this fetch, not a value read inside it — remove it and the "try again" button stops reloading the package list.
@@ -1005,6 +1092,25 @@ export function SignupForm() {
 								)}
 							</form.Field>
 
+							{/*
+							 * RIGHT UNDER the address it proves. Typing a different
+							 * login email — here, or in the company field while "same
+							 * as company email" is ticked — clears the code.
+							 */}
+							<form.Subscribe selector={(state) => state.isSubmitting}>
+								{(isSubmitting) => (
+									<SignupEmailCodeBox
+										id={EMAIL_CODE_BOX_ID}
+										email={loginEmail}
+										state={emailCode}
+										copy={copy}
+										disabled={isSubmitting}
+										onSend={() => void sendEmailCode()}
+										onChangeEmail={changeEmail}
+									/>
+								)}
+							</form.Subscribe>
+
 							<form.Field
 								name="password"
 								validators={{
@@ -1359,6 +1465,7 @@ export function SignupForm() {
 							copy={copy}
 							schema={signupSchema}
 							values={values}
+							emailVerified={emailCode.proof !== null}
 						/>
 					)}
 				</form.Subscribe>

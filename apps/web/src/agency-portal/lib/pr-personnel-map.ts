@@ -39,6 +39,22 @@ export function payClassFromBackend(
 	return payClass === "commission_only" ? "commissionOnly" : "basic";
 }
 
+/**
+ * The KPI a Manage PR card and profile show: the score the server computes
+ * (GET /pr `kpiScore`, a whole number 0–100), or an em-dash while there is
+ * nothing to score yet. Null is NOT 0 — the same rule as `attendancePct`.
+ *
+ * The number and nothing else: how it is made stays on the server, so no
+ * caption, tooltip or breakdown belongs beside it. The agency's own grade
+ * (`agency_pr.kpi_tier`) is a different fact and is labelled as the agency's
+ * grade, never as "KPI".
+ */
+export function prKpiScoreLabel(pr: Pick<AgencyManagedPR, "kpiScore">): string {
+	return typeof pr.kpiScore === "number" && Number.isFinite(pr.kpiScore)
+		? String(Math.round(pr.kpiScore))
+		: "—";
+}
+
 /** Whole years elapsed since an ISO `YYYY-MM-DD` date of birth. */
 export function ageFromDob(dob: string | null | undefined): number {
 	if (!dob) return 0;
@@ -68,8 +84,9 @@ export function ageFromDob(dob: string | null | undefined): number {
  *   - `languages` ← the same user_profile row the PR edits in their own portal
  *   - `attendancePct` / `totalPaid` / `checkIns` / `noShows` ← `pr.stats`, the
  *     agency-scoped aggregate over `shift_assignment` + `payment_voucher`
- * The remaining demo-only fields (rating, KPI score, penalties, pay class, …)
- * have no backend yet, so they get neutral placeholders. `rating: 0`
+ *   - `kpiScore` ← `pr.kpiScore`, the server's number (see `prKpiScoreLabel`)
+ * The remaining demo-only fields (rating, penalties, …) have no backend yet,
+ * so they get neutral placeholders. `rating: 0`
  * is one of those placeholders, NOT a score — see lib/pr-rating-summary.ts,
  * which derives the real average from the `rating` table instead. This is the accepted hybrid tradeoff: real where the backend
  * is real, cosmetic placeholders elsewhere.
@@ -137,7 +154,10 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		checkIns: stats?.completedShifts ?? 0,
 		checkOuts: stats?.completedShifts ?? 0,
 		noShows: stats?.missedShifts ?? 0,
-		kpiScore: 0,
+		// The server's KPI score, agency-scoped like `stats`. Null — never a
+		// placeholder 0, which once printed "KPI 0" on every card — while there is
+		// nothing to score, or for a caller the server does not give it to.
+		kpiScore: pr.kpiScore ?? null,
 		suspended: pr.status === "suspended" || pr.status === "inactive",
 		detached: false,
 		agencyId: pr.agencyId,

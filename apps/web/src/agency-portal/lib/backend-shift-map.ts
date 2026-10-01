@@ -4,6 +4,13 @@ import type {
 	RosterSlotStatus,
 } from "@agency-portal/lib/agency-demo";
 import { formatOutletDayLabel } from "@agency-portal/lib/agency-outlet-shifts";
+import {
+	defaultOutletMenuItemName,
+	isOtherSpecialEvent,
+	type OutletDrinkPrice,
+	type OutletMenuCategory,
+	outletDrinkCategory,
+} from "@agency-portal/lib/outlet-demo";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
 import {
 	isCommissionOnlyPayTier,
@@ -18,6 +25,7 @@ import type { ShiftRequest } from "@agency-portal/lib/store";
 import type {
 	CreateShiftInput,
 	Shift,
+	ShiftEventDrinkMenuInput,
 	ShiftEventKind,
 	ShiftPayTierDemand,
 	ShiftPayTierInput,
@@ -121,32 +129,42 @@ export function shiftWindow(slot: string | null): {
 	return { start: "", end: "" };
 }
 
-function minutesOf(hhmm: string): number | null {
-	const [h, m] = hhmm.split(":").map(Number);
-	if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-	return h * 60 + m;
-}
-
-// Estimated payout so the payout filter has something to compare: window hours
-// (wrapping past midnight) times the shift's hourly rate. Undefined when the
-// window or rate can't be parsed.
-export function estPayoutFor(
-	window: { start: string; end: string },
-	payPerHour: string,
-): number | undefined {
-	const start = minutesOf(window.start);
-	const end = minutesOf(window.end);
-	const pay = Number(payPerHour);
-	if (start == null || end == null || !Number.isFinite(pay)) return undefined;
-	let mins = end - start;
-	if (mins <= 0) mins += 24 * 60;
-	return (mins / 60) * pay;
-}
-
 // numeric(12,2) columns arrive as strings; coerce defensively.
 function num(value: string | null | undefined): number {
 	const n = Number(value);
 	return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Bookings nobody will be paid a wage for: a cancellation, a no-show and an
+ * approved MC/leave (excused). The weekly voucher job reads `completed` rows
+ * only, so none of these ever reaches a PR's pay.
+ */
+const UNPAID_ASSIGNMENT_STATUSES: ReadonlySet<ShiftAssignmentStatus> = new Set([
+	"cancelled",
+	"no_show",
+	"leave_approved",
+]);
+
+/**
+ * What one booking costs in wages — the SERVER's own figure, never re-derived.
+ *
+ * `shift_assignment.pay_amount` is the PR's own tier rate at this shift, as
+ * `resolveTierWageOutcome` priced it at assign time (the per-shift override,
+ * else the outlet's rate card, for THIS PR's `agency_pr.tier`), and the sealed
+ * earned wage once they check out. A Tier II PR on a RM 600 card is 600 here.
+ *
+ * It replaced window hours × `shift.pay_per_hour`, which was wrong twice over:
+ * `pay_per_hour` holds the Tier I DAILY wage (500), so a three-hour slot cost
+ * RM 1,500, and it is one figure for the whole shift, so every tier cost the
+ * same. An excused, cancelled or no-show booking keeps its forecast in the
+ * column (a no-show still reads 500) but is owed nothing — 0 here.
+ */
+export function assignmentWageRm(
+	a: Pick<ShiftAssignment, "status" | "payAmount">,
+): number {
+	if (UNPAID_ASSIGNMENT_STATUSES.has(a.status)) return 0;
+	return num(a.payAmount);
 }
 
 /**
@@ -295,6 +313,7 @@ export function rosterSlotsFromBackend(input: {
 		if (!shift) continue;
 		const window = shiftWindow(shift.slot);
 		const outletGeo = outletGeoById?.get(shift.outletId);
+		const wageRm = assignmentWageRm(a);
 		slots.push({
 			id: a.id,
 			prId: a.prId,
@@ -307,7 +326,11 @@ export function rosterSlotsFromBackend(input: {
 			shift: normalizedSlotLabel(shift.slot) || (shift.eventName ?? ""),
 			shiftStart: window.start,
 			shiftEnd: window.end,
-			estPayout: estPayoutFor(window, shift.payPerHour),
+			// This booking's own wage, per the PR's tier — see `assignmentWageRm`.
+			// `wageRm` marks it as the server's figure, so the roster's payout
+			// estimate reads it instead of pricing the slot off a demo rule.
+			estPayout: wageRm,
+			wageRm,
 			// Stamped in and not yet out = genuinely on the floor. The status map
 			// alone cannot see this (a "confirmed" row is scheduled until the PR
 			// actually arrives), and the live GPS panel keys off "on-duty", so
@@ -340,15 +363,107 @@ export function rosterSlotsFromBackend(input: {
 }
 
 /**
+ * The special sub-type and "Other" name a shift should SHOW.
+ *
+ * The shift's OWN pair wins (0167): it is what the venue posted, and it must not
+ * move when the card it came from is edited later. The card's pair is the
+ * fallback, for shifts posted before 0167 kept one — a card-posted shift carried
+ * the card's type LOCKED, so for it the card's answer is the true one.
+ *
+ * Taken as a PAIR from one source, never mixed: an "Other" name only means
+ * something beside the type it was typed for. A normal shift has neither.
+ */
+export function specialEventFieldsFromShift(
+	shift: Pick<
+		Shift,
+		| "eventKind"
+		| "specialEventType"
+		| "customSpecialEventName"
+		| "templateSpecialEventType"
+		| "templateCustomEventName"
+	>,
+): { specialEventType?: string; customSpecialEventName?: string } {
+	if (shift.eventKind !== "special") return {};
+	if (shift.specialEventType) {
+		return {
+			specialEventType: shift.specialEventType,
+			customSpecialEventName: shift.customSpecialEventName ?? undefined,
+		};
+	}
+	return {
+		specialEventType: shift.templateSpecialEventType ?? undefined,
+		customSpecialEventName: shift.templateCustomEventName ?? undefined,
+	};
+}
+
+/**
+ * The event fields a HISTORY row carries — the outlet's History is built from
+ * ASSIGNMENTS, and the assignment list joins only the shift's `eventKind`. The
+ * sub-type and its "Other" name live on the shift (0167) or the card it was
+ * posted from, so they come from the shift read, joined on the shift id, by the
+ * same rule every other screen uses (`specialEventFieldsFromShift`).
+ *
+ * The KIND is the assignment's own: a special night whose shift read has not
+ * arrived still says "special", and its pill reads "Special" until the type
+ * lands — never an empty label, never a guess.
+ */
+export function historyEventFields(
+	eventKind: string | null | undefined,
+	shift: Parameters<typeof specialEventFieldsFromShift>[0] | undefined,
+): {
+	eventKind?: "normal" | "special";
+	specialEventType?: string;
+	customSpecialEventName?: string;
+} {
+	if (eventKind === "normal") return { eventKind: "normal" };
+	if (eventKind !== "special") return {};
+	return {
+		eventKind: "special",
+		...(shift ? specialEventFieldsFromShift(shift) : {}),
+	};
+}
+
+/** A stored menu category as the Workspace lists read it; unknown = service. */
+function menuCategory(value: string): OutletMenuCategory {
+	return value === "drink" || value === "tip" ? value : "service";
+}
+
+/**
+ * The special event's OWN price list (0167), in the composer's shape — or
+ * undefined when the night is priced from the Workspace list, which is exactly
+ * what every reader (`shiftPriceGroups`, `effectiveShiftDrinkMenu`) takes to
+ * mean "use the venue's everyday prices". Only a special shift carries one.
+ *
+ * `id` is the stored slug, so a line copied from the Workspace keeps that row's
+ * id and the sheet can mark which event prices differ from it.
+ */
+export function eventDrinkMenuFromShift(
+	shift: Pick<Shift, "eventKind" | "eventDrinkMenu">,
+): OutletDrinkPrice[] | undefined {
+	if (shift.eventKind !== "special" || !shift.eventDrinkMenu?.length) {
+		return undefined;
+	}
+	return [...shift.eventDrinkMenu]
+		.sort((a, b) => a.sortOrder - b.sortOrder)
+		.map((row) => ({
+			id: row.slug,
+			name: row.name,
+			priceRm: num(row.priceRm),
+			category: menuCategory(row.category),
+		}));
+}
+
+/**
  * A backend shift -> the demo `ShiftRequest` the outlet Today cards render.
  * `prs` carries the real assignment PR ids so the detail panels can match them
  * against the roster slots built by `rosterSlotsFromBackend`.
  *
  * `date` is the demo's human label ('Tonight' / 'Tomorrow' / '21 Jul') while
  * `dateIso` carries the real date — the resolver prefers `dateIso`, so the label
- * is display only. Fields with no backend behind them (drink menus, tier rates,
- * per-shift floor counts, dress code, cut-loss state) are left unset so the
- * screens fall back to the outlet's Workspace settings and demo defaults.
+ * is display only. Fields with no backend behind them (the demo tier-rate map,
+ * per-shift floor counts, cut-loss state) are left unset so the screens fall
+ * back to the outlet's Workspace settings and demo defaults. A special event's
+ * own prices DO have one now (0167) and ride in as `eventDrinkMenu`.
  */
 export function shiftRequestFromBackendShift(input: {
 	shift: Shift;
@@ -367,6 +482,7 @@ export function shiftRequestFromBackendShift(input: {
 			a.status !== "leave_approved",
 	);
 	const label = formatOutletDayLabel(shift.shiftDate, todayIso);
+	const special = specialEventFieldsFromShift(shift);
 
 	return {
 		id: shift.id,
@@ -392,6 +508,12 @@ export function shiftRequestFromBackendShift(input: {
 		eventKind: shift.eventKind,
 		templateId: shift.templateId ?? undefined,
 		templateCoverImage: shift.templateCoverImage ?? undefined,
+		// The special sub-type and "Other" name: the shift's own (0167), else the
+		// card it was posted from — see `specialEventFieldsFromShift`.
+		specialEventType: special.specialEventType,
+		customSpecialEventName: special.customSpecialEventName,
+		// The event's own prices (0167); undefined = priced from the Workspace.
+		eventDrinkMenu: eventDrinkMenuFromShift(shift),
 		preferredRating: shift.preferredRating ?? 0,
 		estimatedCost: num(shift.estimatedCost),
 		liveSales: num(shift.liveSales),
@@ -400,6 +522,9 @@ export function shiftRequestFromBackendShift(input: {
 		// Who the venue ASKED for — distinct from `prs` (who is booked). Rides
 		// straight off the server response; empty array means nobody was named.
 		requestedPrs: shift.requestedPrs ?? [],
+		// Where the venue SENT the shift — the honest answer to "which agency",
+		// which the sheet used to guess from whoever happened to be rostered.
+		postedAgencyIds: shift.agencyIds,
 		payPerHour: num(shift.payPerHour),
 		// What the shift ASKED for, per tier. Without this every outlet screen fell
 		// back to a synthesised ladder — see `payTierRowsFromShiftPayTiers`.
@@ -415,8 +540,10 @@ export function shiftRequestFromBackendShift(input: {
 /**
  * The fields the reverse (write) mapper reads off a Post Job composer item. A
  * posted shift item is a superset of this — the remaining demo-only fields
- * (drink menus, dress code, star tiers, named PR ids) have no backend column and
- * are dropped here. The pay-tier rows ARE persisted, as `shift_pay_tier` rows.
+ * (star tiers, the demo tier-rate map) have no backend column and are dropped
+ * here. Persisted: pay-tier rows (`shift_pay_tier`), named PRs
+ * (`shift_pr_request`, 0131), the dress code (0132), and a special night's
+ * sub-type, "Other" name and own price list (`shift` + `shift_drink_menu`, 0167).
  */
 export interface OutletShiftPostItem {
 	/** Named-PR picks resolved to (person, membership) pairs — see 0131. */
@@ -432,11 +559,47 @@ export interface OutletShiftPostItem {
 	eventKind?: ShiftEventKind;
 	/** Event template this shift was posted from (0128). */
 	templateId?: string;
+	/** The special sub-type the composer chose (0167) — sent for a special shift only. */
+	specialEventType?: string;
+	/** The name typed for "Other" (0167) — sent only while the type IS 'other'. */
+	customSpecialEventName?: string;
+	/** The special event's own price list, from the event price editor (0167). */
+	eventDrinkMenu?: OutletDrinkPrice[];
 	preferredRating: number;
 	estimatedCost: number;
 	payPerHour: number;
 	/** Per-tier rate + headcount rows the composer built (persisted as overrides). */
 	payTierRows?: PostJobPayTierRow[];
+}
+
+/** The widths of the columns an event price line lands in (0167). */
+const CUSTOM_EVENT_NAME_MAX = 120;
+const EVENT_MENU_NAME_MAX = 255;
+
+/**
+ * The composer's event price list -> the backend `eventDrinkMenu` (0167).
+ *
+ * Every line goes, in the composer's order, with two repairs made HERE so a post
+ * never dies at the server over them: a line the venue added and never named
+ * takes the placeholder it was showing ("New drink"), exactly as the Workspace
+ * save does, and a price that is not a real non-negative number goes as 0.
+ *
+ * The category travels VERBATIM. The list opens as a copy of the Workspace's,
+ * whose seeded Tips row is 'tip' — collapsing it to 'service' is the bug
+ * `saveInputFromWorkspaceSettings` already had to fix once.
+ */
+export function eventDrinkMenuInputFromMenu(
+	menu: OutletDrinkPrice[],
+): ShiftEventDrinkMenuInput[] {
+	return menu.map((d, index) => ({
+		slug: d.id,
+		name: (
+			d.name.trim() || defaultOutletMenuItemName(outletDrinkCategory(d))
+		).slice(0, EVENT_MENU_NAME_MAX),
+		priceRm: nonNegative(d.priceRm),
+		category: d.category ?? "service",
+		sortOrder: index,
+	}));
 }
 
 // The backend's preferredRating is a 0–5 int; the composer's derived value can
@@ -556,6 +719,14 @@ export function createShiftInputFromPost(
 	const payTiers = item.payTierRows?.length
 		? shiftPayTiersFromRows(item.payTierRows)
 		: undefined;
+	// A special night's sub-type, "Other" name and own prices (0167). Sent only
+	// for a special shift — the server clears them on a normal one anyway — and
+	// the name only for "Other". This mapper used to drop all three, so a blank
+	// VIP night came back a bare "Special" priced from the everyday list.
+	const special = item.eventKind === "special";
+	const customName = item.customSpecialEventName
+		?.trim()
+		.slice(0, CUSTOM_EVENT_NAME_MAX);
 	return {
 		outletId,
 		shiftDate: item.dateIso,
@@ -563,6 +734,15 @@ export function createShiftInputFromPost(
 		eventName: item.event.trim() || undefined,
 		eventKind: item.eventKind,
 		templateId: item.templateId,
+		...(special && item.specialEventType
+			? { specialEventType: item.specialEventType }
+			: {}),
+		...(special && isOtherSpecialEvent(item.specialEventType) && customName
+			? { customSpecialEventName: customName }
+			: {}),
+		...(special && item.eventDrinkMenu?.length
+			? { eventDrinkMenu: eventDrinkMenuInputFromMenu(item.eventDrinkMenu) }
+			: {}),
 		languages: item.languages.trim() || undefined,
 		// 0132. This mapper used to drop the dress code on the floor — the field
 		// was collected, VALIDATED (posting refuses an "Other" with no text) and

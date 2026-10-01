@@ -9,6 +9,7 @@ import {
 	OutletShiftStatusBadge,
 } from "@agency-portal/components/outlet/OutletShiftDetailPanel";
 import { OutletShiftStaffingSection } from "@agency-portal/components/outlet/OutletShiftStaffingSection";
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import {
 	canDeleteShiftOn,
 	useOutletShiftActions,
@@ -25,7 +26,7 @@ import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import type { ShiftApplicant } from "@agency-portal/lib/outlet-demo";
 import {
 	formatShiftEventTypeSummary,
-	shiftSpecialEventLabel,
+	specialEventPillLabel,
 } from "@agency-portal/lib/outlet-demo";
 import {
 	agencyNameForShift,
@@ -34,6 +35,10 @@ import {
 	shiftStaffingSummary,
 	staffingFallbackAgencyName,
 } from "@agency-portal/lib/outlet-shift-staffing";
+import {
+	outletWriteRefusalText,
+	outletWriteSuccessText,
+} from "@agency-portal/lib/outlet-write-refusal";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { hasShiftEnded, isShiftLiveNow } from "@agency-portal/lib/shift-window";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
@@ -53,7 +58,6 @@ import {
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Lock, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -241,14 +245,16 @@ function buildCalendarEvents(
  * strip shows them side by side, so a whole-month "23 of 80 slots filled" next
  * to a future-only unfilled count would visibly fail to subtract.
  */
-const ISO_DATE_RE = /^d{4}-d{2}-d{2}$/;
+// ⚠️ `\d`, not `d` — written `/^d{4}-d{2}-d{2}$/` it matched only letter d's,
+// so no real date was ever "from today" and every total above read 0.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Lexicographic compare, but only on a value that really is `YYYY-MM-DD`. */
 function isFromTodayOnwards(iso: string, todayIso: string): boolean {
 	return ISO_DATE_RE.test(iso) && iso >= todayIso;
 }
 
-function monthTotals(events: CalendarEvent[], todayIso: string) {
+export function monthTotals(events: CalendarEvent[], todayIso: string) {
 	let demand = 0;
 	let supplied = 0;
 	for (const ev of events) {
@@ -320,6 +326,7 @@ export function OutletOperationsCalendar({
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const storeRoster = useStore((s) => s.agencyRoster);
 	const storeAgencyPRs = useStore((s) => s.agencyPRs);
+	const toast = useStore((s) => s.toast);
 	const shiftApplicants = useStore((s) => s.shiftApplicants);
 	const storeShifts = useStore((s) => s.shifts);
 	const shifts = shiftsOverride ?? storeShifts;
@@ -330,6 +337,13 @@ export function OutletOperationsCalendar({
 	// company supplied its staff. Demo sessions keep naming the demo agency.
 	const fallbackAgency = staffingFallbackAgencyName(
 		rosterOverride !== undefined,
+	);
+	// The venue's own agency names by id, so the sheet can name the agencies a
+	// shift was SENT to instead of guessing from whoever is rostered.
+	const { links: agencyLinks } = useOutletAgencyLinks();
+	const agencyNameById = useMemo(
+		() => new Map(agencyLinks.map((l) => [l.agencyId, l.agencyName])),
+		[agencyLinks],
 	);
 
 	// Re-render every 30s so a shift turns green when it STARTS and grey when it
@@ -739,6 +753,7 @@ export function OutletOperationsCalendar({
 							agencyRoster,
 							dateIso,
 							fallbackAgency,
+							agencyNameById,
 						);
 						return (
 							<>
@@ -753,7 +768,7 @@ export function OutletOperationsCalendar({
 													variant="gold"
 													className="shrink-0 !py-0.5 !text-[9px]"
 												>
-													{shiftSpecialEventLabel(
+													{specialEventPillLabel(
 														selectedShift.specialEventType,
 														t,
 														selectedShift.customSpecialEventName,
@@ -772,7 +787,7 @@ export function OutletOperationsCalendar({
 										    has no roster slot to name a supplier. */}
 										{linkedAgency && (
 											<p className="iz-tiny iz-muted2 mt-0.5">
-												Agency · {linkedAgency}
+												{fill(t.calendar.agencyLine, { name: linkedAgency })}
 											</p>
 										)}
 									</div>
@@ -780,7 +795,11 @@ export function OutletOperationsCalendar({
 								<OutletShiftDetailPanel
 									shift={selectedShift}
 									variant="future"
-									hideLogSales
+									// A real session logs a PR's sales here exactly as on Today
+									// (the panel applies the grant and the live-or-ended rule).
+									// A demo keeps its per-drink counter off the Calendar, as
+									// it always was.
+									hideLogSales={!writesBacked}
 									// `undefined`, not "": the panel's prop means "we know the
 									// agency", and an empty string would only work there by
 									// accident of being falsy.
@@ -842,16 +861,28 @@ export function OutletOperationsCalendar({
 															onClick={async () => {
 																setSealError(null);
 																try {
-																	await sealShift(selectedShift.id);
+																	const said = await sealShift(
+																		selectedShift.id,
+																	);
+																	// Confirm-every-action: the server's own line, translated.
+																	toast(
+																		outletWriteSuccessText(
+																			said,
+																			t,
+																			t.calendar.closedToast,
+																		),
+																		"success",
+																	);
 																	closeSheet();
 																} catch (err) {
 																	// Stays open on failure — closing here would
 																	// look exactly like a seal that landed.
 																	setSealError(
-																		toMutationError(
+																		outletWriteRefusalText(
 																			err,
+																			t,
 																			t.calendar.couldNotSeal,
-																		)?.message ?? t.calendar.couldNotSeal,
+																		),
 																	);
 																}
 															}}
@@ -933,16 +964,27 @@ export function OutletOperationsCalendar({
 																onClick={async () => {
 																	setDeleteError(null);
 																	try {
-																		await deleteShift(selectedShift.id);
+																		const said = await deleteShift(
+																			selectedShift.id,
+																		);
+																		toast(
+																			outletWriteSuccessText(
+																				said,
+																				t,
+																				t.calendar.withdrawnToast,
+																			),
+																			"success",
+																		);
 																		closeSheet();
 																	} catch (err) {
 																		// Stays open on failure: closing here would
 																		// look exactly like a delete that landed.
 																		setDeleteError(
-																			toMutationError(
+																			outletWriteRefusalText(
 																				err,
+																				t,
 																				t.calendar.couldNotWithdraw,
-																			)?.message ?? t.calendar.couldNotWithdraw,
+																			),
 																		);
 																	}
 																}}

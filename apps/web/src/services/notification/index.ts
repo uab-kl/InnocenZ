@@ -3,23 +3,42 @@ import { buildQueryParams } from "@/lib/build-query-params";
 
 /**
  * The closed enum the backend writes. Mirrors
- * apps/backend/src/features/notification/notification.model.ts — a kind only
- * exists here once something actually raises it.
+ * apps/backend/src/features/notification/notification.model.ts — ALL of it.
+ *
+ * It had fallen seven kinds behind, and the gap was not cosmetic: a kind
+ * missing here maps to nothing, so a new bill (`subscription_invoice_opened`,
+ * sent to every owner and finance member) and every cut-loss request reached
+ * the bell as an unknown row with a generic icon and no link.
+ * `notification-targets.ts` maps each one; the compiler holds that map total.
  */
 export type NotificationKind =
 	| "payment_voucher_issued"
+	/** The voucher's money left the agency (0141). PR-addressed. */
+	| "payment_voucher_paid"
 	| "payment_voucher_dispute_resolved"
 	| "overtime_pending_approval"
+	/** The agency decided a PR's overtime claim. PR-addressed. */
+	| "overtime_decided"
 	| "shift_assigned"
 	| "shift_cancelled"
 	| "agency_join_resolved"
 	| "pr_rating_low"
+	/** A venue asked to cut a shift's cost — waiting on the agency (0098). */
+	| "cutlost_requested"
+	/** The agency answered that request. Outlet-addressed. */
+	| "cutlost_decided"
+	/** A PR was sent home early by an approved cut-loss. PR-addressed. */
+	| "shift_released_early"
 	| "shift_cover_needed"
 	| "pv_day_review_pending"
 	| "leave_requested"
 	| "leave_decided"
+	/** An agency's own free-text notice to its PRs. PR-addressed. */
+	| "agency_broadcast"
 	/** Agency-addressed weekly billing statement: PVs issued, and the resulting tier (0136). */
 	| "subscription_tier_weekly"
+	/** A new bill was opened for this organisation — outlet AND agency (0137). */
+	| "subscription_invoice_opened"
 	/** A saved card / Touch 'n Go charge for a bill was declined — pay it by hand (0166). */
 	| "subscription_autopay_failed";
 

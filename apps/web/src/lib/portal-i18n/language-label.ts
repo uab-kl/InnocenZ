@@ -45,9 +45,10 @@ export function languageListLabel(
 /**
  * Display label for a PR's ethnicity.
  *
- * Same split as `languageLabel`: `pr.race` is the STORED value and Manage PR's
- * filter compares against it (`p.race !== race`), so only the rendered text
- * changes. Unrecognised values pass through — the field accepts free text.
+ * Same split as `languageLabel`: `pr.race` is the STORED value, so only the
+ * rendered text changes. Manage PR's filter folds case the same way this map
+ * does (`raceMatches`), so `Chinese` and `chinese` are one option. Unrecognised
+ * values pass through — the field accepts free text.
  */
 export function raceLabel(raw: string, t: PortalTranslations): string {
 	const map: Record<string, string> = {

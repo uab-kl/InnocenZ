@@ -47,7 +47,11 @@ import { fill } from "@/lib/portal-i18n/fill";
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
 import { formatDate, getErrorMessage, statusColors } from "@/lib/utils";
 import type { Agency } from "@/services/agency";
-import type { PrPagination, PrUser } from "@/services/pr";
+import {
+	currentAgencyLinks,
+	type PrPagination,
+	type PrUser,
+} from "@/services/pr";
 
 export type PrStatusFilter = "all" | "active" | "inactive";
 
@@ -251,7 +255,11 @@ export function PrsTable({
 											{user.phoneNum || "—"}
 										</TableCell>
 										<TableCell>
-											<PrAgenciesCell agencies={user.agencies} />
+											{/* The agencies she works for NOW — a departure is history,
+											    shown on the detail sheet with its own badge. */}
+											<PrAgenciesCell
+												agencies={currentAgencyLinks(user.agencies)}
+											/>
 										</TableCell>
 										<TableCell>
 											<Badge

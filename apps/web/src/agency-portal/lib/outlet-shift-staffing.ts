@@ -87,15 +87,61 @@ export function agencyNameForShift(
 	roster: AgencyRosterSlot[],
 	dateIso: string,
 	fallback = "",
+	/**
+	 * The venue's agency names by id (its own `agency_outlet` links). With it,
+	 * a backend shift names the agencies it was SENT to — known before anyone
+	 * is booked, and right on a shift shared between agencies.
+	 */
+	agencyNameById?: Map<string, string>,
 ): string {
-	const slots = roster.filter(
+	if (shift.postedAgencyIds?.length && agencyNameById) {
+		// An id the venue can no longer name (an unlinked agency) is left out,
+		// never guessed at.
+		const posted = [
+			...new Set(
+				shift.postedAgencyIds
+					.map((id) => agencyNameById.get(id))
+					.filter((name): name is string => Boolean(name)),
+			),
+		];
+		if (posted.length > 0) return posted.join(", ");
+	}
+	// Otherwise whoever SUPPLIED this shift's booked PRs — its own slots only.
+	const names = [
+		...new Set(
+			rosterSlotsForShift(shift, roster, dateIso)
+				.filter((s) => s.agencyAssignment?.agencyName || s.agencyId)
+				.map((s) => rosterSlotAgencyName(s, ""))
+				.filter(Boolean),
+		),
+	];
+	return names.length > 0 ? names.join(", ") : fallback;
+}
+
+/**
+ * The roster slots that belong to THIS shift: same venue, same day, same
+ * window, and a PR the shift actually booked.
+ *
+ * ⚠️ The booked-PR test is the part that was missing. Slots carry no shift id,
+ * so matching on venue + day + window alone let a second shift at the same time
+ * (the 17 Aug duplicate is exactly that) lend this one its agency.
+ */
+export function rosterSlotsForShift(
+	shift: ShiftRequest,
+	roster: AgencyRosterSlot[],
+	dateIso: string,
+): AgencyRosterSlot[] {
+	const booked = new Set([
+		...(shift.prs ?? []),
+		...(shift.releasedEarlyPrIds ?? []),
+	]);
+	return roster.filter(
 		(s) =>
+			booked.has(s.prId) &&
 			outletMatches(s.outlet, shift.outletName) &&
 			s.dateIso === dateIso &&
 			s.shift === shift.shift,
 	);
-	const slot = slots.find((s) => s.agencyAssignment?.agencyName || s.agencyId);
-	return slot ? rosterSlotAgencyName(slot, fallback) : fallback;
 }
 
 /** Agency behind one PR row. `linkedAgency` defaults to nothing for the same
@@ -137,8 +183,13 @@ export function buildShiftStaffRows(input: {
 	const { shift, agencyPRs, agencyRoster, shiftApplicants, agencyName } = input;
 	const prById = Object.fromEntries(agencyPRs.map((pr) => [pr.id, pr]));
 	const shiftTime = formatShiftTimeRange(shift.shift);
+	// Each PR's supplier comes from THIS shift's slot for them. The lookup used
+	// to take the PR's first slot ANYWHERE in the fetched window, so a PR who
+	// worked the venue through one agency last week and another tonight was
+	// labelled with last week's.
+	const slotsHere = rosterSlotsForShift(shift, agencyRoster, input.dateIso);
 	const agencyFor = (prId: string) =>
-		prAgencyLabel(prId, agencyRoster, agencyName);
+		prAgencyLabel(prId, slotsHere, agencyName);
 
 	const booked: ShiftStaffRow[] = (shift.prs ?? []).map((prId) => {
 		const pr = prById[prId];

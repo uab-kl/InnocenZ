@@ -2,6 +2,7 @@ import {
 	Comcard3dPreviewVisual,
 	type ComcardPreviewData,
 } from "@agency-portal/components/agency/Comcard3dPreview";
+import { CutlostDetailPanel } from "@agency-portal/components/agency/CutlostDetailPanel";
 import {
 	OutletLinkingDetail,
 	OutletLinkingList,
@@ -28,10 +29,7 @@ import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { isMemberWaiting } from "@agency-portal/lib/member-queue-state";
 
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
-import {
-	cutlostRequestDetail,
-	cutlostRequestTitle,
-} from "@agency-portal/lib/outlet-cutlost-requests";
+import { cutlostRequestTitle } from "@agency-portal/lib/outlet-cutlost-requests";
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
@@ -1145,118 +1143,37 @@ function SignupDetailPanel({
 	);
 }
 
-function CutlostDetailPanel({
+/**
+ * The cut-loss decision: the extracted pane plus the decline-reason sheet,
+ * which stays here beside the sign-up panel's use of the same sheet.
+ */
+function CutlostDecisionPanel({
 	req,
 	canDecide,
+	busy,
 	onApprove,
 	onReject,
 }: {
 	req: PendingCutlostRequest;
 	/** `approvals:update`. False for the Director, who reads the queue only. */
 	canDecide: boolean;
+	/** A decision on this request is in flight — both buttons wait for it. */
+	busy: boolean;
 	onApprove: () => void;
 	onReject: (reason: string) => void;
 }) {
 	const { t } = usePortalLocale();
 	const [rejectOpen, setRejectOpen] = useState(false);
-	const Icon =
-		req.kind === "best_effort"
-			? Sparkles
-			: req.kind === "release_prs"
-				? UserMinus
-				: TrendingDown;
 
 	return (
 		<>
-			<div className="iz-approvals-detail-head">
-				<div className="iz-approvals-detail-profile">
-					<span className="iz-approvals-cutlost-icon">
-						<Icon className="h-5 w-5" />
-					</span>
-					<div className="min-w-0">
-						<h2 className="iz-approvals-detail-name">{req.outletName}</h2>
-						<p className="iz-approvals-detail-meta">{req.shiftEvent}</p>
-						<p className="iz-approvals-detail-meta mt-0.5">
-							<Clock className="mr-1 inline h-3 w-3" />
-							{fill(t.agencyPending.requestedAt, { date: req.requestedAt })}
-						</p>
-					</div>
-				</div>
-				{/* Approving RELEASES people and seals a pro-rated wage, so this pair
-				    is the sharpest write on the page — a view-only lane sees the
-				    request in full and gets neither button. */}
-				{canDecide && (
-					<div className="iz-approvals-detail-actions">
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary !py-2 !text-xs"
-							onClick={onApprove}
-						>
-							{t.common.approve}
-						</button>
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft !py-2 !text-xs"
-							onClick={() => setRejectOpen(true)}
-						>
-							{t.common.decline}
-						</button>
-					</div>
-				)}
-			</div>
-
-			<div className="iz-approvals-cutlost-summary">
-				<Icon className="h-4 w-4 shrink-0 text-[var(--iz-gold-l)]" />
-				<div className="min-w-0">
-					<p className="iz-heading text-sm font-bold text-[var(--iz-txt)]">
-						{cutlostRequestTitle(req)}
-					</p>
-					<p className="iz-tiny iz-muted2 mt-0.5">
-						{cutlostRequestDetail(req)}
-					</p>
-				</div>
-			</div>
-
-			<div className="iz-approvals-info-chips mt-3">
-				<IzPill variant="violet">{req.dateLabel}</IzPill>
-				<IzPill variant="violet">{req.shiftLabel}</IzPill>
-				{req.model === "best_effort" && (
-					<IzPill variant="violet">{t.approvals.bestEffort}</IzPill>
-				)}
-				{/* "RM" and the grouped number stay out of the dictionary — currency
-				    has one source of truth, and a key that baked it in would be a
-				    second one. Only the word in front of the amount is translated. */}
-				<IzPill variant="red">
-					{t.approvals.cutlost} RM{" "}
-					{Math.round(req.cutlostBefore).toLocaleString("en-MY")}
-				</IzPill>
-				<IzPill variant="green">
-					{t.agencyPending.saves} ~RM{" "}
-					{Math.round(req.estimatedSavings).toLocaleString("en-MY")}
-				</IzPill>
-			</div>
-
-			{req.releasedPrNames?.length ? (
-				<div className="iz-approvals-info-card mt-3">
-					<h3 className="iz-approvals-info-title">{t.approvals.prsAffected}</h3>
-					<p className="iz-tiny iz-muted">{req.releasedPrNames.join(", ")}</p>
-					<p className="iz-tiny iz-muted2 mt-2">
-						{t.agencyPending.releaseOnApprove}
-					</p>
-				</div>
-			) : null}
-
-			{req.rationale?.length ? (
-				<div className="iz-approvals-info-card mt-3">
-					<h3 className="iz-approvals-info-title">{t.approvals.rationale}</h3>
-					<ul className="iz-approvals-rationale">
-						{req.rationale.map((line) => (
-							<li key={line}>{line}</li>
-						))}
-					</ul>
-				</div>
-			) : null}
-
+			<CutlostDetailPanel
+				req={req}
+				canDecide={canDecide}
+				busy={busy}
+				onApprove={onApprove}
+				onDecline={() => setRejectOpen(true)}
+			/>
 			<RejectSheet
 				open={rejectOpen}
 				title={t.approvals.declineCutlostRequest}
@@ -2496,9 +2413,12 @@ function AgencyPending() {
 							</div>
 						)
 					) : selectedCutlost ? (
-						<CutlostDetailPanel
+						<CutlostDecisionPanel
 							req={selectedCutlost}
 							canDecide={canApprovePrSignups}
+							// The live decide call is in flight: both buttons wait, so a
+							// second press cannot fire a second decision behind the first.
+							busy={liveCutlost.backed && liveCutlost.isDeciding}
 							// Approving is what RELEASES people — it seals a pro-rated wage
 							// on every named PR — so on a real session it must reach the
 							// server. The store actions stay for the demo logins.
@@ -2556,21 +2476,29 @@ function AgencyPending() {
 							<X className="h-4 w-4" />
 						</button>
 					</div>
-					<p className="iz-tiny iz-muted mb-3">{t.agencyPending.inviteHint}</p>
+					{/* No invite exists to send — see `agencyPending.addPrHint`. */}
+					<p className="iz-tiny iz-muted mb-3">{t.agencyPending.addPrHint}</p>
 					{INVITE_FIELDS.map((field) => (
 						<div key={field} className="mb-2">
 							<span className="iz-field-label capitalize">
 								{INVITE_FIELD_LABEL[field](t)}
+								{field === "mobile" ? " *" : null}
 							</span>
 							<input
 								className="iz-field-input !text-sm"
 								value={invite[field]}
+								aria-required={field === "mobile" || undefined}
 								onChange={(e) => {
 									setInvite((v) => ({ ...v, [field]: e.target.value }));
 									// The refusal was about what they just changed.
 									setInviteError(null);
 								}}
 							/>
+							{field === "mobile" ? (
+								<p className="iz-tiny iz-muted2 mt-1">
+									{t.agencyRoster.phoneRequiredHint}
+								</p>
+							) : null}
 						</div>
 					))}
 					{/*
@@ -2587,7 +2515,14 @@ function AgencyPending() {
 					<button
 						type="button"
 						className="iz-btn iz-btn-primary mt-2 w-full"
-						disabled={!invite.name || !invite.ic || backend.inviting}
+						// Mobile is required: the PR claims this new account at sign-up by
+						// proving that number (owner default, 29 Sep 2026).
+						disabled={
+							!invite.name ||
+							!invite.ic ||
+							!invite.mobile.trim() ||
+							backend.inviting
+						}
 						aria-busy={backend.inviting || undefined}
 						onClick={() => {
 							const finish = () => {
@@ -2616,8 +2551,8 @@ function AgencyPending() {
 						}}
 					>
 						{backend.inviting
-							? t.agencyPending.sendingInvite
-							: t.agencyPending.sendInvite}
+							? t.agencyPending.addingToRoster
+							: t.agencyPending.addToRoster}
 					</button>
 				</IzSheet>
 			)}

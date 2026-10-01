@@ -5,7 +5,6 @@ import {
 	Ban,
 	Building2,
 	CheckCircle2,
-	ExternalLink,
 	FileText,
 	Handshake,
 	LayoutGrid,
@@ -772,27 +771,14 @@ function DashboardComponent() {
 							: t.admin.dashWelcome}
 					</p>
 				</div>
+				{/* No "Open prototype" link here: it sent a real admin to the
+				    public demo build — demo data on a real session (28 Sep audit). */}
 				<div className="flex flex-wrap gap-3">
 					<Button asChild variant="outline" size="lg" className="h-11 px-4">
 						<Link to="/admin/settings">
 							<Settings className="opacity-80" />
 							{t.admin.navSettings}
 						</Link>
-					</Button>
-					<Button
-						asChild
-						size="lg"
-						className="h-11 border-0 bg-[image:var(--gradient-royal)] px-5 font-bold text-[#1a1726] shadow-[0_8px_24px_color-mix(in_oklab,#e8c874_25%,transparent)] hover:brightness-105"
-					>
-						<a
-							href="https://ng8522.github.io/InnocenZ-proto/"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="!text-[#1a1726] no-underline hover:!text-[#1a1726]"
-						>
-							{t.admin.dashOpenPrototype}
-							<ExternalLink className="opacity-80" />
-						</a>
 					</Button>
 				</div>
 			</div>

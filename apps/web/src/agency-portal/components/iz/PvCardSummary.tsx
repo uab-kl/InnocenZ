@@ -5,8 +5,9 @@ import {
 	getPvSalesTotal,
 	type PrPaymentVoucher,
 	parsePvIssuedMs,
-	resolvePvPayByDue,
 } from "@agency-portal/lib/pr-demo";
+import { pvDisplayDates } from "@agency-portal/lib/pv-display-dates";
+import { voucherPayeeIc } from "@agency-portal/lib/pv-roster-pr";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dayMonthLabel } from "@/lib/portal-i18n/date-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -74,7 +75,9 @@ export function PvCardSummary({
 }) {
 	const { t } = usePortalLocale();
 	const voucherNo = pv.voucherNo?.trim();
+	const payeeIc = voucherPayeeIc(pv, agencyPRs);
 	const weekLabel = pvOwnWeekLabel(pv, t);
+	const dates = pvDisplayDates(pv, t);
 	const isLatest =
 		latestIssuedMs !== undefined &&
 		latestIssuedMs > 0 &&
@@ -100,9 +103,11 @@ export function PvCardSummary({
 			>
 				{resolvePvPrLabel(pv, agencyPRs)} · {pv.outlet}
 			</p>
-			{pv.prIc && (
+			{/* The PR's own IC, through the voucher's FK — not the voucher's copy,
+			    which goes stale when the profile is corrected (`voucherPayeeIc`). */}
+			{payeeIc && (
 				<p className="iz-tiny iz-muted2">
-					{t.outletSettings.ic} {pv.prIc}
+					{t.outletSettings.ic} {payeeIc}
 				</p>
 			)}
 			<p className="iz-tiny iz-muted2 mt-0.5">
@@ -118,8 +123,12 @@ export function PvCardSummary({
 				</p>
 			)}
 			<p className="iz-tiny iz-muted2">
-				{t.history.issued} {pv.issued} · {t.agencyHome.payBy}{" "}
-				{resolvePvPayByDue(pv)}
+				{/* Not yet sent, the date is the day it was RAISED — the PR app no
+				    longer calls a pending voucher "issued", and nor does this. */}
+				{pv.status === "PENDING_REVIEW"
+					? t.agencyPv.raisedOn
+					: t.history.issued}{" "}
+				{dates.issued} · {t.agencyHome.payBy} {dates.payBy}
 				{isLatest && (
 					<span className="ml-1 text-[var(--iz-violet)]">
 						· {t.agencyPv.latest}

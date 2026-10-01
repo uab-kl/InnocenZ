@@ -4,12 +4,12 @@ import { LiveWorkforceTable } from "@agency-portal/components/portal/LiveWorkfor
 import { PortalClickableTableRow } from "@agency-portal/components/portal/PortalClickableTableRow";
 import { PortalTableAvatar } from "@agency-portal/components/portal/PortalTableAvatar";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
+import { useAgencyDayRoster } from "@agency-portal/hooks/use-agency-day-roster";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
 import { useAgencyPrPhotos } from "@agency-portal/hooks/use-agency-pr-photos";
 import { useAgencyPvs } from "@agency-portal/hooks/use-agency-pvs";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
-import { rosterSlotsForAgency } from "@agency-portal/lib/agency-demo";
 import { agencyPvStatusLabel } from "@agency-portal/lib/agency-payroll";
 import type { AgencySubRole } from "@agency-portal/lib/agency-rbac";
 import { cutlostRequestTitle } from "@agency-portal/lib/outlet-cutlost-requests";
@@ -144,13 +144,6 @@ export function AgencyHomeHubTabs({
 }: {
 	agencySubRole: AgencySubRole | null;
 }) {
-	const allAgencyRoster = useStore((s) => s.agencyRoster);
-	const allAgencyPRs = useStore((s) => s.agencyPRs);
-	const activeAgencyId = useStore((s) => s.activeAgencyId);
-	const agencyRoster = useMemo(
-		() => rosterSlotsForAgency(allAgencyRoster, allAgencyPRs, activeAgencyId),
-		[allAgencyRoster, allAgencyPRs, activeAgencyId],
-	);
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const perDrinkRm = useStore((s) => s.outletWorkspace.perDrinkRm);
 	/**
@@ -213,6 +206,15 @@ export function AgencyHomeHubTabs({
 	 * without also taking away Roster.
 	 */
 	const showWorkforce = can("viewLiveFloor");
+	/*
+	 * Today's bookings for the PR-on-duty count — the SAME rows the table under
+	 * the tab reads (backend on a real session, where the store's roster is
+	 * blank; the store on a demo one). Read only for a lane that sees the tab.
+	 */
+	const { slots: agencyRoster } = useAgencyDayRoster({
+		dateIso: DEFAULT_ROSTER_DATE_ISO,
+		enabled: showWorkforce,
+	});
 	const showApprovals = can("approvePrSignups");
 	const showPayroll = can("viewPv");
 	/**

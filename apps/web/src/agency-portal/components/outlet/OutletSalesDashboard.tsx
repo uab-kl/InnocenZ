@@ -1053,7 +1053,7 @@ export function OutletSalesDashboard() {
 											{formatRM(row.sales)}
 										</span>
 										<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-amber-400/80 sm:block">
-											−{formatRM(row.prCost)}
+											{formatRM(-row.prCost)}
 										</span>
 										<span className="whitespace-nowrap text-right iz-nums text-xs font-semibold tabular-nums text-[var(--iz-gold-l)]">
 											{formatRM(row.earned)}

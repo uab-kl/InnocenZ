@@ -30,7 +30,10 @@ import { PostJobActionPanel } from "@agency-portal/components/outlet/post-job-sh
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { useOutletEffectivePlan } from "@agency-portal/hooks/use-outlet-effective-plan";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
-import { useOutletPrPool } from "@agency-portal/hooks/use-outlet-pr-pool";
+import {
+	prPoolEmptyHint,
+	useOutletPrPool,
+} from "@agency-portal/hooks/use-outlet-pr-pool";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import {
 	canonicalOutletName,
@@ -41,6 +44,11 @@ import {
 	resolveDressCode,
 } from "@agency-portal/lib/outlet-demo";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import {
+	outletBatchRefusalText,
+	outletWriteRefusalText,
+	outletWriteSuccessText,
+} from "@agency-portal/lib/outlet-write-refusal";
 import { OUTLET_SERVICES_ENABLED } from "@agency-portal/lib/phase-flags";
 import {
 	loadPostJobDefaults,
@@ -69,23 +77,6 @@ import { fill } from "@/lib/portal-i18n/fill";
 import type { ShiftTemplate } from "@/services/shift-template";
 
 type PostJobTab = "shifts" | "services";
-
-/**
- * The server's own explanation of a failed post, when it sent one. Every
- * rejection here is actionable by a human (link the venue to an agency, get the
- * role granted, re-activate the membership) and none of them are fixed by
- * retrying, so the message has to reach the screen.
- */
-function postShiftErrorMessage(err: unknown, fallback: string): string {
-	const message = (
-		err as { response?: { data?: { message?: string } } } | undefined
-	)?.response?.data?.message;
-	// The server's own message wins when it has one — it names the actual cause
-	// (no subscription, membership inactive) and is not something the client can
-	// reconstruct. It arrives in English; translating it belongs on the backend,
-	// not here. The `fallback` is the part this screen owns, so it is localised.
-	return message?.trim() || fallback;
-}
 
 export const Route = createFileRoute("/outlet/bookings")({
 	validateSearch: (search: Record<string, unknown>): { tab?: PostJobTab } => ({
@@ -136,7 +127,17 @@ function PostJobPage() {
 
 	// On a real outlet session, posting writes to the backend; a demo session
 	// keeps the local store. `backed` decides which path submitNew takes.
-	const { backed, postShifts, isPosting, bookedShifts } = useOutletPostJob();
+	const { backed, postShifts, isPosting, bookedShifts, clashShifts } =
+		useOutletPostJob();
+
+	/**
+	 * A post already on its way — set the moment Post is pressed, before React
+	 * has re-rendered. `isPosting` alone cannot stop a fast double tap: the query
+	 * library publishes it on a timer, so a second tap queued behind the first
+	 * can still read false, and the server — which checks before it writes and
+	 * keeps no idempotency key — would then post the whole batch twice.
+	 */
+	const postInFlight = useRef(false);
 
 	// Daily plan caps count already-booked shifts. On a backed session the demo
 	// `shifts` store is empty, so count the real backend bookings instead —
@@ -172,11 +173,11 @@ function PostJobPage() {
 		backedWorkspace.backed && backedWorkspace.workspace
 			? backedWorkspace.workspace
 			: outletWorkspace;
-	const prPoolEmptyHint = !prPool.backed
-		? undefined
-		: prPool.isLoading
-			? t.postJob.loadingYourPrs
-			: t.postJob.noPrsToNameYet;
+	const prPoolHint = prPoolEmptyHint(prPool, {
+		loading: t.postJob.loadingYourPrs,
+		failed: t.postJob.couldNotLoadPrs,
+		none: t.postJob.noPrsToNameYet,
+	});
 
 	// The venue's REAL plan (member_subscription ledger) — the demo store id is
 	// only the demo fallback. See the hook: Subscription said Enterprise while
@@ -530,6 +531,10 @@ function PostJobPage() {
 	const shiftCountForPost = draftShifts.length > 0 ? draftShifts.length : 1;
 
 	const submitNew = () => {
+		// ONE post at a time. Both Post buttons are disabled while one is in flight;
+		// this also stops the tap that lands before they re-render (`postInFlight`).
+		if (isPosting || postInFlight.current) return;
+
 		const shiftsToPost = draftShifts.length > 0 ? draftShifts : [composer];
 		if (shiftsToPost.length === 0) return;
 
@@ -625,12 +630,16 @@ function PostJobPage() {
 		// Widened to the fields this check reads, which is also what lets the two
 		// shapes behind `capShifts` (backend bookings / demo store rows) be walked as
 		// one list — a union of array types has no callable `filter`.
+		//
+		// A backed session compares against `clashShifts`, which reaches back a day:
+		// last night's 22:00 - 04:00 is filed under yesterday and still overlaps a
+		// post for 02:00 this morning. The caps above keep the narrower list.
 		const bookedRows: {
 			outletName: string;
 			dateIso?: string;
 			shift?: string;
 			event?: string;
-		}[] = capShifts;
+		}[] = backed ? clashShifts : capShifts;
 		const clash = findSlotClashes(
 			expandedShifts.map((s) => ({
 				dateIso: isoFromJobDate(s.jobDate),
@@ -759,18 +768,27 @@ function PostJobPage() {
 
 		// Real session → persist to the backend; the outletId and routed agency are
 		// resolved server-side. Pay-tier rows are persisted as per-shift rate
-		// overrides, named PRs as shift_pr_request rows (0131), and the dress code
-		// as shift.dress_code (0132). Still demo-only in postItems: drink menus and
-		// star tiers, which have no column behind them yet.
+		// overrides, named PRs as shift_pr_request rows (0131), the dress code as
+		// shift.dress_code (0132), and a special night's sub-type, "Other" name and
+		// own price list as shift.special_event_type + shift_drink_menu (0167).
+		// Still demo-only in postItems: star tiers, which have no column behind them.
 		if (backed) {
+			postInFlight.current = true;
 			postShifts(postItems, postAgencyIds)
-				.then(() => {
+				.then((message) => {
+					// The SERVER's own confirmation ("Posted 3 shifts"), in the reader's
+					// language — the confirm-every-action rule. The screen's own sentence
+					// only when the server sent none.
 					toast(
-						fill(
-							postItems.length === 1
-								? t.postJob.postedShiftOne
-								: t.postJob.postedShiftMany,
-							{ n: postItems.length },
+						outletWriteSuccessText(
+							message,
+							t,
+							fill(
+								postItems.length === 1
+									? t.postJob.postedShiftOne
+									: t.postJob.postedShiftMany,
+								{ n: postItems.length },
+							),
 						),
 						"success",
 					);
@@ -778,12 +796,30 @@ function PostJobPage() {
 				})
 				.catch((err) => {
 					// Show what the server actually said. The generic retry message hid
-					// every real cause — above all "This outlet has no onboarding agency
-					// to request PR from" (the venue is not linked to an agency), which
-					// no amount of retrying fixes and which reads on screen as the post
-					// having silently vanished.
-					console.error("[PostJob] POST /shift failed", err);
-					toast(postShiftErrorMessage(err, t.postJob.couldNotPost), "warn");
+					// every real cause — above all "No approved agency to request PR
+					// from" (the venue is not linked to an agency), which no amount of
+					// retrying fixes and which reads on screen as the post having
+					// silently vanished. Every refusal here is actionable by a human
+					// (link an agency, pick a plan, move a clashing shift), so the
+					// server's sentence reaches the screen — in the reader's language
+					// where it is one the portal knows, as sent where it is not, and
+					// the screen's own sentence only when the server gave no reason.
+					//
+					// ALL OR NOTHING: a refused batch posted none of its shifts, so the
+					// form keeps every one of them for the retry. With several shifts in
+					// it the toast also names the day it stopped on and says nothing
+					// went — the reason alone can be about ANOTHER shift ("clashes with
+					// your shift at …"), which never says which of yours was refused.
+					console.error("[PostJob] POST /shift/batch failed", err);
+					toast(
+						postItems.length > 1
+							? outletBatchRefusalText(err, t, t.postJob.couldNotPost)
+							: outletWriteRefusalText(err, t, t.postJob.couldNotPost),
+						"warn",
+					);
+				})
+				.finally(() => {
+					postInFlight.current = false;
 				});
 			return;
 		}
@@ -1025,7 +1061,7 @@ function PostJobPage() {
 											namedPrsOnDate={composerNamedPrsOnDate}
 											peopleRemaining={composerPeopleRemaining}
 											prCandidates={prPool.backed ? prPool.prs : undefined}
-											prEmptyHint={prPoolEmptyHint}
+											prEmptyHint={prPoolHint}
 											workspaceMenu={workspaceMenu}
 											workspaceRates={effectiveWorkspace}
 										/>
@@ -1070,7 +1106,7 @@ function PostJobPage() {
 																prCandidates={
 																	prPool.backed ? prPool.prs : undefined
 																}
-																prEmptyHint={prPoolEmptyHint}
+																prEmptyHint={prPoolHint}
 																workspaceMenu={workspaceMenu}
 																workspaceRates={effectiveWorkspace}
 															/>
@@ -1155,8 +1191,13 @@ function PostJobPage() {
 											shiftCount={shiftCountForPost}
 											onAddShift={addDraftShift}
 											onSubmit={submitNew}
+											// The SAME rule as the desktop panel's button: this dock is the
+											// only Post under 900px, and posting twice is the one tap here
+											// that cannot be undone.
 											submitDisabled={
-												totalHeadcount <= 0 || (backed && !agencyLinks.canPost)
+												totalHeadcount <= 0 ||
+												isPosting ||
+												(backed && !agencyLinks.canPost)
 											}
 											compact
 										/>

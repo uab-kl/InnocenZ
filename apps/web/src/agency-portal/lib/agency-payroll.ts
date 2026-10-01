@@ -82,14 +82,34 @@ export function receiptBelongsToAgencyPr(
 	return prNameMatchesAgency(scan.prName, pr);
 }
 
-/** Canonical PR name on agency payroll — IC match + Luna → Vicky migration. */
+/**
+ * Canonical PR name on agency payroll — the voucher's own FK first, then the IC
+ * match + Luna → Vicky migration for a voucher without one.
+ *
+ * ⚠️ By FK it returns the LEGAL name (`icName`), never the roster's `name`,
+ * which is the working name when one is set. Matching by the copied IC first
+ * named the same PR two ways (live, 29 Sep 2026): PV-000011, whose IC copy was
+ * current, matched the roster and read "Vicky", while her older vouchers, whose
+ * copy predates the 8 Sep correction, fell through to the voucher's own name
+ * and read "(Vicky) Victoria Tan Mei Lin" — and the week's PR count, a Set of
+ * these names, counted her twice.
+ */
 export function resolvePvPrName(
-	pv: Pick<PrPaymentVoucher, "prName" | "prIc">,
+	pv: Pick<PrPaymentVoucher, "prName" | "prIc"> & { prId?: string },
 	agencyPRs: AgencyManagedPR[] = [],
 ): string {
+	if (pv.prId) {
+		const byId = agencyPRs.find((p) => p.id === pv.prId);
+		const legal = byId?.icName?.trim() || byId?.name;
+		if (legal) return legal;
+	}
 	if (pv.prIc) {
+		// The SAME flavour as the FK branch (code review, 29 Sep): a voucher with
+		// no `prId` whose IC copy is current must not print the working name
+		// while its sibling with a `prId` prints the legal one.
 		const byIc = agencyPRs.find((p) => p.ic === pv.prIc);
-		if (byIc?.name) return byIc.name;
+		const legal = byIc?.icName?.trim() || byIc?.name;
+		if (legal) return legal;
 	}
 	const byName = agencyPRs.find((p) => prNameMatchesAgency(pv.prName, p));
 	if (byName?.name) return byName.name;
@@ -113,7 +133,10 @@ export function resolvePvPrName(
  * printing "Victoria Tan Mei Lin (Victoria Tan Mei Lin)".
  */
 export function resolvePvPrLabel(
-	pv: Pick<PrPaymentVoucher, "prName" | "prIc"> & { prNickname?: string },
+	pv: Pick<PrPaymentVoucher, "prName" | "prIc"> & {
+		prId?: string;
+		prNickname?: string;
+	},
 	agencyPRs: AgencyManagedPR[] = [],
 ): string {
 	return formatPayeeLabel(pv.prNickname, resolvePvPrName(pv, agencyPRs));
@@ -370,9 +393,13 @@ export function agencyPendingPayoutDeadline(
 }
 
 export function resolvePvPrId(
-	pv: Pick<PrPaymentVoucher, "prName" | "prIc">,
+	pv: Pick<PrPaymentVoucher, "prName" | "prIc" | "prId">,
 	agencyPRs: AgencyManagedPR[] = [],
 ): string | undefined {
+	// The voucher's own FK first. The copied IC below goes stale when a profile
+	// is corrected — eight of Vicky's nine vouchers matched her by nothing, so
+	// the Paid tab's PR filter could not find them.
+	if (pv.prId && agencyPRs.some((p) => p.id === pv.prId)) return pv.prId;
 	if (pv.prIc) {
 		const byIc = agencyPRs.find((p) => p.ic === pv.prIc);
 		if (byIc) return byIc.id;

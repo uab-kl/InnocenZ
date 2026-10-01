@@ -69,8 +69,15 @@ function statusLabel(status: WeeklyDayStatus, t: PortalTranslations) {
 	return "—";
 }
 
-function cellAmount(value: number) {
-	if (value <= 0) return "—";
+/**
+ * One cell's figure: "12.50", a NEGATIVE "−20.00", and "—" for nothing.
+ *
+ * This used to dash out anything `<= 0`, so a fee taken off a day vanished
+ * from its cell while the week's total still counted it. Money off is printed
+ * with its minus, as the PR app's `formatCell` prints it; only zero is a dash.
+ */
+export function weekCellAmount(value: number) {
+	if (value === 0) return "—";
 	return formatRM(value).replace("RM ", "");
 }
 
@@ -146,9 +153,7 @@ export function PrWeeklyPaymentGrid({
 									<span className="n">{col.dayNum}</span>
 								</th>
 							))}
-							<th className="iz-pr-week-pay__total-h">
-								{t.reports.colTotal}
-							</th>
+							<th className="iz-pr-week-pay__total-h">{t.reports.colTotal}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -195,7 +200,7 @@ export function PrWeeklyPaymentGrid({
 																isDisputed ? "text-[var(--iz-red)]" : undefined
 															}
 														>
-															{cellAmount(value)}
+															{weekCellAmount(value)}
 														</span>
 														<Flag
 															className={`iz-pr-week-pay__cell-flag${isDisputed ? " text-[var(--iz-red)]" : ""}`}
@@ -210,14 +215,14 @@ export function PrWeeklyPaymentGrid({
 																: undefined
 														}
 													>
-														{cellAmount(value)}
+														{weekCellAmount(value)}
 													</span>
 												)}
 											</td>
 										);
 									})}
 									<td className="iz-pr-week-pay__row-total">
-										{cellAmount(rowTotal)}
+										{weekCellAmount(rowTotal)}
 									</td>
 								</tr>
 							);

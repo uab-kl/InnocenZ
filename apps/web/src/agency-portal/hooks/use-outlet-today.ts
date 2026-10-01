@@ -1,4 +1,11 @@
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
+import {
+	fetchAllOutletAssignments,
+	fetchAllOutletPrs,
+	fetchAllOutletShifts,
+	outletAssignmentsKey,
+	outletPrsKey,
+} from "@agency-portal/hooks/use-outlet-shared-queries";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -14,9 +21,6 @@ import type { ShiftRequest } from "@agency-portal/lib/store";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchPrPersonnel } from "@/services/pr-personnel";
-import { fetchShifts } from "@/services/shift";
-import { fetchShiftAssignments } from "@/services/shift-assignment";
 
 // Today shows tonight's shift, so a fortnight ahead is plenty. The Calendar
 // screen pages through months in both directions and passes its own window.
@@ -92,22 +96,22 @@ export function useOutletToday(
 		// bookings rendered as A's. Pinned like use-outlet-ratings — the server
 		// ANDs outletId inside scope, so it can only narrow.
 		queryKey: ["outlet", "today", "shifts", outletId, fromDate, toDate],
-		queryFn: () =>
-			fetchShifts({ outletId, fromDate, toDate, pageSize: 200 }, logout),
+		// Paged out, never one oversized page — see use-outlet-shared-queries.
+		queryFn: () => fetchAllOutletShifts({ outletId, fromDate, toDate }, logout),
 		enabled: backed && Boolean(outletId),
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 	});
 	const assignmentsQuery = useQuery({
-		queryKey: ["outlet", "today", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		queryKey: outletAssignmentsKey,
+		queryFn: () => fetchAllOutletAssignments({}, logout),
 		enabled: backed,
 		staleTime: 30_000,
 	});
 	// Scoped server-side to PRs rostered at this outlet's own venues.
 	const prsQuery = useQuery({
-		queryKey: ["outlet", "today", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		queryKey: outletPrsKey,
+		queryFn: () => fetchAllOutletPrs({}, logout),
 		enabled: backed,
 		staleTime: 60_000,
 	});

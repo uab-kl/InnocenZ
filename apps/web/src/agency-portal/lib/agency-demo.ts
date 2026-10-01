@@ -866,6 +866,13 @@ export interface AgencyRosterSlot {
 	floorDrinks?: number;
 	floorTips?: number;
 	estPayout?: number;
+	/**
+	 * The SERVER's wage for this booking — `shift_assignment.pay_amount` via
+	 * `assignmentWageRm`: this PR's own tier rate before check-out, the sealed
+	 * earned wage after, 0 for a booking nobody is paid for. Set only on backend
+	 * slots; a demo slot leaves it undefined and keeps its demo estimate.
+	 */
+	wageRm?: number;
 	/** Agency assigned PR to this outlet — PR must approve before shift locks */
 	agencyAssignment?: AgencyAssignmentMeta;
 	/** Agency requests moving PR to another outlet — PR approves or declines */
@@ -1169,7 +1176,19 @@ export interface AgencyManagedPR {
 	checkIns: number;
 	checkOuts: number;
 	noShows: number;
-	kpiScore: number;
+	/**
+	 * The KPI score, 0–100 — GET /pr `kpiScore`, computed on the server from this
+	 * agency's own shifts with the PR. `null` (or absent) means there is nothing
+	 * to score yet and renders as an em-dash via `prKpiScoreLabel`, never as 0:
+	 * a placeholder 0 is how every Manage PR card once came to read "KPI 0".
+	 * Never stored, never derived on this side.
+	 */
+	kpiScore?: number | null;
+	/**
+	 * The agency's own grade for this PR — `agency_pr.kpi_tier` (A/B/C). A
+	 * different fact from the KPI score: labelled as the agency's grade, never
+	 * as "KPI".
+	 */
 	kpiTier?: string;
 	suspended?: boolean;
 	detached?: boolean;

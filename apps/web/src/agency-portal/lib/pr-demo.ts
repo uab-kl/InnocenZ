@@ -21,6 +21,7 @@ import {
 	type FinanceHeadPvStamp,
 	seedFinanceHeadStamp,
 } from "@agency-portal/lib/finance-head-stamp";
+import { formatRM } from "@agency-portal/lib/format-rm";
 import { getDrinkMenuForOutlet } from "@agency-portal/lib/outlet-drink-menu";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -1664,8 +1665,12 @@ export function remapSeedReceiptScans(scans: PrReceiptScan[]): PrReceiptScan[] {
 	return scans.map(remapSeedReceiptScan);
 }
 
+/**
+ * The lib-side name for `formatRM` — "RM 1,234.50", a negative "−RM 4.50".
+ * ONE implementation, in `lib/format-rm`; this used to be a second copy of it.
+ */
 export function formatRMPlain(n: number) {
-	return `RM ${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+	return formatRM(n);
 }
 
 export function downloadPvReceipt(
@@ -1702,7 +1707,8 @@ export function downloadPvReceipt(
 		rowLines,
 		"",
 		`Subtotal:      ${formatRMPlain(pv.subtotal)}`,
-		pv.deduct ? `Deductions:    -${formatRMPlain(pv.deduct)}` : "",
+		// Passed negative so the formatter prints the one sign ("−RM 20.00").
+		pv.deduct ? `Deductions:    ${formatRMPlain(-pv.deduct)}` : "",
 		`Net paid:      ${formatRMPlain(pv.net)}`,
 		"",
 		"SIGNATURES",

@@ -4,6 +4,7 @@ import type { OutletPrLiveEarningsBreakdown } from "@agency-portal/lib/outlet-fi
 import { roundRm } from "@agency-portal/lib/outlet-financial-sync";
 import { cn } from "@agency-portal/lib/utils";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function FormulaCell({
 	baseLabel,
@@ -186,8 +187,12 @@ export function OutletPrLiveSalesFloorTable({
 						</tr>
 						<tr className="iz-outlet-live-earnings-table__foot-meta">
 							<td colSpan={8}>
-								Floor drinks {formatRM(roundRm(totals.drinkSales))} · tips{" "}
-								{formatRM(roundRm(totals.tipSales))}
+								{/* One sentence, both amounts filled in — the English glued
+								    around two formatRM calls had no key to translate. */}
+								{fill(t.today.floorDrinksAndTips, {
+									drinks: formatRM(roundRm(totals.drinkSales)),
+									tips: formatRM(roundRm(totals.tipSales)),
+								})}
 							</td>
 						</tr>
 					</tfoot>

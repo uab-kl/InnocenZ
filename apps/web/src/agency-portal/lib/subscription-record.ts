@@ -1,5 +1,7 @@
 import { format, parseISO } from "date-fns";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { MemberSubscription } from "@/services/member-subscription";
+import type { SubscriptionInvoiceProRata } from "@/services/subscription-invoice";
 
 /** One opened billing period, as the ledger states it (KL calendar days). */
 export interface BillingWindow {
@@ -41,6 +43,35 @@ export function periodLabel(startIso: string, endIso: string): string {
 	} catch {
 		return `${startIso} – ${endIso}`;
 	}
+}
+
+/**
+ * "2 of 7 days from 7 Aug 2026 · full period RM 125.00" — a pro-rated first
+ * period in the reader's language (owner, 29 Sep 2026: a first partial week is
+ * not billed in full).
+ *
+ * One filler for the org's row and its receipt, so the two cannot word the
+ * same numbers differently. The template and the money formatter come from the
+ * caller, which keeps this module free of the dictionary. (The admin's payment
+ * panel prints only the short "{n}/{of} days" form, straight through `fill`.)
+ */
+export function proRataLabel(
+	template: string,
+	proRata: SubscriptionInvoiceProRata,
+	formatMoney: (amount: number) => string,
+): string {
+	let date = proRata.billedFrom;
+	try {
+		date = format(parseISO(proRata.billedFrom), "d MMM yyyy");
+	} catch {
+		// An unreadable day prints as stored rather than blanking the line.
+	}
+	return fill(template, {
+		n: proRata.billedDays,
+		of: proRata.periodDays,
+		date,
+		amount: formatMoney(Number(proRata.fullAmount)),
+	});
 }
 
 /** Newest subscription first. */

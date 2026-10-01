@@ -79,6 +79,7 @@ import {
 	declineRequest,
 	fetchAdminRequests,
 	fetchNegotiatedSummary,
+	isAwaitingAnswer,
 	markRequestContacted,
 	resolveRequest,
 	type SubscriberType,
@@ -131,6 +132,7 @@ const requestStatusLabels: Record<
 	declined: (t) => t.adminRequests.statusDeclined,
 	direct: (t) => t.adminRequests.statusDirect,
 	approved: (t) => t.adminRequests.statusApproved,
+	withdrawn: (t) => t.adminRequests.statusWithdrawn,
 };
 
 /**
@@ -160,6 +162,7 @@ const statusBadgeColors: Record<AdminRequestStatus, string> = {
 	direct: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
 	approved:
 		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+	withdrawn: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
 // Who / Role / Type are a record of the originating request — read-only in admin.
@@ -1549,7 +1552,10 @@ function RequestEditForm({
 							{requestStatusLabels[request.status](t)}
 						</Badge>
 					</div>
-					{request.status !== "resolved" && request.status !== "declined" && (
+					{/* Only while it awaits an answer: the server now refuses a second
+					    resolve (it billed the price again) and anything answered or
+					    withdrawn — so a button here would only offer a refusal. */}
+					{isAwaitingAnswer(request.status) && (
 						<div className="flex flex-wrap gap-2 pt-1">
 							{request.status === "pending" && (
 								<Button

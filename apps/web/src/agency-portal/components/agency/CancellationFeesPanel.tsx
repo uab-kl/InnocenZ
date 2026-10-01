@@ -1,4 +1,8 @@
-import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
+import { formatRM } from "@agency-portal/components/iz/ui";
+import {
+	PV_KEY,
+	useAgencyPvEvidence,
+} from "@agency-portal/hooks/use-agency-pvs";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -119,6 +123,9 @@ export function CancellationFeesPanel({
 			void queryClient.invalidateQueries({
 				queryKey: ["agency", "payment-voucher"],
 			});
+			// The LIST is the plural key, which the singular prefix above never
+			// matched — and History's take-home extras nest under it too.
+			void queryClient.invalidateQueries({ queryKey: PV_KEY });
 			void queryClient.invalidateQueries({ queryKey: ["agency-uncharged"] });
 		},
 		onError: () => setError(t.agencyQueues.couldNotWaive),
@@ -136,11 +143,12 @@ export function CancellationFeesPanel({
 						? t.agencyQueues.cancellationFeeOnVoucherOne
 						: t.agencyQueues.cancellationFeeOnVoucherMany}
 				</b>
+				{/* Money OFF, passed negative — the portal's one money format
+				    prints the sign ("−RM 20.00"), not a hand-typed "-RM". */}
 				<b className="iz-sm shrink-0 tabular-nums text-[var(--iz-red)]">
-					-RM{" "}
-					{fees
-						.reduce((s, f) => s + Math.abs(Number(f.line.amount) || 0), 0)
-						.toFixed(2)}
+					{formatRM(
+						-fees.reduce((s, f) => s + Math.abs(Number(f.line.amount) || 0), 0),
+					)}
 				</b>
 			</div>
 			<p className="iz-tiny iz-muted2 mt-1">
@@ -160,7 +168,7 @@ export function CancellationFeesPanel({
 								{line.description}
 							</span>
 							<b className="iz-sm shrink-0 tabular-nums text-[var(--iz-red)]">
-								-RM {Math.abs(Number(line.amount) || 0).toFixed(2)}
+								{formatRM(-Math.abs(Number(line.amount) || 0))}
 							</b>
 						</div>
 						<span className="iz-tiny iz-muted2 block">

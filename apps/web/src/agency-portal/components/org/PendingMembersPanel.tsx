@@ -62,6 +62,39 @@ export {
 	memberQueueState,
 } from "@agency-portal/lib/member-queue-state";
 
+/** The queue's four filters — the chips above the list. */
+export type MemberQueueFilter = "waiting" | "declined" | "deactivated" | "all";
+
+/**
+ * What an EMPTY filter says — its own sentence, not the Waiting one.
+ *
+ * Every filter used to fall through to "No one is waiting to join right now",
+ * so an owner opening Deactivated (or Declined) was told about the wrong list
+ * entirely, and could not tell an empty record from one that failed to load.
+ */
+export function emptyQueueMessage(
+	filter: MemberQueueFilter,
+	t: {
+		portalUi: {
+			noPendingMembers: string;
+			noDeclinedMembers: string;
+			noDeactivatedMembers: string;
+			noMemberRecords: string;
+		};
+	},
+): string {
+	switch (filter) {
+		case "declined":
+			return t.portalUi.noDeclinedMembers;
+		case "deactivated":
+			return t.portalUi.noDeactivatedMembers;
+		case "all":
+			return t.portalUi.noMemberRecords;
+		default:
+			return t.portalUi.noPendingMembers;
+	}
+}
+
 /**
  * WHO made the decision, said honestly.
  *
@@ -177,9 +210,7 @@ export function PendingMembersPanel({
 	 * record of everyone this queue has ever decided about, and each one now
 	 * says who accepted them.
 	 */
-	const [filter, setFilter] = useState<
-		"waiting" | "declined" | "deactivated" | "all"
-	>("waiting");
+	const [filter, setFilter] = useState<MemberQueueFilter>("waiting");
 
 	/*
 	 * ⚠️ WAITING USED TO MEAN "NOT ACTIVE", AND THAT SWALLOWED THE DECLINED.
@@ -246,7 +277,7 @@ export function PendingMembersPanel({
 			<div>
 				{filterRow}
 				<div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-					{t.portalUi.noPendingMembers}
+					{emptyQueueMessage(filter, t)}
 				</div>
 			</div>
 		);

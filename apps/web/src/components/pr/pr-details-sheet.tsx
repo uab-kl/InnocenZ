@@ -46,8 +46,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { languageListLabel, raceLabel } from "@/lib/portal-i18n/language-label";
-import { formatDate, statusColors } from "@/lib/utils";
-import type { PrUser } from "@/services/pr";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import { formatDate, formatDay, statusColors } from "@/lib/utils";
+import type { AgencyPrApproveStatus } from "@/services/agency";
+import { currentAgencyLinks, type PrUser } from "@/services/pr";
+
+/**
+ * The membership states that are NOT a live link, as the admin reads them —
+ * the same labels the agency's own member panel uses (`org-members-panel`).
+ * `approved` is absent on purpose: it keeps the Linked / deactivated badge.
+ */
+const MEMBERSHIP_LABEL: Partial<
+	Record<AgencyPrApproveStatus, (t: PortalTranslations) => string>
+> = {
+	pending: (t) => t.admin.statusPending,
+	rejected: (t) => t.adminOrg.prStatusRejected,
+	leave_pending: (t) => t.adminOrg.prStatusLeavePending,
+	left: (t) => t.adminOrg.prStatusLeft,
+};
 
 interface PrDetailsSheetProps {
 	user: PrUser | null;
@@ -174,6 +190,9 @@ export function PrDetailsSheet({
 	// and keep the local computation only for a response that predates it —
 	// recomputing from `dob` alone would disagree with every other surface.
 	const age = user ? (user.age ?? ageFromDob(user.dob)) : null;
+	// "Agency-Tied" means works there NOW — a departure is history, and is
+	// shown below in the Agencies tab with its own badge (28 Sep audit).
+	const tiedAgencies = user ? currentAgencyLinks(user.agencies) : [];
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -194,10 +213,10 @@ export function PrDetailsSheet({
 							status={user.status}
 							imageUrl={apiAssetUrl(user.profileImage)}
 							meta={
-								user.agencies.length > 0 ? (
+								tiedAgencies.length > 0 ? (
 									<p className="text-sm text-muted-foreground">
 										{fill(t.adminPr.agencyTiedNames, {
-											names: user.agencies
+											names: tiedAgencies
 												.map((agency) => agency.name)
 												.join(", "),
 										})}
@@ -274,10 +293,12 @@ export function PrDetailsSheet({
 										label={t.adminPr.race}
 										value={user.race ? raceLabel(user.race, t) : null}
 									/>
+									{/* A DATE-ONLY column: `formatDate` read it as UTC midnight
+									    and printed "08:00 am" beside it (28 Sep audit). */}
 									<DetailField
 										icon={Cake}
 										label={t.adminPr.dateOfBirth}
-										value={user.dob ? formatDate(user.dob) : null}
+										value={user.dob ? formatDay(user.dob) : null}
 									/>
 									<DetailField
 										icon={Flag}
@@ -544,24 +565,36 @@ export function PrDetailsSheet({
 												{/* "Linked" describes a live partnership. Once an admin
 												    switches the agency off, saying Linked in green is the
 												    screen answering a question nobody asked while hiding
-												    the one that matters. */}
-												<Badge
-													variant="outline"
-													className={
-														agency.status && agency.status !== "active"
-															? statusColors.inactive
-															: statusColors.active
-													}
-													title={
-														agency.status && agency.status !== "active"
-															? t.adminOrg.orgDeactivatedHint
-															: undefined
-													}
-												>
-													{agency.status && agency.status !== "active"
-														? t.adminOrg.orgDeactivatedBadge
-														: t.adminPr.linked}
-												</Badge>
+												    the one that matters. And a membership that is not a
+												    live one — she LEFT, was declined, or has only applied —
+												    says which, instead of Linked (28 Sep audit). */}
+												{agency.approveStatus &&
+												MEMBERSHIP_LABEL[agency.approveStatus] ? (
+													<Badge
+														variant="outline"
+														className={statusColors.inactive}
+													>
+														{MEMBERSHIP_LABEL[agency.approveStatus]?.(t)}
+													</Badge>
+												) : (
+													<Badge
+														variant="outline"
+														className={
+															agency.status && agency.status !== "active"
+																? statusColors.inactive
+																: statusColors.active
+														}
+														title={
+															agency.status && agency.status !== "active"
+																? t.adminOrg.orgDeactivatedHint
+																: undefined
+														}
+													>
+														{agency.status && agency.status !== "active"
+															? t.adminOrg.orgDeactivatedBadge
+															: t.adminPr.linked}
+													</Badge>
+												)}
 											</li>
 										))}
 									</ul>

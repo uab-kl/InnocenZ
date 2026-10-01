@@ -11,7 +11,10 @@ import {
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useOutletCollections } from "@agency-portal/hooks/use-outlet-collections";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
-import { useOutletSubscription } from "@agency-portal/hooks/use-outlet-subscription";
+import {
+	outletMonthlyBill,
+	useOutletSubscription,
+} from "@agency-portal/hooks/use-outlet-subscription";
 import {
 	COLLECTION_AGING_PILL,
 	collectionAmountRm,
@@ -56,6 +59,7 @@ import {
 	describePaymentMethod,
 	willAutoCharge,
 } from "@/services/payment-method";
+import { isInvoiceOwed } from "@/services/subscription-invoice";
 
 const RENEWAL_DATE = "15 Jul 2026";
 
@@ -442,6 +446,29 @@ function OutletSubscriptionPage() {
 	}, [backend.backed, backend.activePlanName, outletOwner.subscriptionPlanId]);
 	const contactLine = outletOwner.email || outletOwner.mobile;
 	/**
+	 * What one month costs, BOTH lanes. The ledger's own plan price wins on a
+	 * real session (the catalogue entry is only how the card is matched); the POS
+	 * add-on is added when the venue holds it — it is billed every month beside
+	 * the plan, and leaving it out under-stated the charge.
+	 */
+	const monthlyBill = outletMonthlyBill(
+		(backend.backed ? backend.planAmountRm : null) ??
+			currentPlan?.monthlyRm ??
+			null,
+		backend.backed ? backend.addonAmountRm : null,
+	);
+	const billedLabel = !monthlyBill
+		? "—"
+		: monthlyBill.addonRm !== null
+			? fill(t.outletSubscription.billedMonthlyWithPos, {
+					total: formatRM(monthlyBill.totalRm),
+					plan: formatRM(monthlyBill.planRm),
+					pos: formatRM(monthlyBill.addonRm),
+				})
+			: fill(t.outletSubscription.billedMonthly, {
+					price: formatRM(monthlyBill.planRm),
+				});
+	/**
 	 * The next billing date, derived from this venue's own subscription row. A
 	 * real session shows a real date; when the ledger has nothing active the
 	 * label is omitted entirely rather than printing the old hardcoded
@@ -503,9 +530,8 @@ function OutletSubscriptionPage() {
 	 */
 	const requoteBlockedNote = useMemo(() => {
 		if (!backend.backed || backend.addonAmountRm === null) return null;
-		const owing = backend.paymentHistory.filter(
-			(invoice) => invoice.status !== "paid",
-		);
+		// Owed = unpaid, never "not paid" — a voided bill is owed by nobody.
+		const owing = backend.paymentHistory.filter(isInvoiceOwed);
 		if (owing.length === 0) return null;
 		const cents = owing.reduce(
 			(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
@@ -554,9 +580,7 @@ function OutletSubscriptionPage() {
 	 */
 	const remindUnpaidPos = () => {
 		if (!backend.backed) return;
-		const owing = backend.paymentHistory.filter(
-			(invoice) => invoice.status !== "paid",
-		);
+		const owing = backend.paymentHistory.filter(isInvoiceOwed);
 		if (owing.length === 0) return;
 		const cents = owing.reduce(
 			(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
@@ -579,9 +603,7 @@ function OutletSubscriptionPage() {
 		 * re-quote rather than a first ask.
 		 */
 		if (backend.backed && backend.addonAmountRm !== null) {
-			const owing = backend.paymentHistory.filter(
-				(invoice) => invoice.status !== "paid",
-			);
+			const owing = backend.paymentHistory.filter(isInvoiceOwed);
 			if (owing.length > 0) {
 				const cents = owing.reduce(
 					(total, invoice) => total + Math.round(Number(invoice.amount) * 100),
@@ -720,9 +742,8 @@ function OutletSubscriptionPage() {
 			 * cancels are deliberately NOT gated — owner: "add on pos and
 			 * cancel can do anytime".
 			 */
-			const owing = backend.paymentHistory.filter(
-				(invoice) => invoice.status !== "paid",
-			);
+			// The same test the server's gate applies: `status = 'unpaid'`.
+			const owing = backend.paymentHistory.filter(isInvoiceOwed);
 			if (owing.length > 0) {
 				const cents = owing.reduce(
 					(sum, invoice) => sum + Math.round(Number(invoice.amount) * 100),
@@ -1175,13 +1196,7 @@ function OutletSubscriptionPage() {
 						canEdit={canPay}
 						isLoading={backend.backed && backend.isCardLoading}
 						isSaving={backend.isSavingCard}
-						billedLabel={
-							currentPlan
-								? fill(t.outletSubscription.billedMonthly, {
-										price: formatRM(currentPlan.monthlyRm),
-									})
-								: "—"
-						}
+						billedLabel={billedLabel}
 						onSave={async (input) => {
 							const result = await backend.saveCard(input);
 							toast(

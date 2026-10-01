@@ -1,5 +1,3 @@
-import { loadLocale } from "@/lib/portal-i18n/locale-prefs";
-import { translations } from "@/lib/portal-i18n/translations";
 import {
 	type AdminNotification,
 	buildPosIntegrationAdminNotification,
@@ -318,6 +316,8 @@ import {
 	removeTabScoped,
 	writeTabScoped,
 } from "@/lib/auth/tab-scoped-storage";
+import { loadLocale } from "@/lib/portal-i18n/locale-prefs";
+import { translations } from "@/lib/portal-i18n/translations";
 
 export type Role = "vendor" | "host" | "agency";
 
@@ -356,6 +356,13 @@ export interface ShiftRequest {
 	 * membership the pick came from. Backend sessions only.
 	 */
 	requestedPrs?: { userId: string; agencyId: string }[];
+	/**
+	 * The agencies the venue SENT this shift to (`shift_agency`, 0124) — served
+	 * to the venue and admin only; an agency is never told who else was asked.
+	 * Backend sessions only. What the sheet names as "the agency", rather than
+	 * guessing from whoever happens to be rostered.
+	 */
+	postedAgencyIds?: string[];
 	id: string;
 	outletName: string;
 	date: string;
@@ -1000,7 +1007,9 @@ function normalizeAgencyPrs(list: AgencyManagedPR[]): AgencyManagedPR[] {
 		yearsExp: typeof pr.yearsExp === "number" ? pr.yearsExp : 0,
 		totalPaid: typeof pr.totalPaid === "number" ? pr.totalPaid : 0,
 		attendancePct: typeof pr.attendancePct === "number" ? pr.attendancePct : 0,
-		kpiScore: typeof pr.kpiScore === "number" ? pr.kpiScore : 0,
+		// Null, not 0: a PR with no score renders "—" (`prKpiScoreLabel`), and a
+		// fallback 0 here is the "KPI 0" every card once read.
+		kpiScore: typeof pr.kpiScore === "number" ? pr.kpiScore : null,
 	}));
 }
 
@@ -7021,9 +7030,8 @@ export const useStore = create<StoreState>()(
 								mergedPvs,
 								mergedAgencyPRsForLedger,
 								// Rehydrate: the signed-in agency comes from the persisted blob.
-								getPrAgencyById(
-									p?.activeAgencyId ?? DEFAULT_TIED_AGENCY_ID,
-								)?.name ?? "",
+								getPrAgencyById(p?.activeAgencyId ?? DEFAULT_TIED_AGENCY_ID)
+									?.name ?? "",
 							),
 							current.shiftHistory,
 							mergedAgencyPRsForLedger,

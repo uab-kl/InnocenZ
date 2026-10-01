@@ -97,6 +97,13 @@ export interface PrPersonnel {
 	/** Present on the LIST path, for agency and admin callers only. */
 	stats?: PrPersonnelStats;
 	/**
+	 * The PR's KPI score, a whole number 0–100, computed by the server — or null
+	 * while there is nothing to score, which renders as an em-dash, never 0.
+	 * LIST path, agency and admin callers only. The number is all the server
+	 * sends; nothing here may recompute or explain it.
+	 */
+	kpiScore?: number | null;
+	/**
 	 * Whether the PR has SET A PASSWORD on their account (list and single read,
 	 * agency and admin callers). Once they have, their sign-in email and phone
 	 * are theirs to change — `PUT /pr/:id` refuses an agency's change with 403.

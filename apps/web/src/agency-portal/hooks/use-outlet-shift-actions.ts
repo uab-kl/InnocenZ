@@ -2,7 +2,7 @@ import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { removeShift, updateShift } from "@/services/shift";
+import { removeShift, updateShift, updateShiftStatus } from "@/services/shift";
 
 /**
  * A shift may be withdrawn only while it is still ENTIRELY in the future — from
@@ -29,15 +29,19 @@ export interface UseOutletShiftActions {
 	/** Mark a shift's staffing confirmed on the backend (shift status -> confirmed). */
 	confirmShift: (shiftId: string) => Promise<void>;
 	isConfirming: boolean;
-	/** Withdraw a future shift. Today's and past shifts are refused server-side too. */
-	deleteShift: (shiftId: string) => Promise<void>;
+	/**
+	 * Withdraw a future shift. Today's and past shifts are refused server-side
+	 * too. Resolves to the server's own sentence, for the confirmation toast.
+	 */
+	deleteShift: (shiftId: string) => Promise<string>;
 	isDeleting: boolean;
 	/**
 	 * Close a finished shift (shift status -> sealed). The server refuses this
 	 * for a shift that has not ended yet, so the UI must not offer it earlier —
-	 * see the seal guard in `shift.controller.ts`.
+	 * see the seal guard in `shift.controller.ts`. Resolves to the server's own
+	 * sentence ("Shift sealed — no one else can be added to it").
 	 */
-	sealShift: (shiftId: string) => Promise<void>;
+	sealShift: (shiftId: string) => Promise<string>;
 	isSealing: boolean;
 }
 
@@ -70,9 +74,8 @@ export function useOutletShiftActions(): UseOutletShiftActions {
 	});
 
 	const remove = useMutation({
-		mutationFn: async (shiftId: string) => {
-			await removeShift(shiftId, logout);
-		},
+		mutationFn: async (shiftId: string) =>
+			(await removeShift(shiftId, logout)).message ?? "",
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["outlet"] });
 			queryClient.invalidateQueries({ queryKey: ["roster"] });
@@ -84,9 +87,8 @@ export function useOutletShiftActions(): UseOutletShiftActions {
 	});
 
 	const seal = useMutation({
-		mutationFn: async (shiftId: string) => {
-			await updateShift(shiftId, { status: "sealed" }, logout);
-		},
+		mutationFn: (shiftId: string) =>
+			updateShiftStatus(shiftId, "sealed", logout),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["outlet"] });
 			queryClient.invalidateQueries({ queryKey: ["roster"] });

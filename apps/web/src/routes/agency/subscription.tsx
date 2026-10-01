@@ -63,6 +63,7 @@ import {
 	describePaymentMethod,
 	willAutoCharge,
 } from "@/services/payment-method";
+import { isInvoiceOwed } from "@/services/subscription-invoice";
 
 const CARD_LAST4 = "4242";
 
@@ -377,7 +378,8 @@ function AgencySubscription() {
 		 * past-rate-card auto-file are untouched: those are the system's own
 		 * acts, not this button.
 		 */
-		const owing = sub.paymentHistory.filter((row) => row.status !== "paid");
+		// Owed = unpaid. A bill InnocenZ voided is owed by nobody (29 Sep 2026).
+		const owing = sub.paymentHistory.filter(isInvoiceOwed);
 		if (owing.length > 0) {
 			const cents = owing.reduce(
 				(total, row) => total + Math.round(Number(row.amount) * 100),

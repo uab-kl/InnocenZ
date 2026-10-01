@@ -33,16 +33,22 @@ export function ShiftMetricIconLabel({
 	total,
 	className,
 	size = "md",
+	text: textOverride,
 }: {
 	kind: ShiftMetricKind;
 	total?: boolean;
 	className?: string;
 	size?: "md" | "lg";
+	/**
+	 * Already-translated words to show beside the kind's icon — for a figure the
+	 * kind's own label would misname (the agency History's "Take-home").
+	 */
+	text?: string;
 }) {
 	const { t } = usePortalLocale();
 	const def = METRIC_BY_ID[kind];
 	const { Icon } = def;
-	const text = total ? def.totalLabel(t) : def.label(t);
+	const text = textOverride ?? (total ? def.totalLabel(t) : def.label(t));
 
 	return (
 		<span

@@ -1,4 +1,5 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import { prDecisionText } from "@agency-portal/lib/pr-decision-copy";
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import { ageFromDob } from "@agency-portal/lib/pr-personnel-map";
 import { prWriteRefusalText } from "@agency-portal/lib/pr-write-refusal";
@@ -209,6 +210,21 @@ export function useAgencyPendingPrs() {
 		onSuccess: invalidate,
 	});
 
+	/**
+	 * The decision's confirmation IS the server's sentence (it used to be a bare
+	 * "OK" for a join), in the reader's language — `pr-decision-copy.ts`. The
+	 * fallbacks only cover an answer with no sentence at all; they were English
+	 * literals, so a 中文 reader saw "Approved" on the one path without words.
+	 */
+	const decisionSaved = (message: string | undefined, fallback: string) =>
+		prDecisionText(message, t, fallback);
+	const decisionRefused = (error: unknown) =>
+		prDecisionText(
+			toMutationError(error, t.agencyPending.couldNotSaveDecision)?.message,
+			t,
+			t.agencyPending.couldNotSaveDecision,
+		);
+
 	return {
 		backed,
 		signups,
@@ -233,12 +249,11 @@ export function useAgencyPendingPrs() {
 			statusMut.mutate(
 				{ userId, approveStatus: "approved" },
 				{
-					onSuccess: (data) => opts?.onSuccess?.(data.message || "Approved"),
-					onError: (e) =>
-						opts?.onError?.(
-							toMutationError(e, "Could not save the decision")?.message ??
-								"Could not save the decision",
+					onSuccess: (data) =>
+						opts?.onSuccess?.(
+							decisionSaved(data.message, t.approvals.approved),
 						),
+					onError: (e) => opts?.onError?.(decisionRefused(e)),
 				},
 			),
 		reject: (
@@ -256,12 +271,11 @@ export function useAgencyPendingPrs() {
 					rejectReason: reason,
 				},
 				{
-					onSuccess: (data) => opts?.onSuccess?.(data.message || "Rejected"),
-					onError: (e) =>
-						opts?.onError?.(
-							toMutationError(e, "Could not save the decision")?.message ??
-								"Could not save the decision",
+					onSuccess: (data) =>
+						opts?.onSuccess?.(
+							decisionSaved(data.message, t.approvals.rejected),
 						),
+					onError: (e) => opts?.onError?.(decisionRefused(e)),
 				},
 			),
 		/**

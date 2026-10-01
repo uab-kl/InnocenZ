@@ -22,6 +22,8 @@ import {
 	ClipboardList,
 	FileText,
 	MapPin,
+	Receipt,
+	Scissors,
 	Star,
 	Wallet,
 } from "lucide-react";
@@ -38,6 +40,10 @@ function kindIcon(kind: OpsNotificationKind) {
 	if (kind === "report_ready") return FileText;
 	if (kind === "reconciliation_due") return ClipboardList;
 	if (kind === "collection_reminder") return Wallet;
+	// A bill — the weekly statement, a new invoice, a declined charge. It fell
+	// to the roster's calendar icon, or to the plain bell as an unknown kind.
+	if (kind === "subscription_tier_weekly") return Receipt;
+	if (kind === "cutlost") return Scissors;
 	if (kind === "unknown") return Bell;
 	return CalendarCheck;
 }
@@ -85,7 +91,9 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 		}
 		setOpen(false);
 		if (n.href) {
-			void navigate({ to: n.href });
+			// The search carries the ITEM (`?pv=`, `?tab=leaves`) — without it the
+			// tap opened the page and left the reader to find what it was about.
+			void navigate({ to: n.href, search: n.search });
 		}
 	};
 

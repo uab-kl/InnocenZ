@@ -1,8 +1,13 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchRatings, type RatingRecord } from "@/services/rating";
+import {
+	fetchRatings,
+	type RatingRecord,
+	type SubmitRatingInput,
+	submitRating,
+} from "@/services/rating";
 
 /**
  * Keyed by the outlet, not just by "outlet ratings". Two venues' rating sets are
@@ -108,5 +113,38 @@ export function useOutletRatings(): UseOutletRatingsResult {
 		refetch: () => {
 			void ratingsQuery.refetch();
 		},
+	};
+}
+
+/**
+ * RATING A PR ON A REAL SESSION — straight to `POST /rating`.
+ *
+ * ⚠️ The Today sheet used to hand its Submit to the demo store's `ratePr`,
+ * whose first line looks the PR up in the demo `prs` slice and returns when it
+ * is not there. A real login blanks that slice, so every real rating returned
+ * on line one: no request, no toast, the sheet simply closed. This sends the
+ * name the card already shows and the shift the sheet belongs to, and resolves
+ * only once the server has stored it.
+ */
+export function useSubmitOutletRating() {
+	const { logout } = useAuth();
+	const queryClient = useQueryClient();
+	const identity = getOutletIdentity();
+	const outletId = identity?.outletId ?? "";
+
+	const mutation = useMutation({
+		mutationFn: (input: Omit<SubmitRatingInput, "outletId">) => {
+			if (!outletId) throw new Error("No outlet session");
+			return submitRating({ ...input, outletId }, logout);
+		},
+		// The venue's own list, and the Post Job pool that averages it.
+		onSuccess: () =>
+			queryClient.invalidateQueries({ queryKey: outletRatingsKey(outletId) }),
+	});
+
+	return {
+		backed: identity !== null,
+		submit: mutation.mutateAsync,
+		isSubmitting: mutation.isPending,
 	};
 }

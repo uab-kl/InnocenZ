@@ -6,7 +6,10 @@ import {
 	formatDueDate,
 	overdueSummary,
 } from "@agency-portal/lib/subscription-due";
-import { periodLabel } from "@agency-portal/lib/subscription-record";
+import {
+	periodLabel,
+	proRataLabel,
+} from "@agency-portal/lib/subscription-record";
 import { useMutation } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { ChevronDown, Receipt } from "lucide-react";
@@ -15,7 +18,11 @@ import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import type { SubscriptionInvoice } from "@/services/subscription-invoice";
+import {
+	isInvoiceOwed,
+	type SubscriptionInvoice,
+	voidReasonOf,
+} from "@/services/subscription-invoice";
 import { createCheckout } from "@/services/subscription-payment";
 
 /**
@@ -131,8 +138,15 @@ export function PaymentHistoryList({
 			</IzCard>
 		);
 	}
-	const unpaid = invoices.filter((invoice) => invoice.status !== "paid");
+	/*
+	 * OWED, PAID, and VOIDED — three piles, not two (owner, 29 Sep 2026: "Add
+	 * Void"). A voided bill was taken back by InnocenZ: it must never sit in the
+	 * amber total, be offered for tick-to-pay, or raise the overdue warning — which
+	 * is exactly where `status !== "paid"` would have put it.
+	 */
+	const unpaid = invoices.filter(isInvoiceOwed);
 	const paid = invoices.filter((invoice) => invoice.status === "paid");
+	const voided = invoices.filter((invoice) => invoice.status === "void");
 
 	const sum = (rows: SubscriptionInvoice[]) =>
 		rows.reduce((total, invoice) => total + Number(invoice.amount), 0);
@@ -300,6 +314,9 @@ export function PaymentHistoryList({
 			{filter === "all" && (
 				<PaidPeriodsDisclosure invoices={paid} laneOf={laneOf} />
 			)}
+			{filter === "all" && (
+				<VoidedPeriodsDisclosure invoices={voided} laneOf={laneOf} />
+			)}
 		</>
 	);
 }
@@ -370,7 +387,7 @@ function OverduePaymentWarning({
 function PeriodDueLine({ rows }: { rows: SubscriptionInvoice[] }) {
 	const { t } = usePortalLocale();
 	const today = new Date();
-	const owing = rows.filter((row) => row.status !== "paid");
+	const owing = rows.filter(isInvoiceOwed);
 	const first = owing[0];
 	if (!first) return null;
 	// `billingCycle` rides on the invoice, so the fallback here is never the
@@ -435,10 +452,9 @@ function PeriodCard({
 	const [open, setOpen] = useState(false);
 	const first = rows[0];
 	if (!first) return null;
-	// What the period's box selects: every lane in this window that still owes.
-	const unpaidIds = rows
-		.filter((invoice) => invoice.status !== "paid")
-		.map((invoice) => invoice.id);
+	// What the period's box selects: every lane in this window that still owes —
+	// never a voided one, which nobody owes.
+	const unpaidIds = rows.filter(isInvoiceOwed).map((invoice) => invoice.id);
 	/**
 	 * READ TOP-DOWN AS A SUM. The plan first, its upgrade lines indented under
 	 * it as "+", a plan subtotal when there is one, then the add-ons. The first
@@ -511,6 +527,8 @@ function PeriodCard({
 				<div className="mt-2 space-y-2">
 					{ordered.map((invoice) => {
 						const isPaid = invoice.status === "paid";
+						const isVoid = invoice.status === "void";
+						const voidReason = isVoid ? voidReasonOf(invoice.note) : null;
 						const lane = laneOf?.(invoice) ?? null;
 						const isUpgrade = invoice.kind === "upgrade";
 						return (
@@ -584,21 +602,58 @@ function PeriodCard({
 												})}
 											</span>
 										)}
-										{invoice.note && (
+										{/* A FIRST WEEK BILLED BY THE DAY (owner, 29 Sep 2026):
+										    "RM 35.71" beside a RM 125 plan reads as a wrong price
+										    unless the row says which days it covers. */}
+										{invoice.proRata && (
 											<span className="iz-tiny iz-muted2 block">
-												{invoice.note}
+												{t.subscription.receiptProRated}
+												{" · "}
+												{proRataLabel(
+													t.subscription.proRatedShare,
+													invoice.proRata,
+													formatRM,
+												)}
+											</span>
+										)}
+										{/* The stored sentence — unless it only restates the
+										    pro-rata line above in English. It says more only once a
+										    credit's reason has been joined onto it. */}
+										{invoice.note &&
+											!isVoid &&
+											(!invoice.proRata ||
+												Number(invoice.creditApplied) > 0) && (
+												<span className="iz-tiny iz-muted2 block">
+													{invoice.note}
+												</span>
+											)}
+										{/* WHY it was voided, in the reader's words around the
+										    admin's own reason. */}
+										{voidReason && (
+											<span className="iz-tiny iz-muted2 block">
+												{fill(t.adminService.voidedReason, {
+													reason: voidReason,
+												})}
 											</span>
 										)}
 									</span>
 									<span className="flex shrink-0 items-center gap-2">
-										<span className="iz-sm font-bold">
+										<span
+											className={`iz-sm font-bold ${isVoid ? "iz-muted line-through" : ""}`}
+										>
 											{isUpgrade ? "+" : ""}
 											{formatRM(Number(invoice.amount))}
 										</span>
-										<IzPill variant={isPaid ? "green" : "amber"}>
+										{/* Green settled, amber waiting, and a VOID neither — the
+										    neutral pill (the owner's status colour rule). */}
+										<IzPill
+											variant={isPaid ? "green" : isVoid ? "ink" : "amber"}
+										>
 											{isPaid
 												? t.subscription.statusPaid
-												: t.subscription.statusUnpaid}
+												: isVoid
+													? t.subscription.statusVoid
+													: t.subscription.statusUnpaid}
 										</IzPill>
 									</span>
 								</div>
@@ -684,6 +739,54 @@ function PaidPeriodsDisclosure({
 								: t.subscription.settledPeriodsMany,
 							{ n: invoices.length, total: formatRM(total) },
 						)}
+					</p>
+				</div>
+				<ChevronDown
+					className={`h-4 w-4 shrink-0 text-[var(--iz-muted)] transition-transform ${
+						open ? "rotate-180" : ""
+					}`}
+				/>
+			</button>
+			{open && (
+				<div className="mt-2 space-y-2">
+					{groupByPeriod(invoices).map((group) => (
+						<PeriodCard key={group.key} rows={group.rows} laneOf={laneOf} />
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
+/**
+ * Bills InnocenZ VOIDED (owner, 29 Sep 2026: "Add Void"), collapsed.
+ *
+ * Kept on the screen rather than hidden: an org that was once shown a charge
+ * must be able to see that it was taken back, and why. Never summed into what
+ * is owed or paid. Renders nothing until something has been voided.
+ */
+function VoidedPeriodsDisclosure({
+	invoices,
+	laneOf,
+}: {
+	invoices: SubscriptionInvoice[];
+	laneOf?: (invoice: SubscriptionInvoice) => "plan" | "addon" | null;
+}) {
+	const { t } = usePortalLocale();
+	const [open, setOpen] = useState(false);
+	if (invoices.length === 0) return null;
+	return (
+		<div className="mt-2">
+			<button
+				type="button"
+				className="iz-card iz-between w-full cursor-pointer text-left"
+				aria-expanded={open}
+				onClick={() => setOpen((prev) => !prev)}
+			>
+				<div className="min-w-0">
+					<p className="iz-sm font-semibold">{t.subscription.voidedPeriods}</p>
+					<p className="iz-tiny iz-muted2 mt-0.5">
+						{fill(t.subscription.voidedPeriodsSummary, { n: invoices.length })}
 					</p>
 				</div>
 				<ChevronDown

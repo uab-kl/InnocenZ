@@ -135,6 +135,8 @@ const en = {
 		/** The agency's weekly subscription statement — PVs issued and the resulting tier. */
 		kindSubscription: "Subscription",
 		kindLeave: "MC / leave",
+		/** A venue's cutlost request, or the agency's answer to it — same word as Approvals' Cutlost tab. */
+		kindCutlost: "Cutlost",
 		kindUnknown: "Update",
 		/** PR push title when a shift lands on them. */
 		shiftAssignedTitle: "Shift assigned",
@@ -223,6 +225,243 @@ const en = {
 		selfLogApprovedBody: "Agency approved your manual receipt log · {amount}",
 		selfLogRejectedBody:
 			"Agency rejected your manual receipt log · {amount} — contact agency",
+		/*
+		 * STORED NOTIFICATION ROWS, re-worded at the render by
+		 * `agency-portal/lib/notification-copy.ts`. The row stays English on the
+		 * wire; these rebuild it from its kind and payload. Names, venues, plans,
+		 * amounts and the PR's or gateway's own words arrive as VALUES, and a
+		 * date arrives already formatted for the locale.
+		 */
+		srvAVenue: "A venue",
+		srvTheVenue: "the venue",
+		srvYourVenue: "Your venue",
+		srvAPr: "a PR",
+		srvUpcomingShift: "an upcoming shift",
+		/** Joins the clauses of one sentence ("2 need review; 1 is unsigned"). */
+		srvListSep: "; ",
+		srvOvertimeTitle: "Overtime needs approval",
+		srvOvertimeBody:
+			"{name} worked {minutes} min past the scheduled end on {date}",
+		srvOvertimeBodyNoDate: "{name} worked {minutes} min past the scheduled end",
+		srvLeaveTitle: "MC / leave request — {name}",
+		srvLeaveBody:
+			'{name} asked to be excused from {when}: "{reason}". Review it on Approvals → MC/Leaves.',
+		srvCoverTitle: "Cover needed — {name}",
+		srvCoverBodyCancelled:
+			"{name} is off {when} (cancelled). Find a replacement on the roster's backfill list.",
+		srvCoverBodyLeave:
+			"{name} is off {when} (approved leave). Find a replacement on the roster's backfill list.",
+		srvNewShiftTitle: "New shift — {venue}",
+		srvNewShiftBodyOne: "{venue} posted a shift on {when} and needs 1 PR.",
+		srvNewShiftBodyMany: "{venue} posted a shift on {when} and needs {n} PRs.",
+		srvWithdrawnTitle: "Shift withdrawn — {venue}",
+		srvWithdrawnBodyNone:
+			"{venue} withdrew the shift on {when}. Nobody was booked on it.",
+		srvWithdrawnBodyOne:
+			"{venue} withdrew the shift on {when}. 1 booked PR was released and notified.",
+		srvWithdrawnBodyMany:
+			"{venue} withdrew the shift on {when}. {n} booked PRs were released and notified.",
+		srvWithdrawnPrTitle: "A shift was withdrawn",
+		srvWithdrawnPrBody:
+			"{venue} withdrew the shift on {when}. You are no longer booked for it.",
+		srvCutRequestTitle: "Venue asked to cut a shift",
+		srvCutRelease: "release {names}",
+		srvCutSlotsOne: "cut 1 slot",
+		srvCutSlotsMany: "cut {n} slots",
+		srvCutApprovedTitle: "Cut-loss approved",
+		srvCutDeclinedTitle: "Cut-loss declined",
+		srvRatingLowTitle: "{name}'s rating has dropped",
+		srvRatingLowBody:
+			"Average now {avg} across {n} ratings, below the {line} warning line.",
+		srvDayReviewTitleSignOne: "1 voucher waiting for your signature",
+		srvDayReviewTitleSignMany: "{n} vouchers waiting for your signature",
+		srvDayReviewTitleReviewOne: "1 voucher awaiting receipt review",
+		srvDayReviewTitleReviewMany: "{n} vouchers awaiting receipt review",
+		srvDayReviewTitleBoth: "{n} vouchers need review or signature",
+		srvDayReviewPartReviewOne:
+			"1 has receipts or overtime still undecided — approve them on Payroll › Receipts",
+		srvDayReviewPartReviewMany:
+			"{n} have receipts or overtime still undecided — approve them on Payroll › Receipts",
+		srvDayReviewPartSignOne:
+			"1 is reviewed but unsigned — finance has to sign before it can reach the PR",
+		srvDayReviewPartSignMany:
+			"{n} are reviewed but unsigned — finance has to sign before they can reach the PR",
+		srvDayReviewBody:
+			"Last week ({start} to {end}) did not go out: {parts}. Until then the PR sees nothing for that week.",
+		srvTierTitleCustom: "{n} PV last week · Custom",
+		srvTierTitleFrozen: "{n} PV last week · Custom price still pending",
+		srvTierTitlePast: "{n} PV last week · past the rate card",
+		srvTierTitleUnchanged: "{n} PV last week · staying on {plan}",
+		srvTierTitleMoved: "{n} PV last week · now on {plan}",
+		srvTierBodyCustom:
+			"You issued {n} PV between {start} and {end}. You are on a negotiated Custom price, which volume does not change — the rate card bands do not apply to it.",
+		srvTierBodyFrozen:
+			"You issued {n} PV between {start} and {end}. Your tier is held at {plan} while your Custom price request is open, so the figure being negotiated does not move under it. It resumes following your weekly volume once InnocenZ admin answers.",
+		srvTierBodyPast:
+			"You issued {n} PV between {start} and {end} — beyond the highest published band, which has no list price. InnocenZ admin has been asked to agree a Custom price with you. You stay on {plan} until they answer.",
+		srvTierBodyUnchanged:
+			"You issued {n} PV between {start} and {end}. That is still within the {plan} band, so your weekly charge is unchanged.",
+		srvTierBodyMoved:
+			"You issued {n} PV between {start} and {end}. That volume falls in the {plan} band, so your weekly charge follows {plan} from this period on — you were on {previous}. Nothing to do: your tier follows the vouchers you issue, there is no plan to pick.",
+		srvBillTitle: "New bill: {amount}",
+		/**
+		 * {proRata} and {credit} are srvBillProRata / srvBillCredit filled in, or
+		 * empty — each carries its own trailing space. Same order as the producer.
+		 */
+		srvBillBody:
+			"{start} to {end}. {proRata}{credit}Open Subscription to see everything still unpaid.",
+		srvBillBodyLines:
+			"{start} to {end}, across {n} lines. {proRata}{credit}Open Subscription to see everything still unpaid.",
+		srvBillProRata:
+			"Pro-rated: {billed} of {days} days from {from} (full period {full}). ",
+		/** {credit} is what was taken off; {before} the bill before it — the payload's own figures. */
+		srvBillCredit:
+			"{credit} credit from a switch to a cheaper plan taken off ({before} before credit). ",
+		srvAutopayTitle: "Automatic payment failed: {amount}",
+		/** {why} is srvAutopayReason filled in, or empty. */
+		srvAutopayBodyCard:
+			"We could not charge your card for {start} to {end}{why}. The bill is still unpaid — pay it by FPX or e-wallet from Subscription, Payment history.",
+		srvAutopayBodyWallet:
+			"We could not charge your e-wallet for {start} to {end}{why}. The bill is still unpaid — pay it by FPX or e-wallet from Subscription, Payment history.",
+		srvAutopayReason: " ({reason})",
+		/*
+		 * PR-ADDRESSED rows — a PR's own shift, leave, overtime, voucher and
+		 * agency news. They reach a web bell when the signed-in person is also a
+		 * PR. Each English value is its producer's sentence, so English reads as
+		 * it was stored; a date arrives formatted for the locale.
+		 */
+		srvShiftAssignedTitle: "You have a new shift",
+		srvShiftAssignedBody: "Your shift is on {date}.",
+		srvShiftCancelledTitle: "A shift was cancelled",
+		srvShiftRemovedTitle: "You were removed from a shift",
+		srvShiftCancelledBody: "You are no longer booked for the shift on {date}.",
+		srvLeaveApprovedTitle: "MC / leave approved",
+		srvLeaveApprovedBody:
+			"Your agency approved the request — you are excused from this shift with no penalty.",
+		srvLeaveRejectedTitle: "MC / leave rejected",
+		srvLeaveRejectedBody:
+			"Your agency rejected the request — you are still on this shift.",
+		srvOvertimeApprovedTitle: "Overtime approved",
+		srvOvertimeApprovedBody:
+			"Your {minutes} min of overtime on {date} was approved — {amount} is on that week's payment voucher.",
+		srvOvertimeRejectedTitle: "Overtime not approved",
+		srvOvertimeRejectedBody:
+			"Your {minutes} min of overtime on {date} was not approved. Ask your agency if you think this is wrong.",
+		srvDisputeAcceptedTitle: "Your dispute was accepted",
+		srvDisputeRejectedTitle: "Your dispute was rejected",
+		/** {part} is one of the four srvPart* labels; {note} is the agency's own words. */
+		srvDisputeBody: "{part} on {date}",
+		srvDisputeBodyNote: "{part} on {date} — {note}",
+		srvPartWages: "Wages",
+		srvPartDrinks: "Drinks",
+		srvPartTips: "Tips",
+		srvPartOthers: "Others",
+		srvPvIssuedTitle: "Your payment voucher is ready",
+		srvPvResentTitle: "Reminder: your payment voucher is waiting",
+		srvPvIssuedBody:
+			"Week {start} to {end}. Check the amounts and raise a dispute if anything is wrong.",
+		srvPvIssuedBodyNoWeek:
+			"Check the amounts and raise a dispute if anything is wrong.",
+		srvPvPaidTitle: "You have been paid",
+		/** {voucher} is the voucher number, or srvYourVoucher when it has none. */
+		srvPvPaidBody: "{voucher} — {amount} has been transferred to your bank.",
+		srvYourVoucher: "Your voucher",
+		srvReleasedTitle: "You were released early",
+		srvReleasedBody:
+			"{venue} on {date} — wages sealed at {amount} for the hours you worked",
+		/** Sentence-initial stand-in for a venue with no name. */
+		srvTheVenueStart: "The venue",
+		srvJoinAcceptedTitle: "You were accepted by the agency",
+		srvJoinAcceptedBody: "You can now be scheduled for shifts.",
+		srvJoinDeclinedTitle: "Your agency application was declined",
+		srvDepartureApprovedTitle: "Your departure from the agency was approved",
+		srvDepartureApprovedBody: "You are no longer under this agency.",
+		srvDepartureDeclinedTitle: "Your departure request was declined",
+		srvSwapTitle: "Outlet swap — your answer is needed",
+		srvSwapBody:
+			"Your agency asks to move your {date} shift ({slot}) to another venue. Accept or decline in the app BEFORE the shift starts — an unanswered request expires at start time.",
+		srvSwapBodyAt:
+			"Your agency asks to move your {date} shift ({slot}) to another venue at {to}. Accept or decline in the app BEFORE the shift starts — an unanswered request expires at start time.",
+		/** The producer's stand-in for a shift with no time window. */
+		srvTimeTbc: "time TBC",
+	},
+	/**
+	 * THE SERVER'S OWN SENTENCES FOR THE OUTLET'S WRITES — Post Job, the shift
+	 * sheet (confirm, seal, withdraw), Log Sales, cut-loss and ratings — in the
+	 * reader's language. Rendered by `agency-portal/lib/outlet-write-refusal.ts`,
+	 * which matches the server's ENGLISH; each English value here is that
+	 * sentence word for word, so an English session reads what the server said.
+	 * Plan names, dates, time windows, event names, module keys and role names
+	 * arrive as VALUES and pass through.
+	 */
+	outletServer: {
+		noApprovedAgency:
+			"No approved agency to request PR from — link an agency in Settings first",
+		selectedAgenciesNotApproved:
+			"None of the selected agencies are approved for this outlet",
+		ownOutletOnly: "You can only create shifts for your own outlet",
+		onlyOutletPosts:
+			"Only an outlet can post a shift. The outlet posts the job to its agency.",
+		noOrganisation: "No organization associated with this account",
+		unknownTemplate: "Unknown event template for this outlet",
+		venuePending:
+			"This venue is still awaiting InnocenZ approval, so it cannot post shifts yet. You will be notified as soon as it is approved.",
+		/** {status} is venueSuspended / venueInactive, or the stored status as sent. */
+		venueBlocked:
+			"This venue is {status} and cannot post shifts. Contact InnocenZ to restore access.",
+		venueSuspended: "suspended",
+		venueInactive: "inactive",
+		noPlan:
+			"This venue has no active subscription plan, so it cannot post shifts. Choose a plan under Settings → Subscription, or contact InnocenZ.",
+		planCapacityOne:
+			"Your {plan} plan covers 1 PR a day. {used} already requested on {date}, so this shift can ask for at most {left} more — lower the headcount or upgrade the plan.",
+		planCapacityMany:
+			"Your {plan} plan covers {limit} PRs a day. {used} already requested on {date}, so this shift can ask for at most {left} more — lower the headcount or upgrade the plan.",
+		tiersOverAskedOne:
+			"The pay tiers ask for {asked} PRs but this shift only has 1 slot — lower a tier's count or raise the headcount.",
+		tiersOverAskedMany:
+			"The pay tiers ask for {asked} PRs but this shift only has {slots} slots — lower a tier's count or raise the headcount.",
+		sameWindow:
+			"You already have a shift at {slot} on {date}. Raise that shift's headcount instead of posting a second one for the same time.",
+		sameWindowNamed:
+			'You already have a shift at {slot} on {date} ("{event}"). Raise that shift\'s headcount instead of posting a second one for the same time.',
+		overlap:
+			"This clashes with your shift at {slot} on {date} — an outlet's shifts cannot overlap. Change this shift's time, or move the other one first.",
+		overlapNamed:
+			"This clashes with your shift at {slot} on {date} (\"{event}\") — an outlet's shifts cannot overlap. Change this shift's time, or move the other one first.",
+		slotNeedsWindow:
+			'Give the shift a time window such as "22:00 - 04:00" — a label on its own cannot be checked for clashes.',
+		eventNameTooLong: "Event name is too long",
+		specialNameTooLong: "The event name is too long",
+		languagesTooLong: "Languages is too long",
+		dressCodeTooLong: "Dress code is too long",
+		noTimeCannotSeal:
+			"This shift has no scheduled time, so it cannot be sealed",
+		sealAfterFinish: "A shift can only be sealed after it has finished",
+		cannotWithdrawToday:
+			"This shift is today or has already passed — it can no longer be withdrawn. Contact the agency to stand the team down.",
+		shiftNotFound: "Shift not found",
+		prNotFound: "PR not found",
+		prNotOnShift: "PR is not actively assigned to this shift",
+		salesTotalTooLarge: "The sales total is too large",
+		onlyVenueCutLoss: "Only the venue can raise a cut-loss request",
+		assignmentsNotOnShift: "One or more assignments are not on this shift",
+		prsNotOnShift: "One or more PRs are not on this shift",
+		invalidRequest: "Invalid request",
+		ratingShiftMismatch:
+			"That shift does not belong to this PR at this outlet.",
+		notOutletMember: "Forbidden — not a member of this outlet",
+		/** {verb} and {module} are the stored permission code and module key. */
+		forbiddenPermission: "Forbidden — requires {verb} on module {module}",
+		forbiddenPermissionShort: "Forbidden — requires {module}:{verb}",
+		/** {roles} are role names joined by forbiddenRoleJoin. */
+		forbiddenRole: "Forbidden — requires role: {roles}",
+		forbiddenRoleJoin: " or ",
+		/** POST /shift/batch — Post Job sends its shifts together, all or nothing. */
+		batchEmpty: "Add at least one shift to post.",
+		/** {max} is the server's per-post limit. */
+		batchTooMany:
+			"You can post at most {max} shifts at once — split the rest into a second post.",
 	},
 	nav: {
 		today: "Today",
@@ -336,6 +575,8 @@ const en = {
 		selectPrs: "Select PRs",
 		resetToWorkspaceRates: "Reset to workspace rates",
 		loadingYourPrs: "Loading your PRs…",
+		/** The pool's read FAILED — not the same as having nobody to name. */
+		couldNotLoadPrs: "Could not load your PRs — refresh the page to try again.",
 		noPrsToNameYet:
 			"No PRs to name yet — you can only request PRs who have worked at your venue. Post without naming anyone and the agency will staff it.",
 		notAvailableYet: "Not available yet",
@@ -464,6 +705,12 @@ const en = {
 		goToSettingsAgencies: "Go to Settings → Agencies",
 		postedShiftOne: "Posted {n} shift",
 		postedShiftMany: "Posted {n} shifts",
+		/**
+		 * A batch refused part-way posts NOTHING (`POST /shift/batch`). {date} is
+		 * the refused shift's day; {reason} the server's refusal, already translated.
+		 */
+		batchRefusedOn:
+			"Nothing was posted — the shift on {date} was refused: {reason}",
 		sessionExpired:
 			"Your outlet session has expired — sign out and sign in again before posting",
 		shiftExceedsPlan:
@@ -1162,6 +1409,9 @@ const en = {
 		noLinkedAccount:
 			"This PR has no linked account yet, so profile details cannot be saved",
 		nameRequired: "Enter the PR's name",
+		/** POST /pr refused a NEW PR with no usable mobile number (a stub is claimed only by it). */
+		mobileRequired:
+			"Enter the PR's mobile number — it is how they claim this account when they sign up.",
 		title: "Manage PR",
 		accessRestricted: "Access restricted",
 		tapToMultiSelect: "Tap PR cards to multi-select",
@@ -1180,7 +1430,12 @@ const en = {
 		place: "Place",
 		experience: "Experience",
 		yearsExperience: "Years experience",
-		kpiTier: "KPI tier",
+		/**
+		 * The agency's own A/B/C grade for a PR (`agency_pr.kpi_tier`). Never
+		 * "KPI": that label belongs to the server's score (`metricKpi`), and two
+		 * different facts must not share one name.
+		 */
+		agencyGrade: "Agency grade",
 		trainingTier: "Training tier",
 		payClass: "Pay class",
 		notGraded: "Not graded",
@@ -1289,6 +1544,12 @@ const en = {
 		unavailablePrs: "Unavailable PRs",
 		estPayout: "Est payout",
 		prsRosteredThisWeek: "PRs rostered this week",
+		/*
+		 * The booking count beside it — the figure counts PEOPLE (owner default,
+		 * 29 Sep 2026), so a PR on five nights is one PR and five shifts.
+		 */
+		weekShiftCountOne: "{n} shift",
+		weekShiftCountMany: "{n} shifts",
 		estLabourCost: "Est labour cost",
 		liveGps: "Live GPS",
 		prSwapRequests: "PR swap requests",
@@ -1425,7 +1686,21 @@ const en = {
 		// this money has already left the agency, which is why the card is green.
 		totalPaid: "Total paid",
 		noPaidVouchersMatch: "No paid vouchers match this filter",
-		summaryLine: "{count} {label} · {range} · {total} paid out",
+		/*
+		 * The agency History header. It said "paid out", beside a Paid PVs tab
+		 * whose real paid total is a different figure — none of this need yet
+		 * have been paid.
+		 *
+		 * Owner default (29 Sep 2026): TAKE-HOME is the headline, the wage part
+		 * beside it. {total} = sealed wages + approved overtime + commission on
+		 * approved receipts − voucher deductions and penalty lines, all from
+		 * stored rows (history-take-home.ts); {wages} = the sealed wages alone.
+		 * Both arrive formatted, currency included.
+		 */
+		summaryLine:
+			"{count} {label} · {range} · {total} take-home · {wages} in wages",
+		/** The same header while the take-home's other half is loading or failed — never a half-sum. */
+		summaryLineWagesOnly: "{count} {label} · {range} · {total} in wages",
 		datePaid: "Date paid",
 		paid: "Paid",
 		cycleLabel: "Cycle",
@@ -1436,11 +1711,18 @@ const en = {
 		colDate: "Date",
 		paidPvs: "Paid PVs",
 		prViewHint:
-			"PR view — shift totals match Last Week / Last Last Week payroll PVs. Tap a PR, then an outlet for each night.",
+			"PR view — each PR's take-home, with the wage part beside it, and the floor sales they brought in. Take-home = sealed wages + approved overtime + commission on approved receipts, less voucher deductions and penalty lines; payment itself is on the vouchers (Paid PVs tab). Tap a PR, then an outlet for each night.",
 		outletViewHint:
-			"Outlet view — same shift nights as payroll PVs. Tap a row for PR breakdown.",
+			"Outlet view — the same completed shifts, grouped by outlet. Tap a row for PR breakdown.",
 		noShiftHistory: "No shift history yet — completed shifts will appear here.",
-		summary: "{n} PR shifts · {range} · RM {total} paid out",
+		/*
+		 * The OUTLET History header. {total} is the sealed WAGE of the completed
+		 * shifts listed — what the PRs were owed for the hours, NOT money that has
+		 * left anybody's account. It said "paid out"; the agency twin above
+		 * (`summaryLine`) was corrected on 29 Sep and this one was missed.
+		 * {total} arrives formatted, currency included.
+		 */
+		summary: "{n} PR shifts · {range} · {total} in wages",
 		latestOn: "Latest {day} · {date}",
 		latestPlain: "Latest {date}",
 		topEarner: "Top earner",
@@ -1460,6 +1742,16 @@ const en = {
 		metricPayoutHint:
 			"What the PR takes home — wages, OT, and commissions from Workspace rates.",
 		whatTheseIconsMean: "What these icons mean",
+		/*
+		 * The agency History's per-PR figure: TAKE-HOME, the wage part beside it
+		 * (owner default, 29 Sep 2026) — the same sum as the header's `summaryLine`,
+		 * cut per PR. `metricWages` labels the figure while the take-home's other
+		 * parts are loading or failed, so a wage is never called a payout.
+		 * {amount} arrives formatted, currency included.
+		 */
+		metricTakeHome: "Take-home",
+		metricWages: "Wages",
+		wagesBeside: "{amount} in wages",
 	},
 	/**
 	 * Spoken languages on a PR profile — DISPLAY ONLY.
@@ -1554,7 +1846,7 @@ const en = {
 		eventCountMany: "{n} events",
 		today: "Today",
 		future: "Future",
-		drinksAndTips: "Drinks {pct}% · Tips {range}",
+		drinksAndTips: "Drinks {pct}% · Tips {tips}%",
 		demandSupplied: "Demand / Supplied",
 		dotsMarkOpenShifts: "Dots mark days with open shifts.",
 	},
@@ -1749,6 +2041,13 @@ const en = {
 		paidOn: " · paid {date}",
 		statusPaid: "Paid",
 		statusUnpaid: "Unpaid",
+		/**
+		 * A bill InnocenZ voided — raised in error, not owed (owner, 29 Sep 2026:
+		 * "Add Void"). A neutral pill: neither settled green nor waiting amber.
+		 */
+		statusVoid: "Void",
+		voidedPeriods: "Voided bills",
+		voidedPeriodsSummary: "{n} voided by InnocenZ — not owed",
 
 		cardNumber: "Card number",
 		expiry: "Expiry (MM/YY)",
@@ -1898,6 +2197,14 @@ const en = {
 		receiptBase: "Plan price",
 		receiptCredit: "Deduction (credit from previous plan)",
 		receiptUpgrade: "Upgrade charge",
+		/**
+		 * A first period billed by the day (owner, 29 Sep 2026: a first partial
+		 * week is not billed in full). {n} days billed of the period's {of}, from
+		 * {date}; {amount} is what the whole period costs on the plan.
+		 */
+		receiptProRated: "Pro-rated",
+		proRatedShare: "{n} of {of} days from {date} · full period {amount}",
+		proRatedShort: "Pro-rated {n}/{of} days",
 		/**
 		 * On a link-and-pay rail the email is not a "billing email" — it is
 		 * where the payment link goes. Optional only because the link also
@@ -2306,6 +2613,10 @@ const en = {
 		noAddressOnFile: "none on file",
 		addressWillDiffer:
 			"The pin and the venue address will then describe different places — the fence measures from the pin.",
+		partialMatch:
+			"Google matched only part of what you typed — check the pin before you save it.",
+		keepsOwnAddress:
+			"Google's address for this place is less detailed than yours, so the venue keeps its own address — only the pin moves.",
 		pinAndAddressSaved: "Check-in pin and venue address saved",
 		couldNotSaveLocation: "Could not save the location",
 		removeConfirm:
@@ -2322,6 +2633,11 @@ const en = {
 		precisionInterpolated: "Interpolated",
 		precisionBlockCentre: "Block centre",
 		precisionApproximate: "Approximate — may be a whole area",
+		precisionPlace: "Google Maps place",
+		precisionPlacePin: "Google's pin for this place",
+		typedAddressTitle: "Use the address you entered",
+		typedAddressPin: "The check-in pin goes on the first match: {place}",
+		useTypedAddress: "Use my address",
 	},
 	/** Outlet → Settings → Agencies. Which agencies may staff this venue. */
 	agencyLinks: {
@@ -2489,6 +2805,8 @@ const en = {
 		cardHintRenewal: "{brand} ···· {last4} · renewal {date}",
 		demoCardHint: "Visa ···· {last4} · renewal {date}",
 		billedMonthly: "Billed monthly · {price}",
+		/** A venue on the POS add-on is billed for BOTH lanes each month — the plan-only figure under-stated the charge. Amounts arrive formatted. */
+		billedMonthlyWithPos: "Billed monthly · {total} ({plan} plan + {pos} POS)",
 		nextRenewal: "Next renewal {date}",
 		/**
 		 * Popped the moment Switch is pressed while periods are unpaid — the
@@ -2717,6 +3035,12 @@ const en = {
 		sealing: "Closing…",
 		couldNotSeal: "Couldn't close this shift.",
 		alreadySealed: "Closed — no one can be added to this shift.",
+		/** Toast after Close shift succeeds — the server's sentence, translated. */
+		closedToast: "Shift closed — no one else can be added to it.",
+		/** Toast after Withdraw succeeds. */
+		withdrawnToast: "Shift withdrawn.",
+		/** Toast when a status change lands on a shift already in that state (e.g. closed in another tab). */
+		updatedToast: "Shift updated.",
 		/*
 		 * Weekday column heads. Spelled out rather than derived from a date
 		 * formatter so the three-letter English abbreviations do not leak into a
@@ -2754,6 +3078,12 @@ const en = {
 		withdrawShift: "Withdraw shift",
 		withdrawing: "Withdrawing…",
 		couldNotWithdraw: "Couldn't withdraw this shift.",
+		/** The shift sheet's supplier line; {name} is the agency's own name. */
+		agencyLine: "Agency · {name}",
+		/** How many PRs the venue posted the shift for, before any cut. */
+		postedQuantity: "Posted {n}",
+		/** Requests or applicants still waiting on someone. */
+		nWaiting: "{n} waiting",
 	},
 	/** Outlet → Today. The live shift card and everything that hangs off it. */
 	today: {
@@ -2802,6 +3132,31 @@ const en = {
 		salesLocked: "Sales locked after seal.",
 		payrollSent: "Payroll sent · shift sealed",
 		logSales: "Log sales",
+		/*
+		 * LOG SALES on a real session — one RM figure per PR, written through
+		 * `POST /shift-sale` (owner default, 29 Sep 2026). The hint says the one
+		 * thing an operator must know: a receipt the agency approves for the
+		 * same PR recomputes the row from the receipts and replaces this figure.
+		 */
+		logSalesHint:
+			"Drink sales per PR for this shift — what the Today figures and Reports read. A receipt the agency approves for the same PR replaces the figure with the receipts' total.",
+		logSalesAmountLabel: "Drink sales for {name} (RM)",
+		logSalesRecorded: "Recorded {amount}",
+		logSalesNothingRecorded: "Nothing recorded yet",
+		logSalesInvalid: "Enter an amount like 1250 or 1,250.50.",
+		logSalesTooLarge:
+			"That is more than one PR sells in a night — check the figure.",
+		/**
+		 * The recorded total is drinks + tips + services (owner, 29 Sep 2026:
+		 * "Count services too"); this box edits the drinks, and the rest travels
+		 * back as recorded. {amount} is the tips and services together.
+		 */
+		logSalesKeptNote:
+			"Includes {amount} in tips and services — saving changes the drink sales only; those stay as recorded.",
+		logSalesNoPrs: "Nobody is booked on this shift.",
+		/** The server's "Sale logged", in the reader's words. */
+		saleLoggedServer: "Sale logged.",
+		couldNotLogSale: "Could not log this sale.",
 		// Shown when tonight could not be LOADED — distinct from a genuinely
 		// quiet night, which every other empty state on this screen already says.
 		couldNotLoadTonight: "Could not load tonight",
@@ -2822,6 +3177,9 @@ const en = {
 		shiftHistory: "Shift history",
 		rate: "Rate",
 		submit: "Submit",
+		/** Said only once the server has stored it — the old toast fired before the request, and on a real session the request was never sent at all. */
+		ratingSaved: "Rating saved for {name}",
+		couldNotSaveRating: "Could not save the rating — the agency was not told",
 		dismiss: "Dismiss",
 		/**
 		 * Post-seal prompt, shown beside the Dismiss button above. Chinese has no
@@ -2895,6 +3253,8 @@ const en = {
 		colNormal: "Normal",
 		colTotalEarn: "Total earn",
 		tonightTotal: "Tonight total",
+		/** Foot-meta row under the floor earnings table. Both amounts arrive formatted by formatRM. */
+		floorDrinksAndTips: "Floor drinks {drinks} · tips {tips}",
 		weeklyReconciliation: "Weekly reconciliation",
 		reconciliationHint:
 			"A statement counts completed shifts only. This total also counts shifts that ran but were never marked completed, so a gap is worth checking.",
@@ -3026,7 +3386,6 @@ const en = {
 		dashWelcomeNamed:
 			"Welcome back, {name} — here's what needs your attention today.",
 		dashWelcome: "Welcome back — here's what needs your attention today.",
-		dashOpenPrototype: "Open prototype",
 		dashLoading: "Loading…",
 
 		dashPlatformBreakdown: "Platform breakdown",
@@ -3711,7 +4070,7 @@ const en = {
 		displayName: "Display name",
 		/** Placeholder for the display-name input. */
 		yourDisplayName: "Your display name",
-		/** Field label. The value beside it is user.roles[0], a raw stored role that stays English. */
+		/** Field label. The value beside it is the account's stored admin role name (adminConsoleRoleName), which stays English. */
 		role: "Role",
 		userId: "User ID",
 		/** Discards unsaved name/photo edits. */
@@ -3988,6 +4347,10 @@ const en = {
 		/** Admin's own wording for the stored `signed` PV state; the agency portal words it "To pay". */
 		pvSigned: "Signed",
 		colPrName: "PR name",
+		/** Column head over the voucher number with its agency under it — numbering is per agency. */
+		colVoucher: "Voucher",
+		/** Column head over the agency's and the PR's signing times. */
+		colSigned: "Signed",
 		colCycle: "Cycle",
 		issued: "Issued",
 		pvLoadFailed: "Failed to load vouchers. Try again.",
@@ -4065,6 +4428,72 @@ const en = {
 			"Optional — so this period can be matched to a statement",
 		paymentReferencePlaceholder: "e.g. MBB-20260827-0001",
 		confirmPayment: "Confirm payment",
+		/*
+		 * VOID — take back an UNPAID bill raised in error (owner, 29 Sep 2026:
+		 * "Add Void"). The confirmation is the server's own sentence; these are
+		 * the button, the form and the fallbacks.
+		 */
+		voidInvoice: "Void",
+		voidInvoiceConfirm: "Void invoice",
+		voidReason: "Reason for voiding",
+		voidReasonPlaceholder: "Why is this bill being voided?",
+		voidReasonHint:
+			"Only an unpaid bill with no payment in progress can be voided. It stops counting as owed, and the bill and this reason stay on record.",
+		voidFailed: "Could not void this bill",
+		/** A voided row's reason, read back off its note. */
+		voidedReason: "Voided: {reason}",
+		/*
+		 * REFUNDS DUE — the red card at the top of Plan Payment. Money that landed
+		 * on a voided or already-paid bill settles nothing and is owed back; the
+		 * server records it and this is where an admin finally sees it.
+		 */
+		refundsDueTitleOne: "1 payment needs a refund",
+		refundsDueTitleMany: "{n} payments need a refund",
+		refundsDueHint:
+			"Money arrived for a bill that was voided or already paid, so it settled nothing and is owed back to the organisation. Open a line to see the payment.",
+		refundReasonVoided: "Paid for a voided bill",
+		refundReasonPaidTwice: "Paid twice",
+		/** A failed READ — never shown as "nothing owed". */
+		refundsDueLoadFailed: "Could not check for payments owed back",
+		/** The line's button, and the dialog it opens. */
+		markRefunded: "Mark refunded",
+		/** Dialog title, and the line button's accessible name. */
+		markRefundedTitle: "Mark {invoice} refunded",
+		markRefundedIntro:
+			"Record that {amount} went back to {org}. The payment stays on record as Refunded, beside why it was owed; the bill itself does not change.",
+		refundReference: "Refund reference",
+		refundReferenceHint:
+			"The bank or gateway reference of the money sent back — up to {max} characters. It is kept beside the payment's own reference.",
+		refundReferencePlaceholder: "e.g. MBB-20260930-0001",
+		/** Shown instead of truncating a pasted reference the server would refuse. */
+		refundReferenceTooLong: "Too long — {n} of {max} characters",
+		confirmRefunded: "Confirm refund",
+		/** Only when the server gave no sentence of its own. */
+		markRefundedFailed: "Could not mark this payment refunded",
+		markedRefunded: "Marked refunded",
+		/**
+		 * The line button's accessible name. It STARTS with the visible
+		 * "Mark refunded" so a voice user saying what they see finds it
+		 * (WCAG 2.5.3), then names which bill.
+		 */
+		markRefundedFor: "Mark refunded — {invoice}",
+		/*
+		 * The server's own sentences (refund-message.ts), word for word — English
+		 * reads exactly as sent; `localiseRefundMessage` maps each to its key.
+		 */
+		serverRefunded:
+			"{invoice}: {amount} marked refunded — reference {reference}",
+		serverRefundAlreadyDone: "This payment is already marked refunded",
+		serverRefundNotOwed:
+			"Only a payment owed back can be marked refunded — this one did not land on a voided or already-paid bill",
+		serverRefundReferenceMissing:
+			"Enter the refund reference — the bank or gateway reference of the money sent back",
+		serverRefundReferenceTooLong:
+			"The refund reference is too long — {max} characters at most",
+		serverRefundNoRoom:
+			"That refund reference is too long to keep beside this payment's own reference — use a shorter one",
+		/** The server's plain "Not Found" on this action — the payment is gone. */
+		serverRefundPaymentGone: "This payment no longer exists",
 
 		/** The detail panel behind a Plan Payment row. */
 		paymentPanelIntro:
@@ -4122,6 +4551,8 @@ const en = {
 		attemptSucceeded: "Settled",
 		attemptFailed: "Declined",
 		attemptRefunded: "Refunded",
+		/** A pending attempt whose money arrived on a voided or already-paid bill. */
+		attemptRefundDue: "Refund due",
 		attemptVoided: "Withdrawn",
 		showingBillingPeriods: "Showing {from} - {to} of {total} billing periods",
 		/**
@@ -4232,14 +4663,52 @@ const en = {
 		noCutlostRequests: "No cutlost requests",
 		selectLeaveToReview: "Select an MC / leave request to review",
 		selectCutlostToReview: "Select a cutlost request to review",
-		inviteHint: "Enter IC + contact → invite sent to complete profile",
-		sendInvite: "Send invite",
-		/** The invite button while POST /pr is in flight. */
-		sendingInvite: "Sending…",
+		/*
+		 * ⚠️ NOTHING IS SENT. `POST /pr` adds the PR to the roster as an account
+		 * with no password and messages nobody; the PR claims it by signing up in
+		 * the PR app with the SAME mobile number (a verified WhatsApp code on that
+		 * number claims the stub). This used to promise "invite sent to complete
+		 * profile" — an invite no code path has ever sent.
+		 */
+		addPrHint:
+			"Adds them to your roster now. Nothing is sent to the PR — they get their own login by signing up in the PR app with this mobile number.",
+		addToRoster: "Add to roster",
+		/** The button while POST /pr is in flight. */
+		addingToRoster: "Adding…",
 		/** POST /pr accepted — the sheet closes on this, and only on this. */
 		prInvited: "PR added to your roster.",
 		/** POST /pr refused with no sentence of its own. */
 		couldNotInvitePr: "Could not add this PR — try again",
+		/** A join/departure decision refused with no sentence of its own. */
+		couldNotSaveDecision: "Could not save the decision — try again",
+		/*
+		 * The SERVER's own join / departure decision sentences (backend
+		 * agency/join-decision.ts), re-worded at the render by
+		 * pr-decision-copy.ts. English matches the server word for word.
+		 */
+		srvJoinApproved: "Request approved — they are on your roster now.",
+		srvJoinDeclined: "Request declined — they were not added to your roster.",
+		srvDepartureApproved:
+			"Departure approved — they are no longer on your roster.",
+		srvDepartureDeclined:
+			"Departure declined — they stay on your roster, and your reason was sent to them.",
+		srvAlreadyApproved:
+			"Already approved — they are on your roster. Nothing changed.",
+		srvDepartureAlreadyDeclined:
+			"Their departure was already declined — they stay on your roster. Nothing changed.",
+		srvApprovedCannotDecline:
+			"This request was already approved and they are on your roster, so it can no longer be declined. Nothing changed.",
+		srvAlreadyDeclined: "Already declined. Nothing changed.",
+		srvDeclinedCannotApprove:
+			"This request was already declined, so it can no longer be approved — they can apply again, and the new request will appear here. Nothing changed.",
+		srvDepartureAlreadyApproved:
+			"Their departure was already approved — they are no longer on your roster. Nothing changed.",
+		srvDepartureApprovedCannotDecline:
+			"Their departure was already approved, so it can no longer be declined. Nothing changed.",
+		srvDecisionChanged:
+			"This request changed while you were deciding it — reload the page to see it now. Nothing changed.",
+		srvDepartureReasonRequired:
+			"A reason is required to reject a departure — it is sent to the PR.",
 	},
 	/**
 	 * Flow 2 — the agency's payout runs (agency pays PR). Not to be confused with
@@ -4320,6 +4789,11 @@ const en = {
 		weekWorked: "Week worked",
 		/** Chip on the most recently issued voucher in the list. */
 		latest: "Latest",
+		/**
+		 * The voucher date on a card NOT yet sent to the PR. It is the day the
+		 * voucher was raised, and "Issued" before the send read as if the PR had it.
+		 */
+		raisedOn: "Raised",
 		prIdLabel: "PR ID",
 		/** Short form on a receipt row where the full "Commission logged" will not fit. */
 		commissionShort: "Comm",
@@ -4396,6 +4870,12 @@ const en = {
 		voucherReopened: "Voucher re-opened — both signatures removed",
 		/** Toast after the late agency signature on a PR-signed voucher. */
 		voucherSignedCanPay: "Voucher signed — you can record the payment now",
+		/** Screen-reader label on the Payroll voucher list's free-text search. */
+		searchVouchers: "Search vouchers",
+		/** Placeholder: what the search matches. "PV no." is the printed voucher number. */
+		searchVouchersPlaceholder: "PV no., PR name, IC or outlet",
+		/** Payroll header when the agency holds no active plan row — never a demo plan in its place. */
+		noActivePlan: "No active plan",
 	},
 	agencyPrs: {
 		/** Recent-penalties band summary, backend evaluation. `amount` arrives as "RM 120" from the call site — currency never lives in the dictionary. */
@@ -4542,6 +5022,8 @@ const en = {
 		 */
 		statusDirect: "Direct",
 		statusApproved: "Approved",
+		/** The SUBSCRIBER took the request back before anyone answered — not the admin's "Declined". */
+		statusWithdrawn: "Withdrawn",
 		roleOutlet: "Outlet",
 		roleAgency: "Agency",
 		editRequest: "Edit request",
@@ -4695,6 +5177,9 @@ const en = {
 		noteApproved: "Approved — the price now follows the to-plan.",
 		noteDeclinedPlanChange:
 			"Declined — the outlet stays on the from-plan price.",
+		/** The venue took the request back itself — nobody declined it. */
+		noteWithdrawnPlanChange:
+			"Withdrawn by the outlet — it stays on the from-plan price.",
 		toastPlanChangeApproved: "Plan change approved",
 		toastPlanChangeApproveFailed: "Failed to approve plan change",
 		toastPlanChangeDeclined: "Plan change declined",
@@ -4968,12 +5453,12 @@ const en = {
 		colItem: "Item",
 		/** Line-table column header; also the add-form's Qty placeholder. */
 		colQty: "Qty",
-		/** Line-table column header. The PR's cut, not the outlet's selling price. */
-		colCommission: "Commission",
+		/** Line-table column header. The PR's cut for the WHOLE line — `amount` is never multiplied by the quantity — not the outlet's selling price. */
+		colCommission: "Commission · line total",
 		/** Discards an unsaved line draft. Nothing is written. */
 		undo: "Undo",
 		commissionIsPrCut:
-			"Commission is the PR's cut, not the price printed on the paper.",
+			"Commission is the PR's cut for the whole line — every unit together, not one — and it is not the price printed on the paper. Changing the quantity does not recalculate it.",
 		/** The link that opens the collapsed add-a-line form. */
 		paperShowsMissingItem: "The paper shows an item this list is missing",
 		addMissingLine: "Add a missing line",
@@ -4995,7 +5480,7 @@ const en = {
 		/** aria-label on the add-form's qty box (colQty is the short visible form). */
 		quantity: "Quantity",
 		/** aria-label. RM names the FIELD's unit here, not a formatted value. */
-		commissionInRm: "Commission in RM",
+		commissionInRm: "Commission for the whole line, in RM",
 		noListConfigured:
 			"{outlet} has no {list} configured, so a line cannot be verified — ask the outlet to set it up first.",
 		/** Fills {list} in noListConfigured for a drinks receipt. */
@@ -5006,7 +5491,7 @@ const en = {
 		outletListUnavailable:
 			"The outlet's list is not available, so a line cannot be verified.",
 		outletPriceVsCommission:
-			"The RM beside each item is {outlet}'s selling price, for matching against the paper. The box you fill in is the PR's commission — a different figure.",
+			"The RM beside each item is {outlet}'s selling price for ONE unit, for matching against the paper. The box you fill in is the PR's commission for the whole line — all the units together, a different figure.",
 		/** {kind} arrives already translated (money.drinks / money.tips). */
 		lockedKindHint:
 			"This is a {kind} receipt, so a line added here is {kind} — one paper is one kind.",
@@ -5043,7 +5528,7 @@ const en = {
 		/** Screen-reader label on a per-line qty box. */
 		quantityForItem: "Quantity for {item}",
 		/** Screen-reader label on a per-line commission box. */
-		commissionRmForItem: "Commission in RM for {item}",
+		commissionRmForItem: "Whole-line commission in RM for {item}",
 		/** Mid-line on the receipt row, after the PR and the outlet. */
 		orderNoInline: "order {no}",
 		/** {when} is already formatted by the row's own date helper. NOT table.logged, which is a column header meaning entry METHOD. */
@@ -5116,18 +5601,36 @@ const en = {
 		prNameField: "PR name",
 		/** Add-PR dialog write failure. */
 		couldNotAddPr: "Couldn't add the PR. Please try again.",
+		/** Under the Add-PR mobile field: why it is required. */
+		phoneRequiredHint:
+			"Required — the PR claims this account by signing up with this number.",
 		/** Title of the roster earnings sheet opened from the Drinks amount. */
 		drinksBreakdown: "Drinks breakdown",
 		/** Title of the roster earnings sheet opened from the Tips amount. */
 		tipsBreakdown: "Tips breakdown",
 		/** Title of the roster earnings sheet opened from the Est. payout amount. */
 		estPayoutBreakdown: "Est. payout breakdown",
+		/**
+		 * The same sheet on a real session, which breaks the figure down by the
+		 * server's own wage per booking — the number the column shows.
+		 */
+		estPayoutServerHint:
+			"Each booking's wage at the PR's tier, as the server priced it — the Est. payout column's own figure. Commission is added on the PR's voucher once their receipts are approved.",
+		shiftTotal: "Shift total",
+		noBookingsThisShift: "No PRs are booked on this shift.",
 		/** Empty state of the drinks breakdown table. */
 		noDrinkSalesThisShift: "No drink sales logged for this shift yet.",
 		/** Empty state of the tips breakdown table. */
 		noTipsThisShift: "No tips logged for this shift yet.",
 		/** Foot-meta row under the drinks breakdown. {amount} arrives already formatted by formatRM. */
 		floorDrinksTotal: "Floor drinks {amount}",
+		/**
+		 * The Drinks / Tips sheets on a REAL session, which list each PR's floor
+		 * sales as the server recorded them (`shift_sale`) — the column's own
+		 * figures, not the demo rate card's happy-hour split.
+		 */
+		recordedSalesHint:
+			"Each PR's floor sales from their approved receipts, as the server recorded them — the column's own figures. Commission is added on the PR's voucher.",
 		/** Accessible name of the planning date trigger in weekly mode. Same zh as roster.pickWeek, which is the trigger's visible placeholder. */
 		chooseWeek: "Choose week",
 	},
@@ -5361,6 +5864,8 @@ const en = {
 		financeHead: "Finance Head",
 		/** Grid row label; same wording as agencyPv.stepPrSigned, which is the workflow-rail step. */
 		prSigned: "PR signed",
+		/** Grid row label for the agency's half of the dual signature — whoever signed, whatever their title. The name and capacity follow it. */
+		agencySigned: "Agency signed",
 		/** Short form of payroll.bankReference, for the narrow summary grid. */
 		bankRef: "Bank ref",
 		/** Heading over the issuer method + payee bank details, which stay as stored. */
@@ -5413,6 +5918,10 @@ const en = {
 		 * sign-up. Distinct from an invite, which the organisation started.
 		 */
 		noPendingMembers: "No one is waiting to join right now.",
+		/** Each filter's OWN empty state — the Deactivated tab used to say nobody was waiting to join. */
+		noDeclinedMembers: "No join request has been declined.",
+		noDeactivatedMembers: "No team member has been deactivated.",
+		noMemberRecords: "No members to show yet.",
 		/** The queue's own name — on the agency Approvals tabs and above the
 		    outlet's team list. "New member" not "Requests": the reader is being
 		    told WHO is waiting, not what kind of paperwork it is. */
@@ -5482,6 +5991,27 @@ const en = {
 			"Their portal role was revoked when they were switched off, so choose the title they are coming back as.",
 		reactivateButton: "Reactivate member",
 		reactivateFailed: "Could not reactivate this member",
+		/** The lane the row still remembers (0160), shown above the picker. */
+		reactivatePreviousRole: "Role before removal: {role}",
+		/** The picker's prompt while that lane is Owner/Guarantor — not grantable here. */
+		reactivatePickRole: "Choose a role…",
+		/* Fallbacks only — each decision shows the server's own sentence first. */
+		memberReactivated: "Member reactivated",
+		memberDeactivated: "Member deactivated",
+		memberApproved: "Request approved",
+		memberDeclined: "Request declined",
+		/*
+		 * The SERVER's own member-change sentences (backend
+		 * rbac/member-change-message.ts), re-worded at the render by
+		 * member-change-copy.ts. {role} arrives already translated.
+		 */
+		serverMemberReactivatedAs: "Member reactivated as {role}.",
+		serverRequestApprovedAs: "Request approved — they join as {role}.",
+		serverMemberDeactivated: "Member deactivated — they no longer have access.",
+		serverRoleChangedTo: "Role changed to {role}.",
+		serverMemberUpdated: "Member updated.",
+		serverRequestDeclined:
+			"Request declined — they were not added to the team.",
 		deactivatedBy: "Deactivated by",
 		declinedRole: "Declined",
 		declinedBy: "Declined by",
@@ -6824,12 +7354,12 @@ const en = {
 		errorInvalidCredentials: "Invalid email or password. Please try again.",
 		/** Sign-in banner for a thrown value that is not an Error and not an axios failure. */
 		errorUnexpected: "An unexpected error occurred. Please try again.",
-		/** Rendered in place of the identical English sentence the backend sends. The backend's wording is the map KEY in login.tsx and stays untranslated — change this pair together if auth.controller's message changes. */
-		errorAccountNotRegistered: "This account is not registered yet.",
-		/** Display side of the backend's "This account is inactive." login refusal. See errorAccountNotRegistered. */
+		/** Rendered in place of the identical English sentence the backend sends — ONE answer for an unknown account, an account with no password and a wrong password (owner, 29 Sep 2026: "General message, both"). The backend's wording is the map KEY in login.tsx and stays untranslated — change this pair together with the backend's account-answers.ts. */
+		errorWrongEmailOrPassword: "Wrong email or password",
+		/** The phone sign-in's version of errorWrongEmailOrPassword. */
+		errorWrongPhoneOrPassword: "Wrong phone number or password",
+		/** Display side of the backend's "This account is inactive." — said only once the password is right. See errorWrongEmailOrPassword. */
 		errorAccountInactive: "This account is inactive.",
-		/** Display side of the backend's "Wrong password" login refusal. See errorAccountNotRegistered. */
-		errorWrongPassword: "Wrong password",
 		/** First line of the /forgot-password h1; forgotHeadingAccent finishes it. */
 		forgotHeading: "Forgot your",
 		/** Gradient second line of the /forgot-password h1 — one sentence with forgotHeading. */
@@ -7210,6 +7740,7 @@ const zh: PortalTranslations = {
 		kindPvDayReviewPending: "每日复核",
 		kindSubscription: "订阅",
 		kindLeave: "病假 / 请假",
+		kindCutlost: "缺班损失",
 		kindUnknown: "更新",
 		shiftAssignedTitle: "已派班",
 		shiftAssignedPrBody: "{outlet} —— 请在班次首页确认",
@@ -7282,6 +7813,193 @@ const zh: PortalTranslations = {
 		selfLogApprovedBody: "经纪公司已批准您的手动收据记录 · {amount}",
 		selfLogRejectedBody:
 			"经纪公司已驳回您的手动收据记录 · {amount} —— 请联系经纪公司",
+		srvAVenue: "某门店",
+		srvTheVenue: "该门店",
+		srvYourVenue: "你的门店",
+		srvAPr: "一位 PR",
+		srvUpcomingShift: "即将到来的班次",
+		srvListSep: "；",
+		srvOvertimeTitle: "加班待审批",
+		srvOvertimeBody: "{name} 于 {date} 超出排定结束时间 {minutes} 分钟",
+		srvOvertimeBodyNoDate: "{name} 超出排定结束时间 {minutes} 分钟",
+		srvLeaveTitle: "病假 / 请假申请 —— {name}",
+		srvLeaveBody:
+			"{name} 申请免除 {when} 的班次：「{reason}」。请到「审批 → 病假 / 请假」处理。",
+		srvCoverTitle: "需要顶班 —— {name}",
+		srvCoverBodyCancelled:
+			"{name} 不上 {when} 的班（已取消）。请在排班的补位名单中找人替补。",
+		srvCoverBodyLeave:
+			"{name} 不上 {when} 的班（请假已批准）。请在排班的补位名单中找人替补。",
+		srvNewShiftTitle: "新班次 —— {venue}",
+		srvNewShiftBodyOne: "{venue} 发布了 {when} 的班次，需要 1 位 PR。",
+		srvNewShiftBodyMany: "{venue} 发布了 {when} 的班次，需要 {n} 位 PR。",
+		srvWithdrawnTitle: "班次已撤回 —— {venue}",
+		srvWithdrawnBodyNone:
+			"{venue} 撤回了 {when} 的班次。该班次没有已排班的人。",
+		srvWithdrawnBodyOne:
+			"{venue} 撤回了 {when} 的班次。已排班的 1 位 PR 已被放行并收到通知。",
+		srvWithdrawnBodyMany:
+			"{venue} 撤回了 {when} 的班次。已排班的 {n} 位 PR 已被放行并收到通知。",
+		srvWithdrawnPrTitle: "有班次被撤回",
+		srvWithdrawnPrBody: "{venue} 撤回了 {when} 的班次。你已不再被安排该班次。",
+		srvCutRequestTitle: "门店申请削减班次",
+		srvCutRelease: "放行 {names}",
+		srvCutSlotsOne: "削减 1 个名额",
+		srvCutSlotsMany: "削减 {n} 个名额",
+		srvCutApprovedTitle: "缺班损失申请已批准",
+		srvCutDeclinedTitle: "缺班损失申请已拒绝",
+		srvRatingLowTitle: "{name} 的评分已下降",
+		srvRatingLowBody:
+			"目前平均 {avg} 分（共 {n} 条评价），低于 {line} 分的警戒线。",
+		srvDayReviewTitleSignOne: "1 张薪资单等待你签署",
+		srvDayReviewTitleSignMany: "{n} 张薪资单等待你签署",
+		srvDayReviewTitleReviewOne: "1 张薪资单等待收据审核",
+		srvDayReviewTitleReviewMany: "{n} 张薪资单等待收据审核",
+		srvDayReviewTitleBoth: "{n} 张薪资单需要审核或签署",
+		srvDayReviewPartReviewOne:
+			"1 张仍有未决定的收据或加班 —— 请在「薪资 › 收据」中批准",
+		srvDayReviewPartReviewMany:
+			"{n} 张仍有未决定的收据或加班 —— 请在「薪资 › 收据」中批准",
+		srvDayReviewPartSignOne: "1 张已审核但未签署 —— 需财务签署后才能发给 PR",
+		srvDayReviewPartSignMany: "{n} 张已审核但未签署 —— 需财务签署后才能发给 PR",
+		srvDayReviewBody:
+			"上周（{start} 至 {end}）的薪资单未能发出：{parts}。在此之前，PR 看不到该周的任何薪资。",
+		srvTierTitleCustom: "上周 {n} 张薪资单 · 定制价",
+		srvTierTitleFrozen: "上周 {n} 张薪资单 · 定制价仍待确认",
+		srvTierTitlePast: "上周 {n} 张薪资单 · 超出价目表",
+		srvTierTitleUnchanged: "上周 {n} 张薪资单 · 维持 {plan}",
+		srvTierTitleMoved: "上周 {n} 张薪资单 · 现为 {plan}",
+		srvTierBodyCustom:
+			"你在 {start} 至 {end} 期间开出了 {n} 张薪资单。你使用的是协商的定制价，不随用量变动 —— 价目表的档位不适用。",
+		srvTierBodyFrozen:
+			"你在 {start} 至 {end} 期间开出了 {n} 张薪资单。你的定制价申请尚未回复，档位暂时维持在 {plan}，以免正在协商的价格随之变动。InnocenZ 管理员回复后，档位会恢复按每周用量调整。",
+		srvTierBodyPast:
+			"你在 {start} 至 {end} 期间开出了 {n} 张薪资单 —— 超出最高公开档位，该档位没有标价。已请 InnocenZ 管理员与你协商定制价。在对方回复前，你维持在 {plan}。",
+		srvTierBodyUnchanged:
+			"你在 {start} 至 {end} 期间开出了 {n} 张薪资单，仍在 {plan} 档位内，每周费用不变。",
+		srvTierBodyMoved:
+			"你在 {start} 至 {end} 期间开出了 {n} 张薪资单，落在 {plan} 档位，因此从本期起每周费用按 {plan} 计算 —— 你原本是 {previous}。无需操作：档位随你开出的薪资单自动调整，不需要选择方案。",
+		srvBillTitle: "新账单：{amount}",
+		srvBillBody:
+			"{start} 至 {end}。{proRata}{credit}打开「订阅」查看所有未付款项。",
+		srvBillBodyLines:
+			"{start} 至 {end}，共 {n} 项。{proRata}{credit}打开「订阅」查看所有未付款项。",
+		srvBillProRata:
+			"按比例计费：自 {from} 起 {days} 天中的 {billed} 天（整期 {full}）。",
+		srvBillCredit: "因改用较便宜的方案，已抵扣 {credit}（抵扣前 {before}）。",
+		srvAutopayTitle: "自动扣款失败：{amount}",
+		srvAutopayBodyCard:
+			"我们无法从你的银行卡扣取 {start} 至 {end} 的费用{why}。账单仍未支付 —— 请在「订阅 › 付款记录」中以 FPX 或电子钱包付款。",
+		srvAutopayBodyWallet:
+			"我们无法从你的电子钱包扣取 {start} 至 {end} 的费用{why}。账单仍未支付 —— 请在「订阅 › 付款记录」中以 FPX 或电子钱包付款。",
+		srvAutopayReason: "（{reason}）",
+		srvShiftAssignedTitle: "你有新的班次",
+		srvShiftAssignedBody: "你的班次在 {date}。",
+		srvShiftCancelledTitle: "班次已取消",
+		srvShiftRemovedTitle: "你已被移出一个班次",
+		srvShiftCancelledBody: "你已不再被安排 {date} 的班次。",
+		srvLeaveApprovedTitle: "病假 / 请假已批准",
+		srvLeaveApprovedBody:
+			"经纪公司已批准你的申请 —— 你免于出勤这个班次，且不会被扣款。",
+		srvLeaveRejectedTitle: "病假 / 请假被拒绝",
+		srvLeaveRejectedBody: "经纪公司拒绝了你的申请 —— 你仍需出勤这个班次。",
+		srvOvertimeApprovedTitle: "加班已批准",
+		srvOvertimeApprovedBody:
+			"你于 {date} 的 {minutes} 分钟加班已获批准 —— {amount} 已列入该周的薪资单。",
+		srvOvertimeRejectedTitle: "加班未获批准",
+		srvOvertimeRejectedBody:
+			"你于 {date} 的 {minutes} 分钟加班未获批准。如认为有误，请联系你的经纪公司。",
+		srvDisputeAcceptedTitle: "你的争议已被接受",
+		srvDisputeRejectedTitle: "你的争议已被驳回",
+		srvDisputeBody: "{date} 的{part}",
+		srvDisputeBodyNote: "{date} 的{part} —— {note}",
+		srvPartWages: "工资",
+		srvPartDrinks: "酒水",
+		srvPartTips: "小费",
+		srvPartOthers: "其他",
+		srvPvIssuedTitle: "你的薪资单已就绪",
+		srvPvResentTitle: "提醒：你的薪资单还在等你处理",
+		srvPvIssuedBody:
+			"{start} 至 {end} 这一周。请核对金额，如有出入请提出争议。",
+		srvPvIssuedBodyNoWeek: "请核对金额，如有出入请提出争议。",
+		srvPvPaidTitle: "款项已支付",
+		srvPvPaidBody: "{voucher} —— {amount} 已转入你的银行账户。",
+		srvYourVoucher: "你的薪资单",
+		srvReleasedTitle: "你被安排提前收工",
+		srvReleasedBody:
+			"{venue} · {date} —— 工资已按你实际工作的时数锁定为 {amount}",
+		srvTheVenueStart: "该门店",
+		srvJoinAcceptedTitle: "经纪公司已接受你的申请",
+		srvJoinAcceptedBody: "现在可以为你安排班次了。",
+		srvJoinDeclinedTitle: "你的加入申请被拒绝",
+		srvDepartureApprovedTitle: "你的离开申请已批准",
+		srvDepartureApprovedBody: "你已不再隶属这家经纪公司。",
+		srvDepartureDeclinedTitle: "你的离开申请被拒绝",
+		srvSwapTitle: "换班请求 —— 需要你的答复",
+		srvSwapBody:
+			"经纪公司请求把你 {date} 的班次（{slot}）调到另一家门店。请在班次开始前在应用中接受或拒绝 —— 未回复的请求会在开始时间失效。",
+		srvSwapBodyAt:
+			"经纪公司请求把你 {date} 的班次（{slot}）调到另一家门店，时间为 {to}。请在班次开始前在应用中接受或拒绝 —— 未回复的请求会在开始时间失效。",
+		srvTimeTbc: "时间待定",
+	},
+	outletServer: {
+		noApprovedAgency:
+			"没有可请求 PR 的已批准经纪公司 —— 请先在「设置」中关联一家经纪公司",
+		selectedAgenciesNotApproved: "所选的经纪公司都未获准为此门店服务",
+		ownOutletOnly: "你只能为自己的门店发布班次",
+		onlyOutletPosts: "只有门店可以发布班次，由门店把职位发给其经纪公司。",
+		noOrganisation: "此账号未关联任何机构",
+		unknownTemplate: "此门店没有这个活动模板",
+		venuePending:
+			"此门店仍在等待 InnocenZ 审核，暂时无法发布班次。审核通过后会立即通知你。",
+		venueBlocked:
+			"此门店目前{status}，无法发布班次。请联系 InnocenZ 恢复权限。",
+		venueSuspended: "已被暂停",
+		venueInactive: "已停用",
+		noPlan:
+			"此门店没有有效的订阅方案，无法发布班次。请在「设置 → 订阅」中选择方案，或联系 InnocenZ。",
+		planCapacityOne:
+			"你的 {plan} 方案每天可请求 1 位 PR。{date} 已请求 {used} 位，因此此班次最多只能再请求 {left} 位 —— 请减少人数或升级方案。",
+		planCapacityMany:
+			"你的 {plan} 方案每天可请求 {limit} 位 PR。{date} 已请求 {used} 位，因此此班次最多只能再请求 {left} 位 —— 请减少人数或升级方案。",
+		tiersOverAskedOne:
+			"各薪资档共请求 {asked} 位 PR，但此班次只有 1 个名额 —— 请减少某一档的人数或增加总人数。",
+		tiersOverAskedMany:
+			"各薪资档共请求 {asked} 位 PR，但此班次只有 {slots} 个名额 —— 请减少某一档的人数或增加总人数。",
+		sameWindow:
+			"你在 {date} {slot} 已有一个班次。请提高该班次的人数，不要在同一时间再发布一个。",
+		sameWindowNamed:
+			"你在 {date} {slot} 已有一个班次（「{event}」）。请提高该班次的人数，不要在同一时间再发布一个。",
+		overlap:
+			"这与你在 {date} {slot} 的班次时间冲突 —— 同一门店的班次不能重叠。请修改此班次的时间，或先调整另一个班次。",
+		overlapNamed:
+			"这与你在 {date} {slot} 的班次（「{event}」）时间冲突 —— 同一门店的班次不能重叠。请修改此班次的时间，或先调整另一个班次。",
+		slotNeedsWindow:
+			"请为班次设置时间段，例如「22:00 - 04:00」—— 仅有名称无法检查时间冲突。",
+		eventNameTooLong: "活动名称太长",
+		specialNameTooLong: "活动名称太长",
+		languagesTooLong: "语言内容太长",
+		dressCodeTooLong: "着装要求太长",
+		noTimeCannotSeal: "此班次没有排定时间，因此无法结束",
+		sealAfterFinish: "班次时段结束后才能结束此班次",
+		cannotWithdrawToday:
+			"此班次在今天或已经过去 —— 无法再撤回。请联系经纪公司通知团队取消。",
+		shiftNotFound: "找不到该班次",
+		prNotFound: "找不到该 PR",
+		prNotOnShift: "该 PR 没有在此班次上值班",
+		salesTotalTooLarge: "销售总额过大",
+		onlyVenueCutLoss: "只有门店可以提出减损申请",
+		assignmentsNotOnShift: "有一个或多个排班不在此班次上",
+		prsNotOnShift: "有一位或多位 PR 不在此班次上",
+		invalidRequest: "请求无效",
+		ratingShiftMismatch: "该班次不属于这位 PR 在此门店的班次。",
+		notOutletMember: "无权操作 —— 你不是此门店的成员",
+		forbiddenPermission: "无权操作 —— 需要 {module} 模块的 {verb} 权限",
+		forbiddenPermissionShort: "无权操作 —— 需要 {module} 模块的 {verb} 权限",
+		forbiddenRole: "无权操作 —— 需要以下角色之一：{roles}",
+		forbiddenRoleJoin: "、",
+		batchEmpty: "请至少添加一个班次再发布。",
+		batchTooMany: "一次最多只能发布 {max} 个班次 —— 其余的请分开另行发布。",
 	},
 	nav: {
 		today: "今天",
@@ -7372,6 +8090,7 @@ const zh: PortalTranslations = {
 		selectPrs: "选择 PR",
 		resetToWorkspaceRates: "重置为工作区费率",
 		loadingYourPrs: "正在加载您的 PR…",
+		couldNotLoadPrs: "无法加载您的 PR — 请刷新页面重试。",
 		noPrsToNameYet:
 			"暂无可指定的 PR — 只能指定曾在本店上过班的 PR。不指定人员直接发布，由经纪公司安排。",
 		notAvailableYet: "暂未开放",
@@ -7492,6 +8211,7 @@ const zh: PortalTranslations = {
 		goToSettingsAgencies: "前往「设置 → 经纪公司」",
 		postedShiftOne: "已发布 {n} 个班次",
 		postedShiftMany: "已发布 {n} 个班次",
+		batchRefusedOn: "未发布任何班次 —— {date} 的班次被拒绝：{reason}",
 		sessionExpired: "你的门店登录已过期 —— 请退出后重新登录再发布",
 		shiftExceedsPlan: "班次超出套餐限制 —— 每班最多 {max} 位指名 PR（{date}）",
 		peopleExceedsPlan:
@@ -8017,6 +8737,7 @@ const zh: PortalTranslations = {
 		noAgencyForAccount: "您的账户尚未关联任何经纪公司",
 		noLinkedAccount: "此 PR 尚未关联账户，因此无法保存资料",
 		nameRequired: "请输入 PR 的姓名",
+		mobileRequired: "请输入 PR 的手机号 — PR 注册时须用此号码认领账户。",
 		title: "PR 管理",
 		accessRestricted: "无访问权限",
 		tapToMultiSelect: "点击 PR 卡片可多选",
@@ -8035,7 +8756,7 @@ const zh: PortalTranslations = {
 		place: "所在地",
 		experience: "经验",
 		yearsExperience: "从业年数",
-		kpiTier: "KPI 等级",
+		agencyGrade: "经纪公司评级",
 		trainingTier: "培训等级",
 		payClass: "薪资级别",
 		notGraded: "未评级",
@@ -8137,6 +8858,8 @@ const zh: PortalTranslations = {
 		unavailablePrs: "不可排班 PR",
 		estPayout: "预计支出",
 		prsRosteredThisWeek: "本周已排班 PR",
+		weekShiftCountOne: "{n} 个班次",
+		weekShiftCountMany: "{n} 个班次",
 		estLabourCost: "预计人力成本",
 		liveGps: "实时定位",
 		prSwapRequests: "PR 换班申请",
@@ -8252,7 +8975,8 @@ const zh: PortalTranslations = {
 		recordsAndTotal: "{records} · 合计 {total}",
 		totalPaid: "已付总额",
 		noPaidVouchersMatch: "没有符合筛选条件的已付薪资单",
-		summaryLine: "{count} {label} · {range} · 已支付 {total}",
+		summaryLine: "{count} {label} · {range} · 实得 {total} · 工资 {wages}",
+		summaryLineWagesOnly: "{count} {label} · {range} · 工资 {total}",
 		datePaid: "付款日期",
 		paid: "已付款",
 		cycleLabel: "周期",
@@ -8263,11 +8987,11 @@ const zh: PortalTranslations = {
 		colDate: "日期",
 		paidPvs: "已付薪资单",
 		prViewHint:
-			"PR 视图 —— 班次合计与上周 / 上上周薪资单一致。点击 PR，再点门店，可查看逐班明细。",
+			"PR 视图 —— 每个 PR 的实得（旁边注明其中的工资部分），以及其带来的现场销售。实得 = 封存的工资 + 已批准的加班费 + 已批准收据的抽成 − 薪资单扣款与罚款明细；实际付款以薪资单为准（见「已付薪资单」）。点击 PR，再点门店，可查看逐班明细。",
 		outletViewHint:
-			"门店视图 —— 与薪资单为同一批班次。点击某行可查看 PR 明细。",
+			"门店视图 —— 同一批已完成的班次，按门店分组。点击某行可查看 PR 明细。",
 		noShiftHistory: "还没有班次历史 —— 已完成的班次会显示在这里。",
-		summary: "{n} 个 PR 班次 · {range} · 已支付 RM {total}",
+		summary: "{n} 个 PR 班次 · {range} · 工资 {total}",
 		latestOn: "最近 {day} · {date}",
 		latestPlain: "最近 {date}",
 		topEarner: "收入榜首",
@@ -8281,6 +9005,9 @@ const zh: PortalTranslations = {
 		metricPayoutHint:
 			"该 PR 实际拿到的金额 —— 工资、加班费，以及按工作区费率计算的抽成。",
 		whatTheseIconsMean: "这些图标的含义",
+		metricTakeHome: "实得",
+		metricWages: "工资",
+		wagesBeside: "工资 {amount}",
 	},
 	languages: {
 		english: "英语",
@@ -8356,7 +9083,7 @@ const zh: PortalTranslations = {
 		eventCountMany: "{n} 场活动",
 		today: "今天",
 		future: "未来",
-		drinksAndTips: "酒水 {pct}% · 小费 {range}",
+		drinksAndTips: "酒水 {pct}% · 小费 {tips}%",
 		demandSupplied: "需求 / 已派",
 		dotsMarkOpenShifts: "圆点表示当天有空缺班次。",
 	},
@@ -8498,6 +9225,9 @@ const zh: PortalTranslations = {
 		paidOn: " · 付款于 {date}",
 		statusPaid: "已付款",
 		statusUnpaid: "未付款",
+		statusVoid: "已作废",
+		voidedPeriods: "已作废的账单",
+		voidedPeriodsSummary: "{n} 张账单已由 InnocenZ 作废 —— 无需支付",
 
 		cardNumber: "卡号",
 		expiry: "有效期（月/年）",
@@ -8602,6 +9332,9 @@ const zh: PortalTranslations = {
 		receiptBase: "方案价格",
 		receiptCredit: "抵扣（前方案余额）",
 		receiptUpgrade: "升级差额",
+		receiptProRated: "按天折算",
+		proRatedShare: "{date} 起，{of} 天中的 {n} 天 · 整期 {amount}",
+		proRatedShort: "按天折算 {n}/{of} 天",
 		sendLinksTo: "付款链接发送至",
 		linksAlsoReachYou:
 			"选填 — 付款链接也会通过应用内通知和 WhatsApp 发送给负责人和财务账号，Today 页面也有「立即付款」按钮。",
@@ -8904,6 +9637,9 @@ const zh: PortalTranslations = {
 		noAddressOnFile: "尚未填写",
 		addressWillDiffer:
 			"定位点与门店地址将指向不同的地点 —— 围栏是以定位点为准测量的。",
+		partialMatch: "Google 只匹配了您输入内容的一部分 —— 保存前请先核对定位点。",
+		keepsOwnAddress:
+			"Google 为此地点提供的地址不如您的详细，因此门店保留自己的地址 —— 只移动定位点。",
 		pinAndAddressSaved: "签到定位点与门店地址已保存",
 		couldNotSaveLocation: "无法保存位置",
 		removeConfirm:
@@ -8920,6 +9656,11 @@ const zh: PortalTranslations = {
 		precisionInterpolated: "插值定位",
 		precisionBlockCentre: "街区中心",
 		precisionApproximate: "大致位置 —— 可能是整个区域",
+		precisionPlace: "Google 地图地点",
+		precisionPlacePin: "Google 为此地点设定的定位点",
+		typedAddressTitle: "使用您输入的地址",
+		typedAddressPin: "签到定位点将设在第一个匹配项：{place}",
+		useTypedAddress: "使用我的地址",
 	},
 	agencyLinks: {
 		agencies: "经纪公司合作",
@@ -9057,6 +9798,7 @@ const zh: PortalTranslations = {
 		cardHintRenewal: "{brand} ···· {last4} · 续订日 {date}",
 		demoCardHint: "Visa ···· {last4} · 续订日 {date}",
 		billedMonthly: "按月计费 · {price}",
+		billedMonthlyWithPos: "按月计费 · {total}（方案 {plan} + POS {pos}）",
 		nextRenewal: "下次续订 {date}",
 		settleBeforeSwitch:
 			"尚有 {n} 个账期未付，共 {amount} —— 请先与 InnocenZ 结清，再更换方案。POS 申请与取消随时可办。",
@@ -9247,6 +9989,9 @@ const zh: PortalTranslations = {
 		sealing: "正在结束…",
 		couldNotSeal: "无法结束此班次。",
 		alreadySealed: "已结束 —— 无法再为此班次加入人员。",
+		closedToast: "班次已结束 —— 不能再加入其他人。",
+		withdrawnToast: "班次已撤回。",
+		updatedToast: "班次已更新。",
 		wdSun: "日",
 		wdMon: "一",
 		wdTue: "二",
@@ -9277,6 +10022,9 @@ const zh: PortalTranslations = {
 		withdrawShift: "撤回班次",
 		withdrawing: "正在撤回…",
 		couldNotWithdraw: "无法撤回此班次。",
+		agencyLine: "经纪公司 · {name}",
+		postedQuantity: "已发布 {n} 位",
+		nWaiting: "{n} 位待处理",
 	},
 	today: {
 		noAgencyYet: "你还没有经纪公司",
@@ -9316,6 +10064,18 @@ const zh: PortalTranslations = {
 		salesLocked: "封存后销售数据即被锁定。",
 		payrollSent: "薪资已发送 · 班次已封存",
 		logSales: "录入销售",
+		logSalesHint:
+			"本班次每位 PR 的酒水销售额 —— 即「今天」的数字与报表所读取的数据。经纪公司批准该 PR 的收据后，此数字会被收据的合计取代。",
+		logSalesAmountLabel: "{name} 的酒水销售额（RM）",
+		logSalesRecorded: "已记录 {amount}",
+		logSalesNothingRecorded: "尚未记录",
+		logSalesInvalid: "请输入金额，例如 1250 或 1,250.50。",
+		logSalesTooLarge: "这超过一位 PR 一晚的销售额 —— 请核对数字。",
+		logSalesKeptNote:
+			"其中包含 {amount} 的小费和服务项目 —— 保存只会更改酒水销售额，这些金额保持记录不变。",
+		logSalesNoPrs: "此班次没有已排班的人。",
+		saleLoggedServer: "销售额已记录。",
+		couldNotLogSale: "无法记录此笔销售。",
 		couldNotLoadTonight: "无法加载今晚的安排",
 		couldNotLoadTonightHint:
 			"班次或人员加载失败 — 下方内容可能不完整。请刷新重试。",
@@ -9331,6 +10091,8 @@ const zh: PortalTranslations = {
 		shiftHistory: "班次记录",
 		rate: "评分",
 		submit: "提交",
+		ratingSaved: "已保存对 {name} 的评分",
+		couldNotSaveRating: "评分未能保存 —— 经纪公司未收到",
 		dismiss: "忽略",
 		ratePrsPromptOne: "为 {n} 位 PR 评分 · 24 小时",
 		ratePrsPromptMany: "为 {n} 位 PR 评分 · 24 小时",
@@ -9397,6 +10159,7 @@ const zh: PortalTranslations = {
 		colNormal: "普通时段",
 		colTotalEarn: "总收入",
 		tonightTotal: "今晚合计",
+		floorDrinksAndTips: "现场酒水 {drinks} · 小费 {tips}",
 		weeklyReconciliation: "每周对账",
 		reconciliationHint:
 			"结算单只计入已完成的班次，这个合计还包含已开班但未标记完成的班次，因此差额值得核对。",
@@ -9513,7 +10276,6 @@ const zh: PortalTranslations = {
 		dashCheckingServices: "正在检查服务",
 		dashWelcomeNamed: "欢迎回来，{name} — 以下是今天需要您关注的事项。",
 		dashWelcome: "欢迎回来 — 以下是今天需要您关注的事项。",
-		dashOpenPrototype: "打开原型",
 		dashLoading: "加载中…",
 
 		dashPlatformBreakdown: "平台分布",
@@ -10271,6 +11033,8 @@ const zh: PortalTranslations = {
 		pvSent: "已发送",
 		pvSigned: "已签署",
 		colPrName: "PR 姓名",
+		colVoucher: "付款单",
+		colSigned: "签署",
 		colCycle: "结算周期",
 		issued: "开具日期",
 		pvLoadFailed: "付款单加载失败，请重试。",
@@ -10334,6 +11098,44 @@ const zh: PortalTranslations = {
 		paymentReferenceHint: "选填 — 便于将此账期与银行对账单核对",
 		paymentReferencePlaceholder: "例如 MBB-20260827-0001",
 		confirmPayment: "确认付款",
+		voidInvoice: "作废",
+		voidInvoiceConfirm: "确认作废",
+		voidReason: "作废原因",
+		voidReasonPlaceholder: "为何作废此账单？",
+		voidReasonHint:
+			"仅未付款、且无进行中付款的账单可以作废。作废后不再计入欠款，账单与此原因都会保留在记录中。",
+		voidFailed: "无法作废此账单",
+		voidedReason: "已作废：{reason}",
+		refundsDueTitleOne: "1 笔付款需要退款",
+		refundsDueTitleMany: "{n} 笔付款需要退款",
+		refundsDueHint:
+			"这些款项付给了已作废或已付款的账单，没有结清任何费用，应退还给该机构。点击任一行查看该笔付款。",
+		refundReasonVoided: "为已作废的账单付款",
+		refundReasonPaidTwice: "重复付款",
+		refundsDueLoadFailed: "无法检查待退还的款项",
+		markRefunded: "标记为已退款",
+		markRefundedTitle: "将 {invoice} 标记为已退款",
+		markRefundedIntro:
+			"记录已将 {amount} 退还给 {org}。这笔付款会以「已退款」保留在记录中，并附上当初应退还的原因；账单本身不会改变。",
+		refundReference: "退款参考号",
+		refundReferenceHint:
+			"退回款项的银行或支付网关参考号 —— 最多 {max} 个字符。它会与该付款原有的参考号一并保存。",
+		refundReferencePlaceholder: "例如 MBB-20260930-0001",
+		refundReferenceTooLong: "过长 —— {n}/{max} 个字符",
+		confirmRefunded: "确认退款",
+		markRefundedFailed: "无法将此付款标记为已退款",
+		markedRefunded: "已标记为已退款",
+		markRefundedFor: "标记为已退款 —— {invoice}",
+		serverRefunded: "{invoice}：{amount} 已标记为已退款 —— 参考号 {reference}",
+		serverRefundAlreadyDone: "此付款已标记为已退款",
+		serverRefundNotOwed:
+			"只有应退还的付款才能标记为已退款 —— 这笔付款并非付给已作废或已付款的账单",
+		serverRefundReferenceMissing:
+			"请输入退款参考号 —— 即退回款项的银行或支付网关参考号",
+		serverRefundReferenceTooLong: "退款参考号过长 —— 最多 {max} 个字符",
+		serverRefundNoRoom:
+			"此退款参考号过长，无法与该付款原有的参考号一并保存 —— 请使用较短的参考号",
+		serverRefundPaymentGone: "这笔付款已不存在",
 
 		paymentPanelIntro:
 			"此账期的费用、订户的付款方式，以及针对它的每一次付款尝试。",
@@ -10368,6 +11170,7 @@ const zh: PortalTranslations = {
 		attemptSucceeded: "已结清",
 		attemptFailed: "已拒付",
 		attemptRefunded: "已退款",
+		attemptRefundDue: "待退款",
 		attemptVoided: "已撤回",
 		showingBillingPeriods: "显示第 {from} - {to} 项，共 {total} 个计费周期",
 		showingSubscribers: "显示第 {from} - {to} 项，共 {total} 个门店与经纪公司",
@@ -10416,11 +11219,33 @@ const zh: PortalTranslations = {
 		noCutlostRequests: "暂无缺班损失申请",
 		selectLeaveToReview: "请选择要审核的病假 / 请假申请",
 		selectCutlostToReview: "请选择要审核的缺班损失申请",
-		inviteHint: "填写身份证号 + 联系方式 → 系统会发送邀请，由对方补全资料",
-		sendInvite: "发送邀请",
-		sendingInvite: "发送中…",
+		addPrHint:
+			"立即将其加入您的名单。系统不会向 PR 发送任何消息 —— PR 需用此手机号在 PR 应用中注册，才能登录自己的账号。",
+		addToRoster: "加入名单",
+		addingToRoster: "正在添加…",
 		prInvited: "已将 PR 加入您的名单。",
 		couldNotInvitePr: "无法添加此 PR —— 请重试",
+		couldNotSaveDecision: "无法保存此决定 —— 请重试",
+		srvJoinApproved: "已批准申请 —— 对方现已在您的名单中。",
+		srvJoinDeclined: "已拒绝申请 —— 对方未被加入您的名单。",
+		srvDepartureApproved: "已批准解约 —— 对方已不在您的名单中。",
+		srvDepartureDeclined:
+			"已驳回解约 —— 对方仍在您的名单中，您的理由已发送给对方。",
+		srvAlreadyApproved: "此前已批准 —— 对方已在您的名单中。没有任何改动。",
+		srvDepartureAlreadyDeclined:
+			"其解约此前已被驳回 —— 对方仍在您的名单中。没有任何改动。",
+		srvApprovedCannotDecline:
+			"此申请已获批准，对方已在您的名单中，因此无法再拒绝。没有任何改动。",
+		srvAlreadyDeclined: "此前已拒绝。没有任何改动。",
+		srvDeclinedCannotApprove:
+			"此申请已被拒绝，因此无法再批准 —— 对方可重新申请，新申请会显示在这里。没有任何改动。",
+		srvDepartureAlreadyApproved:
+			"其解约此前已获批准 —— 对方已不在您的名单中。没有任何改动。",
+		srvDepartureApprovedCannotDecline:
+			"其解约已获批准，因此无法再驳回。没有任何改动。",
+		srvDecisionChanged:
+			"您处理期间此申请已发生变化 —— 请刷新页面查看最新状态。没有任何改动。",
+		srvDepartureReasonRequired: "驳回解约需填写理由 —— 理由会发送给 PR。",
 	},
 	/**
 	 * Flow 2 — the agency's payout runs (agency pays PR). Not to be confused with
@@ -10482,6 +11307,7 @@ const zh: PortalTranslations = {
 			"请逐日审核后发送，付款单会出现在其「收款」页面供签署。",
 		weekWorked: "工作周",
 		latest: "最新",
+		raisedOn: "开立于",
 		prIdLabel: "PR 编号",
 		commissionShort: "提成",
 		verifySelfLog: "核实自行填报",
@@ -10532,6 +11358,9 @@ const zh: PortalTranslations = {
 			"本机构尚未签署此付款单。请先签名确认 PR 已会签的金额，然后再登记付款。",
 		voucherReopened: "付款单已重新开放 — 双方签名已撤除",
 		voucherSignedCanPay: "付款单已签署 — 现在可以登记付款",
+		searchVouchers: "搜索付款单",
+		searchVouchersPlaceholder: "付款单号、PR 姓名、身份证号或门店",
+		noActivePlan: "暂无生效中的方案",
 	},
 	agencyPrs: {
 		penaltyBreachOne: "{n} 项违规 · 合计 {amount}",
@@ -10644,6 +11473,7 @@ const zh: PortalTranslations = {
 		statusDeclined: "已拒绝",
 		statusDirect: "自动生效",
 		statusApproved: "已批准",
+		statusWithdrawn: "已撤回",
 		roleOutlet: "门店",
 		roleAgency: "经纪公司",
 		editRequest: "编辑申请",
@@ -10748,6 +11578,7 @@ const zh: PortalTranslations = {
 			"提醒：在你批准之前，门店仍按原套餐价格付费。批准后价格随新套餐。",
 		noteApproved: "已批准 —— 价格现已随新套餐。",
 		noteDeclinedPlanChange: "已拒绝 —— 门店维持原套餐价格。",
+		noteWithdrawnPlanChange: "门店已撤回 —— 维持原套餐价格。",
 		toastPlanChangeApproved: "套餐变更已批准",
 		toastPlanChangeApproveFailed: "批准套餐变更失败",
 		toastPlanChangeDeclined: "套餐变更已拒绝",
@@ -10927,9 +11758,10 @@ const zh: PortalTranslations = {
 		noLinesYet: "此收据尚未记录任何明细 — 请在下方添加单据上显示的酒水或小费。",
 		colItem: "项目",
 		colQty: "数量",
-		colCommission: "提成",
+		colCommission: "提成 · 整行合计",
 		undo: "撤销",
-		commissionIsPrCut: "提成是 PR 的分成，不是单据上打印的售价。",
+		commissionIsPrCut:
+			"提成是 PR 在整行（全部数量合计，而非单件）的分成，不是单据上打印的售价。修改数量不会自动重算提成。",
 		paperShowsMissingItem: "单据上有此清单缺少的项目",
 		addMissingLine: "添加遗漏的明细",
 		category: "类别",
@@ -10942,14 +11774,14 @@ const zh: PortalTranslations = {
 		pickItemOffPaper: "请选择单据上的项目…",
 		outletPriceLabel: "门店价",
 		quantity: "数量",
-		commissionInRm: "提成金额（RM）",
+		commissionInRm: "整行提成金额（RM）",
 		noListConfigured:
 			"{outlet}尚未配置{list}，因此无法核实明细 — 请先请门店完成设置。",
 		drinksList: "酒水清单",
 		serviceEntitlementList: "服务项目清单",
 		outletListUnavailable: "门店清单不可用，因此无法核实明细。",
 		outletPriceVsCommission:
-			"每个项目旁的 RM 是{outlet}的售价，用于与单据核对。您填写的是 PR 的提成 — 那是另一个数字。",
+			"每个项目旁的 RM 是{outlet}单件的售价，用于与单据核对。您填写的是 PR 在整行（全部数量合计）的提成 — 那是另一个数字。",
 		lockedKindHint:
 			"这是一张{kind}收据，因此在此添加的明细也属于{kind} — 一张单据只对应一种类别。",
 		drinksAndTipsOnly: "仅限酒水与小费 — 工资和加班由签到与签退记录决定。",
@@ -10971,7 +11803,7 @@ const zh: PortalTranslations = {
 		pickFromOutletList:
 			"请从门店清单中选择项目 — 明细必须对应该门店实际销售的商品。",
 		quantityForItem: "{item} 的数量",
-		commissionRmForItem: "{item} 的提成金额（RM）",
+		commissionRmForItem: "{item} 的整行提成金额（RM）",
 		orderNoInline: "订单号 {no}",
 		loggedAt: "记录于 {when}",
 		printedAt: "打印于 {time}",
@@ -11015,12 +11847,19 @@ const zh: PortalTranslations = {
 		phone: "手机号",
 		prNameField: "PR 姓名",
 		couldNotAddPr: "添加 PR 失败，请重试。",
+		phoneRequiredHint: "必填 — PR 注册时须用此号码认领账户。",
 		drinksBreakdown: "酒水明细",
 		tipsBreakdown: "小费明细",
 		estPayoutBreakdown: "预计支出明细",
+		estPayoutServerHint:
+			"每个排班按 PR 等级计算的工资，由服务器定价 —— 即「预计支出」一栏的数字。收据获批后，抽成会加到该 PR 的薪资单上。",
+		shiftTotal: "班次合计",
+		noBookingsThisShift: "该班次没有已排班的 PR。",
 		noDrinkSalesThisShift: "该班次尚未记录酒水销售。",
 		noTipsThisShift: "该班次尚未记录小费。",
 		floorDrinksTotal: "现场酒水 {amount}",
+		recordedSalesHint:
+			"每个 PR 已批准收据的现场销售额，以服务器记录为准 —— 即该栏显示的数字。抽成会计入 PR 的薪资单。",
 		chooseWeek: "选择周次",
 	},
 	agencyQueues: {
@@ -11172,6 +12011,7 @@ const zh: PortalTranslations = {
 		receiptsOnThisShift: "本班次 {n} 张",
 		financeHead: "财务主管",
 		prSigned: "PR 已签署",
+		agencySigned: "机构已签署",
 		bankRef: "银行流水号",
 		paymentTo: "付款至",
 		description: "描述",
@@ -11200,6 +12040,9 @@ const zh: PortalTranslations = {
 	},
 	portalUi: {
 		noPendingMembers: "目前没有待审批的加入申请。",
+		noDeclinedMembers: "没有被拒绝的加入申请。",
+		noDeactivatedMembers: "没有被停用的团队成员。",
+		noMemberRecords: "暂无成员记录。",
 		newMembers: "新成员",
 		membersWaiting: "待审批",
 		membersActive: "已在团队",
@@ -11232,6 +12075,18 @@ const zh: PortalTranslations = {
 			"停用时其门户角色已被撤销，原有职位也随之失效，请选择其恢复后的职位。",
 		reactivateButton: "恢复成员",
 		reactivateFailed: "无法恢复该成员",
+		reactivatePreviousRole: "移除前的职位：{role}",
+		reactivatePickRole: "请选择职位…",
+		memberReactivated: "成员已恢复",
+		memberDeactivated: "成员已停用",
+		memberApproved: "已通过申请",
+		memberDeclined: "已拒绝申请",
+		serverMemberReactivatedAs: "成员已恢复，职位为{role}。",
+		serverRequestApprovedAs: "已通过申请 —— 对方以{role}身份加入。",
+		serverMemberDeactivated: "成员已停用 —— 对方已无法访问。",
+		serverRoleChangedTo: "职位已更改为{role}。",
+		serverMemberUpdated: "成员资料已更新。",
+		serverRequestDeclined: "已拒绝申请 —— 对方未被加入团队。",
 		deactivatedBy: "停用人",
 		declinedRole: "已拒绝",
 		declinedBy: "拒绝人",
@@ -12092,9 +12947,9 @@ const zh: PortalTranslations = {
 		errorNetwork: "服务器内部错误。",
 		errorInvalidCredentials: "邮箱或密码有误，请重试。",
 		errorUnexpected: "发生意外错误，请重试。",
-		errorAccountNotRegistered: "该账户尚未注册。",
+		errorWrongEmailOrPassword: "邮箱或密码错误",
+		errorWrongPhoneOrPassword: "手机号码或密码错误",
 		errorAccountInactive: "该账户已停用。",
-		errorWrongPassword: "密码错误",
 		forgotHeading: "忘记您的",
 		forgotHeadingAccent: "密码？",
 		forgotSubheading:

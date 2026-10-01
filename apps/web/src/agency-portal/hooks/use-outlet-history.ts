@@ -1,9 +1,18 @@
+import {
+	fetchAllOutletAssignments,
+	fetchAllOutletPrs,
+	fetchAllOutletShifts,
+	fetchOutletShiftSales,
+	outletPrsKey,
+	outletShiftSalesKey,
+} from "@agency-portal/hooks/use-outlet-shared-queries";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	indexShiftSales,
 	shiftHistoryRowFromAssignment,
 	shiftSaleKey,
 } from "@agency-portal/lib/agency-shift-history-map";
+import { historyEventFields } from "@agency-portal/lib/backend-shift-map";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { managedPrFromBackend } from "@agency-portal/lib/pr-personnel-map";
 import {
@@ -13,13 +22,6 @@ import {
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchPrPersonnel } from "@/services/pr-personnel";
-import { fetchShiftAssignments } from "@/services/shift-assignment";
-import { fetchShiftSales } from "@/services/shift-sale";
-
-// The assignment endpoint has no date filter, so the page size is what bounds
-// the ledger. One outlet's sealed nights stay well inside this.
-const HISTORY_PAGE_SIZE = 500;
 
 export interface OutletHistoryData {
 	backed: boolean;
@@ -55,11 +57,10 @@ export function useOutletHistory(): OutletHistoryData {
 
 	const assignmentsQuery = useQuery({
 		queryKey: ["outlet", "history", "assignments"],
-		queryFn: () =>
-			fetchShiftAssignments(
-				{ status: "completed", pageSize: HISTORY_PAGE_SIZE },
-				logout,
-			),
+		// The endpoint has no date filter, so the ledger is every completed night —
+		// paged out in full. It used to ask for 500 in one page and got the
+		// server's 100, so History quietly stopped at a venue's hundredth night.
+		queryFn: () => fetchAllOutletAssignments({ status: "completed" }, logout),
 		enabled: backed,
 		placeholderData: keepPreviousData,
 		staleTime: 60_000,
@@ -78,8 +79,9 @@ export function useOutletHistory(): OutletHistoryData {
 	// rows on screen reading RM 0.00 — a wrong number dressed as a real one.
 	// `GET /shift-sale` pins an outlet caller to its own venues server-side.
 	const salesQuery = useQuery({
-		queryKey: ["outlet", "history", "shift-sales"],
-		queryFn: () => fetchShiftSales({}, logout),
+		// Shared with Today and the Calendar sheet's sales tiles.
+		queryKey: outletShiftSalesKey,
+		queryFn: () => fetchOutletShiftSales(logout),
 		enabled: backed,
 		placeholderData: keepPreviousData,
 		staleTime: 60_000,
@@ -87,9 +89,33 @@ export function useOutletHistory(): OutletHistoryData {
 
 	// Same key/fn as outlet Today so history cards share the PR photo cache.
 	const prsQuery = useQuery({
-		queryKey: ["outlet", "today", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		queryKey: outletPrsKey,
+		queryFn: () => fetchAllOutletPrs({}, logout),
 		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	/*
+	 * WHAT KIND OF NIGHT IT WAS — "VIP night", an "Other" name — as the Calendar
+	 * and Today show it. The assignment list History is built from joins only
+	 * the shift's `eventKind`; the sub-type lives on the shift (0167) or the card
+	 * it was posted from, which is on the SHIFT read. So the special shifts are
+	 * read too — only the special ones (`?eventKind=special`, pinned to the
+	 * caller's venues server-side), and only once the ledger holds a special
+	 * night, so a venue that never ran one pays nothing for this.
+	 */
+	const hasSpecialNight = useMemo(
+		() =>
+			(assignmentsQuery.data?.data ?? []).some(
+				(a) => a.status === "completed" && a.eventKind === "special",
+			),
+		[assignmentsQuery.data],
+	);
+	const specialShiftsQuery = useQuery({
+		queryKey: ["outlet", "history", "special-shifts"],
+		queryFn: () => fetchAllOutletShifts({ eventKind: "special" }, logout),
+		enabled: backed && hasSpecialNight,
+		placeholderData: keepPreviousData,
 		staleTime: 60_000,
 	});
 
@@ -97,6 +123,9 @@ export function useOutletHistory(): OutletHistoryData {
 		if (!backed) return [];
 		const assignments = assignmentsQuery.data?.data ?? [];
 		const saleByShiftPr = indexShiftSales(salesQuery.data ?? []);
+		const specialShiftById = new Map(
+			(specialShiftsQuery.data?.data ?? []).map((s) => [s.id, s]),
+		);
 
 		const built: ShiftHistoryRow[] = [];
 		for (const a of assignments) {
@@ -105,8 +134,8 @@ export function useOutletHistory(): OutletHistoryData {
 			if (a.status !== "completed") continue;
 			// Without the joined shift date there is no night to file the row under.
 			if (!a.shiftDate) continue;
-			built.push(
-				shiftHistoryRowFromAssignment({
+			built.push({
+				...shiftHistoryRowFromAssignment({
 					assignment: a,
 					shiftDate: a.shiftDate,
 					prName: a.prName ?? "Unknown PR",
@@ -116,10 +145,17 @@ export function useOutletHistory(): OutletHistoryData {
 					agencyName: a.agencyName ?? "Agency",
 					sale: saleByShiftPr.get(shiftSaleKey(a.shiftId, a.prId)),
 				}),
-			);
+				...historyEventFields(a.eventKind, specialShiftById.get(a.shiftId)),
+			});
 		}
 		return sortShiftHistoryDesc(built);
-	}, [backed, outletName, assignmentsQuery.data, salesQuery.data]);
+	}, [
+		backed,
+		outletName,
+		assignmentsQuery.data,
+		salesQuery.data,
+		specialShiftsQuery.data,
+	]);
 
 	const prs = useMemo<AgencyManagedPR[]>(
 		() => (backed ? (prsQuery.data?.data ?? []).map(managedPrFromBackend) : []),

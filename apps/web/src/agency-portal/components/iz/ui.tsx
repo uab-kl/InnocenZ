@@ -300,9 +300,12 @@ export function IzKpiLabel({
 	);
 }
 
-export function formatRM(n: number) {
-	return `RM ${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+/**
+ * "RM 1,234.50", and a negative as "−RM 4.50". One implementation, in the leaf
+ * `lib/format-rm` so libs can share it; re-exported here for the components
+ * that have always imported it from the kit.
+ */
+export { formatRM } from "@agency-portal/lib/format-rm";
 
 export function IzSelect({
 	className,

@@ -1,4 +1,5 @@
 import { formatRM } from "@agency-portal/components/iz/ui";
+import { proRataLabel } from "@agency-portal/lib/subscription-record";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { Printer } from "lucide-react";
@@ -77,6 +78,19 @@ export function InvoiceReceipt({ invoiceId }: { invoiceId: string }) {
 					value={`${format(parseISO(invoice.periodStart), "d MMM yyyy")} – ${format(parseISO(invoice.periodEnd), "d MMM yyyy")}`}
 				/>
 				<Row label={t.adminService.planLabel} value={invoice.planName} />
+				{/* A first period billed only for the days held (owner, 29 Sep
+				    2026) — the period above stays the whole week, so this row is
+				    what explains a total short of the plan price. */}
+				{invoice.proRata && (
+					<Row
+						label={t.subscription.receiptProRated}
+						value={proRataLabel(
+							t.subscription.proRatedShare,
+							invoice.proRata,
+							formatRM,
+						)}
+					/>
+				)}
 				{/* The arithmetic behind the total, when there is any: plan price,
 				    what was deducted and why, or the upgrade difference. */}
 				{invoice.kind === "upgrade" && (
@@ -93,7 +107,7 @@ export function InvoiceReceipt({ invoiceId }: { invoiceId: string }) {
 						/>
 						<Row
 							label={t.subscription.receiptCredit}
-							value={`−${formatRM(Number(invoice.creditApplied))}`}
+							value={formatRM(-Number(invoice.creditApplied))}
 						/>
 						{invoice.note && (
 							<p className="iz-tiny iz-muted2 py-1">{invoice.note}</p>

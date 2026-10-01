@@ -19,12 +19,18 @@ import {
 	OutletShiftLogRatingBlock,
 	OutletShiftLogShiftCard,
 	OutletShiftLogSummaryCard,
+	type PrHistoryCardMoney,
 } from "@agency-portal/components/outlet/outlet-history-ui";
 import { ShiftHistoryExpandableMoneyBlock } from "@agency-portal/components/outlet/ShiftHistoryExpandableMoneyBlock";
 import { useAgencyRatings } from "@agency-portal/hooks/use-agency-ratings";
 import { useOutletHistory } from "@agency-portal/hooks/use-outlet-history";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
+import {
+	type HistoryTakeHome,
+	type HistoryVoucherDeduction,
+	historyTakeHomeByPr,
+} from "@agency-portal/lib/history-take-home";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { shiftHistoryForOutlet } from "@agency-portal/lib/portal-sync";
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
@@ -59,6 +65,20 @@ import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 type Portal = "agency" | "outlet";
 type AgencyGroupBy = "pr" | "venue";
 
+/**
+ * The agency History's take-home, handed to the log so each PR's card and
+ * sheet state the header's own sum cut per PR (history-take-home.ts).
+ */
+export type ShiftHistoryTakeHome = {
+	/**
+	 * Every part has loaded. False on a real session still reading its vouchers
+	 * (or failing to): the cards then state wages alone, labelled as wages.
+	 */
+	ready: boolean;
+	/** This agency's vouchers — the deduction field and the penalty lines. */
+	vouchers: HistoryVoucherDeduction[];
+};
+
 export function ShiftHistoryLog({
 	portal,
 	rows = [],
@@ -66,6 +86,7 @@ export function ShiftHistoryLog({
 	embedded = false,
 	groupBy = "pr",
 	agencyPRs: agencyPRsProp,
+	takeHome,
 }: {
 	portal: Portal;
 	rows?: ShiftHistoryRow[];
@@ -76,6 +97,11 @@ export function ShiftHistoryLog({
 	groupBy?: AgencyGroupBy;
 	/** Live PR roster for avatars (profile → comcard). Falls back to demo store. */
 	agencyPRs?: AgencyManagedPR[];
+	/**
+	 * Agency History only. Omitted (the outlet History), each card keeps the
+	 * plain payout figure its rows carry.
+	 */
+	takeHome?: ShiftHistoryTakeHome;
 }) {
 	const { t } = usePortalLocale();
 	const [nameFilter, setNameFilter] = useState("");
@@ -179,12 +205,50 @@ export function ShiftHistoryLog({
 		[filtered, portal],
 	);
 
+	/*
+	 * Each PR's take-home over the FILTERED rows — the very function the header
+	 * runs over all of them, so with no filter set the cards add up to it.
+	 * Deductions follow the filter too: a voucher counts only when its PR has a
+	 * listed night inside its week.
+	 */
+	const prTakeHome = useMemo<Map<string, HistoryTakeHome> | null>(
+		() =>
+			takeHome
+				? historyTakeHomeByPr({
+						rows: filtered,
+						vouchers: takeHome.ready ? takeHome.vouchers : [],
+					})
+				: null,
+		[takeHome, filtered],
+	);
+	const prMoney = useMemo<Map<string, PrHistoryCardMoney> | null>(() => {
+		if (!takeHome || !prTakeHome) return null;
+		return new Map(
+			[...prTakeHome].map(([prId, money]) => [
+				prId,
+				{
+					takeHomeRm: takeHome.ready ? money.takeHomeRm : null,
+					wagesRm: money.wagesRm,
+				},
+			]),
+		);
+	}, [takeHome, prTakeHome]);
+
+	// Ranked by the figure each card STATES, so the crown and the bars agree
+	// with the number printed beside them.
 	const rankedPrRollups = useMemo(
-		() => [...prRollups].sort((a, b) => b.totalPayout - a.totalPayout),
-		[prRollups],
+		() =>
+			[...prRollups].sort(
+				(a, b) =>
+					prCardFigure(b, prMoney?.get(b.prId)) -
+					prCardFigure(a, prMoney?.get(a.prId)),
+			),
+		[prRollups, prMoney],
 	);
 
-	const topPrPayout = rankedPrRollups[0]?.totalPayout ?? 0;
+	const topPrPayout = rankedPrRollups[0]
+		? prCardFigure(rankedPrRollups[0], prMoney?.get(rankedPrRollups[0].prId))
+		: 0;
 
 	const useOutletCardLayout =
 		portal === "outlet" || (portal === "agency" && !agencyByVenue);
@@ -231,6 +295,35 @@ export function ShiftHistoryLog({
 			sumShiftHistoryBreakdowns(detailPrShifts, breakdownOpts(detailPrShifts)),
 		[detailPrShifts, breakdownOpts],
 	);
+	/*
+	 * The PR sheet's headline, in the card's own words: take-home with the wage
+	 * part beside it, and the voucher deductions as a line of the breakdown so
+	 * the parts still add up to the figure. Its nights and outlets below are
+	 * each night's own wage + overtime + commission — a deduction belongs to a
+	 * voucher week, never to one night.
+	 */
+	const detailMoney = useMemo(() => {
+		const money = detailPrId ? prTakeHome?.get(detailPrId) : undefined;
+		if (!takeHome || !money) {
+			return { breakdown: detailBreakdown, label: undefined, note: undefined };
+		}
+		if (!takeHome.ready) {
+			return {
+				breakdown: detailBreakdown,
+				label: t.history.metricWages,
+				note: undefined,
+			};
+		}
+		return {
+			breakdown: {
+				...detailBreakdown,
+				deductionsRm: money.deductionsRm,
+				totalPayout: money.takeHomeRm,
+			},
+			label: t.history.metricTakeHome,
+			note: fill(t.history.wagesBeside, { amount: formatRM(money.wagesRm) }),
+		};
+	}, [detailPrId, prTakeHome, takeHome, detailBreakdown, t]);
 	const detailPrVenueBreakdown = useMemo(
 		() =>
 			sumShiftHistoryBreakdowns(
@@ -502,6 +595,7 @@ export function ShiftHistoryLog({
 							agencyPRs={agencyPRs}
 							rating={findOutletRatingForPr(rollup.prName, outletRatings)}
 							onTap={showPrDetail ? () => openPrDetail(rollup.prId) : undefined}
+							money={prMoney?.get(rollup.prId)}
 						/>
 					))
 				) : (
@@ -604,6 +698,13 @@ export function ShiftHistoryLog({
 								<ShiftHistoryExpandableMoneyBlock
 									className="mt-2"
 									breakdown={detailPrVenueBreakdown}
+									// Until the take-home can be stated these nights carry
+									// their wage alone, so the tile says so.
+									payoutLabel={
+										takeHome && !takeHome.ready
+											? t.history.metricWages
+											: undefined
+									}
 								/>
 							</IzCard>
 
@@ -646,7 +747,9 @@ export function ShiftHistoryLog({
 								</p>
 								<ShiftHistoryExpandableMoneyBlock
 									className="mt-2"
-									breakdown={detailBreakdown}
+									breakdown={detailMoney.breakdown}
+									payoutLabel={detailMoney.label}
+									payoutNote={detailMoney.note}
 								/>
 							</IzCard>
 
@@ -758,7 +861,9 @@ export function ShiftHistoryLog({
 						{detailOutletPrRollups.map((rollup) => (
 							<IzCard key={rollup.prId} flat>
 								<div className="iz-between items-start gap-2">
-									<p className="iz-heading text-sm font-bold">{rollup.prName}</p>
+									<p className="iz-heading text-sm font-bold">
+										{rollup.prName}
+									</p>
 									<span className="iz-tiny iz-muted2">
 										{fill(t.history.countPair, {
 											a: fill(
@@ -985,6 +1090,14 @@ export function OutletPrShiftHistorySheet({
 			)}
 		</IzSheet>
 	);
+}
+
+/** The figure a PR's card states — see `OutletPrHistoryCard`'s `money`. */
+function prCardFigure(
+	rollup: ShiftHistoryPrRollup,
+	money: PrHistoryCardMoney | undefined,
+): number {
+	return money ? (money.takeHomeRm ?? money.wagesRm) : rollup.totalPayout;
 }
 
 function venueLatestMeta(

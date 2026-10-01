@@ -5,6 +5,7 @@ import {
 	type PrPaymentVoucher,
 } from "@agency-portal/lib/pr-demo";
 import type { WeeklyPaymentSummary } from "@agency-portal/lib/pr-weekly-payment";
+import { pvDisplayDates } from "@agency-portal/lib/pv-display-dates";
 import {
 	formatPayeeField,
 	PV_TEMPLATE_ISSUER,
@@ -13,6 +14,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 
 export function PvSummaryView({
 	pv,
@@ -31,6 +33,7 @@ export function PvSummaryView({
 	hideSignatureDetails?: boolean;
 }) {
 	const { t } = usePortalLocale();
+	const dates = pvDisplayDates(pv, t);
 	const isWeekly = Boolean(pv.weekStartIso && weekSummary);
 	const weeklyNote =
 		isWeekly && weekSummary ? (
@@ -61,8 +64,10 @@ export function PvSummaryView({
 				<SummaryRow label={t.izPv.phone} value={payee.phone} />
 			)}
 			<SummaryRow label={t.izPv.week} value={pv.cycle} highlight />
-			<SummaryRow label={t.history.issued} value={pv.issued} />
-			<SummaryRow label={t.izPv.dueSignBy} value={pv.due} />
+			<SummaryRow label={t.history.issued} value={dates.issued} />
+			{/* "Pay by", as the voucher card says it: `due` is the payment deadline
+			    the server stamps (a week after the week closes), not a sign-by. */}
+			<SummaryRow label={t.agencyHome.payBy} value={dates.payBy} />
 			<SummaryRow label={t.table.outlet} value={pv.outlet} />
 			{isWeekly && weekSummary ? (
 				<>
@@ -108,8 +113,17 @@ export function PvSummaryView({
 			)}
 			{!hideSignatureDetails && pv.financeHeadSignedAt && (
 				<SummaryRow
-					label={t.izPv.financeHead}
-					value={`${pv.financeHeadName} · ${pv.financeHeadSignedAt}`}
+					// Whoever signed, in the capacity they signed in — an owner's
+					// signature is not the finance head's. A voucher signed before
+					// the capacity was recorded (0149) names the signer alone.
+					label={t.izPv.agencySigned}
+					value={[
+						pv.financeHeadName,
+						pv.financeHeadRole ? portalRoleLabel(pv.financeHeadRole, t) : null,
+						pv.financeHeadSignedAt,
+					]
+						.filter((part): part is string => Boolean(part?.trim()))
+						.join(" · ")}
 				/>
 			)}
 			{!hideSignatureDetails && pv.prSignedAt && (
@@ -176,8 +190,9 @@ export function PvSummaryView({
 						{pv.deduct > 0 && (
 							<tr className="iz-data-table-tot">
 								<td colSpan={5}>{t.payroll.deductions}</td>
+								{/* Passed negative: the formatter prints the one sign. */}
 								<td className="text-right text-[var(--iz-red)]">
-									-{formatRM(pv.deduct)}
+									{formatRM(-pv.deduct)}
 								</td>
 							</tr>
 						)}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isMemberWaiting, memberQueueState } from "./member-queue-state";
+import {
+	isMemberWaiting,
+	memberQueueState,
+	reactivationLane,
+} from "./member-queue-state";
 
 /**
  * The exact shape of Atlas Agency's live `agency_user` rows on 14 Sep 2026,
@@ -67,5 +71,57 @@ describe("isMemberWaiting", () => {
 	it("still counts somebody genuinely waiting", () => {
 		const withApplicant = [...ATLAS_LIVE, { status: "pending" }];
 		expect(withApplicant.filter(isMemberWaiting).length).toBe(1);
+	});
+});
+
+/**
+ * Reactivating a member must never write a role the owner did not see (28 Sep
+ * 2026 audit: "reactivating overwrites the member's role"). The picker used to
+ * fall silently to the first approvable title, so a former Guarantor came back
+ * as Finance on a single click.
+ */
+describe("reactivationLane", () => {
+	const AGENCY = ["finance", "director"] as const;
+
+	it("restores the lane the row remembers when the queue may grant it", () => {
+		expect(
+			reactivationLane({ heldLane: "director", approvable: AGENCY }),
+		).toEqual({ lane: "director", heldRestorable: true });
+	});
+
+	it("asks rather than substituting when the held lane is not grantable here", () => {
+		expect(
+			reactivationLane({ heldLane: "guarantor", approvable: AGENCY }),
+		).toEqual({ lane: null, heldRestorable: false });
+		expect(
+			reactivationLane({ heldLane: "owner", approvable: AGENCY }).lane,
+		).toBeNull();
+	});
+
+	it("takes the owner's explicit pick", () => {
+		expect(
+			reactivationLane({
+				heldLane: "guarantor",
+				picked: "finance",
+				approvable: AGENCY,
+			}).lane,
+		).toBe("finance");
+		expect(
+			reactivationLane({
+				heldLane: "director",
+				picked: "finance",
+				approvable: AGENCY,
+			}).lane,
+		).toBe("finance");
+	});
+
+	it("ignores a pick the queue may not grant", () => {
+		expect(
+			reactivationLane({
+				heldLane: "director",
+				picked: "owner",
+				approvable: AGENCY,
+			}).lane,
+		).toBe("director");
 	});
 });

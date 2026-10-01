@@ -39,6 +39,7 @@
  * fixed here, because un-hiding it would add a visible line to a financial
  * document, which is not a translation pass's call to make.
  */
+import { formatRM } from "@agency-portal/lib/format-rm";
 import type {
 	PrPaymentVoucher,
 	PrProfile,
@@ -76,13 +77,6 @@ function escapeHtml(s: string) {
 		.replace(/</g, "&lt;")
 		.replace(/>/g, "&gt;")
 		.replace(/"/g, "&quot;");
-}
-
-function amt(n: number) {
-	return n.toLocaleString("en-MY", {
-		minimumFractionDigits: 2,
-		maximumFractionDigits: 2,
-	});
 }
 
 function csvCell(value: string | number) {
@@ -285,7 +279,10 @@ export function buildPvBreakdownHtml(
 		)
 		.join("");
 
-	const totalCell = `<td class="total" colspan="2" rowspan="${payRows.length + 1}"><span class="total-lbl">Total</span><span class="total-val">RM ${amt(pv.net)}</span></td>`;
+	// A negative total reads "−RM 4.50", sign before the currency — exactly as the
+	// backend twin prints it (`formatVoucherRm`). Only the PR's PDFKit copy swaps
+	// that minus for an en dash, the one glyph its WinAnsi font can encode.
+	const totalCell = `<td class="total" colspan="2" rowspan="${payRows.length + 1}"><span class="total-lbl">Total</span><span class="total-val">${formatRM(pv.net)}</span></td>`;
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -684,7 +681,7 @@ export function buildPvBreakdownSheetRows(
 	}
 
 	push("");
-	push("Payment Details:", "", "Total", `RM ${amt(pv.net)}`, "");
+	push("Payment Details:", "", "Total", formatRM(pv.net), "");
 	push("Payment Method:", issuer.paymentMethod, "", "", "");
 	push("Bank Name:", payee.bank, "", "", "");
 	push("Bank Account Name:", payee.accountName, "", "", "");
@@ -964,7 +961,8 @@ export async function buildPvBreakdownWorkbook(
 	ws.mergeCells(paymentStartRow, 4, paymentBlockEnd, 5);
 	pvExBox(ws, paymentStartRow, 4, paymentBlockEnd, 5, "medium");
 	const totalCell = ws.getCell(paymentStartRow, 4);
-	totalCell.value = `Total\n\nRM ${amt(pv.net)}`;
+	// TEXT, as in the backend twin: one merged cell holding label and figure.
+	totalCell.value = `Total\n\n${formatRM(pv.net)}`;
 	totalCell.font = {
 		name: "Arial",
 		size: 18,

@@ -8,8 +8,60 @@ import { buildQueryParams } from "@/lib/build-query-params";
  * SUBSCRIPTION and carries no payment state at all. Trying to read payment out
  * of that one is what every "paid history" attempt on these screens ran into.
  */
-export type SubscriptionInvoiceStatus = "unpaid" | "paid";
+/**
+ * `void` (owner, 29 Sep 2026: "Add Void") is a bill InnocenZ took back — raised
+ * in error, voided by an admin with a reason. It is NOT owed and never paid; it
+ * stays listed so the record of what was once charged survives.
+ */
+export type SubscriptionInvoiceStatus = "unpaid" | "paid" | "void";
 export type SubscriberType = "outlet" | "agency";
+
+/**
+ * Is this bill money OWED? Only `unpaid` is.
+ *
+ * ⚠️ "Not paid" is NOT "owed" since `void` exists: every screen that summed
+ * `status !== "paid"` would have counted a voided bill as money outstanding,
+ * offered it for tick-to-pay, and warned about it as overdue. Ask this instead.
+ */
+export function isInvoiceOwed(invoice: {
+	status: SubscriptionInvoiceStatus | string;
+}): boolean {
+	return invoice.status === "unpaid";
+}
+
+/** The server's prefix (backend `invoice-void.ts` VOID_NOTE_PREFIX); the reason follows it. */
+const VOID_NOTE_PREFIX = "Voided: ";
+
+/**
+ * Why a bill was voided, read back off its note — or null. The server appends
+ * "Voided: <reason>" after whatever the note already said (a pro-rata sentence,
+ * a credit's reason), so the LAST prefix is the one that holds it.
+ */
+export function voidReasonOf(note: string | null | undefined): string | null {
+	if (!note) return null;
+	const at = note.lastIndexOf(VOID_NOTE_PREFIX);
+	if (at < 0) return null;
+	const reason = note.slice(at + VOID_NOTE_PREFIX.length).trim();
+	return reason || null;
+}
+
+/**
+ * A lane's FIRST period, billed only for the days it was held (owner, 29 Sep
+ * 2026: a first partial week is not billed in full) — an agency approved on a
+ * Friday pays 2 of 7 days of its first Sun–Sat week.
+ *
+ * The server reads these numbers back off the invoice's own note, so a first
+ * week billed in full before the rule never shows up as pro-rated. `amount` is
+ * already the pro-rated figure; nothing on screen recomputes it.
+ */
+export interface SubscriptionInvoiceProRata {
+	billedDays: number;
+	periodDays: number;
+	/** The KL calendar day billing started, YYYY-MM-DD. */
+	billedFrom: string;
+	/** What the whole period costs on this plan; numeric(12,2), so a string. */
+	fullAmount: string;
+}
 
 export interface SubscriptionInvoice {
 	id: string;
@@ -42,6 +94,8 @@ export interface SubscriptionInvoice {
 	planName: string;
 	/** 'weekly' for agencies, 'monthly' for outlets. */
 	billingCycle: string;
+	/** Set only on a pro-rated first period; absent or null on every whole one. */
+	proRata?: SubscriptionInvoiceProRata | null;
 }
 
 export interface SubscriptionInvoicePagination {
@@ -186,6 +240,25 @@ export async function setSubscriptionInvoiceStatus(
 	const response = await client.put<SubscriptionInvoiceApiResponse>(
 		`/subscription-invoice/${id}`,
 		{ status, ...(status === "paid" && reference ? { reference } : {}) },
+	);
+	return response.data;
+}
+
+/**
+ * Void an UNPAID bill raised in error — admin-only server-side, and the reason
+ * is required (owner, 29 Sep 2026: "Add Void"). The server refuses a paid bill,
+ * one with a payment in flight or recorded, and one a plan-switch credit is tied
+ * to — each with its own sentence, which the caller shows as-is.
+ */
+export async function voidSubscriptionInvoice(
+	id: string,
+	reason: string,
+	onRefreshFail: () => void,
+): Promise<SubscriptionInvoiceApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<SubscriptionInvoiceApiResponse>(
+		`/subscription-invoice/${id}/void`,
+		{ reason },
 	);
 	return response.data;
 }

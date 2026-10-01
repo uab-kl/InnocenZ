@@ -42,8 +42,13 @@ export type OpsNotificationKind =
 	// The agency's weekly subscription statement: PVs issued last payroll week
 	// and the tier that volume put it on. Its own kind rather than `pv_ready`:
 	// that announces one PR's voucher, this is the count of ALL of them read as
-	// a bill, and it lands on Subscription rather than Payroll.
+	// a bill, and it lands on Subscription rather than Payroll. The other two
+	// billing notices — a bill opened, an automatic charge declined — share it.
 	| "subscription_tier_weekly"
+	// A venue's request to cut a shift short, and the agency's answer to it.
+	// Its own kind rather than `shift_edit`: it is a decision about MONEY that
+	// waits on someone, not a change already made to the roster.
+	| "cutlost"
 	// Last resort for a row whose backend kind this build has never heard of.
 	// The `notification_kind` DB enum grows by migration and a shared dev database
 	// routinely runs ahead of the web app — mapping such a row to a neutral kind
@@ -75,6 +80,12 @@ export interface OpsNotification {
 	at: string;
 	read: boolean;
 	href?: string;
+	/**
+	 * The item to open on `href` — the route's own search keys (`?pv=`,
+	 * `?tab=`). Without it a tap opened the page and left the reader to find
+	 * the thing the notice was about.
+	 */
+	search?: Record<string, string>;
 	sosId?: string;
 	pvId?: string;
 	prName?: string;

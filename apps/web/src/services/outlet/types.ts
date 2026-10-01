@@ -177,7 +177,9 @@ export type GeocodePrecision =
 	| "ROOFTOP"
 	| "RANGE_INTERPOLATED"
 	| "GEOMETRIC_CENTER"
-	| "APPROXIMATE";
+	| "APPROXIMATE"
+	/** A named Google Maps place from Places search (no location_type there). */
+	| "PLACE";
 
 /** One address-lookup suggestion. Saves nothing until the operator commits it. */
 /**
@@ -203,6 +205,14 @@ export interface GeocodeCandidate {
 	placeId: string;
 	/** Absent from a backend older than the address-sync change. */
 	components?: GeocodeAddressParts;
+	/** Google matched only part of the query. Absent from an older backend. */
+	partialMatch?: boolean;
+	/** Google's address for the place names a street. Absent from an older backend. */
+	hasStreet?: boolean;
+	/** Google knows the match as a named place, not just an address. */
+	isPlace?: boolean;
+	/** The place's own name ("1 Utama Shopping Centre") — Places search only. */
+	name?: string;
 }
 
 export interface GeocodeCandidatesApiResponse {

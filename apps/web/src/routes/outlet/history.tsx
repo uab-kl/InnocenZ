@@ -1,9 +1,11 @@
 import { ShiftHistoryLog } from "@agency-portal/components/iz/ShiftHistoryLog";
+import { formatRM } from "@agency-portal/components/iz/ui";
 import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
 import { useOutletHistory } from "@agency-portal/hooks/use-outlet-history";
+import { historyWagesRm } from "@agency-portal/lib/history-take-home";
 import { shiftHistoryForOutlet } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute } from "@tanstack/react-router";
@@ -37,7 +39,6 @@ function OutletHistory() {
 		const sorted = [...rows].sort((a, b) => a.dateIso.localeCompare(b.dateIso));
 		const oldest = sorted[0]?.dateDisplay;
 		const newest = sorted[sorted.length - 1]?.dateDisplay;
-		const totalPayout = rows.reduce((a, r) => a + r.totalPayout, 0);
 		const range =
 			oldest && newest && oldest !== newest
 				? `${oldest} – ${newest}`
@@ -45,7 +46,16 @@ function OutletHistory() {
 		return fill(t.history.summary, {
 			n: rows.length,
 			range: range ?? "",
-			total: totalPayout.toLocaleString(),
+			/*
+			 * The sealed WAGES of the nights listed, and the header now says so —
+			 * it said "paid out", which none of this money need yet be. Wages
+			 * only: a venue cannot see the deductions an agency takes from its PR
+			 * (see history-take-home.ts), so it is never shown a "take-home".
+			 *
+			 * `formatRM`, the cards' own formatter — `toLocaleString()` followed
+			 * the BROWSER and dropped the cents (the agency header's old bug).
+			 */
+			total: formatRM(historyWagesRm(rows)),
 		});
 	}, [rows, backend.isLoading, t]);
 

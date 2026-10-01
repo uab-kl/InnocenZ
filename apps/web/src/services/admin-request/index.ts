@@ -12,13 +12,26 @@ export type AdminRequestType =
 // Plan-change lifecycle: outlet switches sit as 'pending' until the admin marks
 // them 'approved' or 'declined'; agency switches are auto-applied and logged as
 // 'direct'. Other request types use pending → contacted → resolved.
+// 'withdrawn' = the SUBSCRIBER took it back before anyone answered (0138). It
+// was missing here, so the Requests page's label lookup threw on such a row.
 export type AdminRequestStatus =
 	| "pending"
 	| "contacted"
 	| "resolved"
 	| "declined"
 	| "direct"
-	| "approved";
+	| "approved"
+	| "withdrawn";
+
+/**
+ * Still waiting for the admin's answer — the only states Resolve, Mark
+ * contacted and Cancel may act on. The server claims the row on the same test
+ * (`AWAITING_ANSWER`) and refuses anything else with 409, so offering a button
+ * outside it would only offer a refusal.
+ */
+export function isAwaitingAnswer(status: AdminRequestStatus): boolean {
+	return status === "pending" || status === "contacted";
+}
 export type SubscriberType = "outlet" | "agency";
 
 export interface AdminRequestPagination {

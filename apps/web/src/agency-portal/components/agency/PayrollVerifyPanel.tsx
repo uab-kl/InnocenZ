@@ -1,6 +1,10 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
 import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
-import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import {
+	formatRM,
+	IzCard,
+	IzSectionLabel,
+} from "@agency-portal/components/iz/ui";
 import { useAgencyPvReceiptReview } from "@agency-portal/hooks/use-agency-pv-receipt-review";
 import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
 import {
@@ -46,7 +50,6 @@ const NEEDS_EVIDENCE: PaymentVoucherComponent[] = [
 	"tip_commission",
 ];
 
-const money = (n: number) => `RM ${n.toFixed(2)}`;
 const sum = (lines: PaymentVoucherLine[]) =>
 	lines.reduce((total, line) => total + Number(line.amount || 0), 0);
 
@@ -161,7 +164,7 @@ function ReceiptRow({
 						{t.receipts[RECEIPT_STATUS_LABEL[receipt.status]]}
 					</span>
 				</div>
-				<span className="font-medium">{money(sum(lines))}</span>
+				<span className="font-medium">{formatRM(sum(lines))}</span>
 			</div>
 
 			<p className="iz-tiny iz-muted2 mt-0.5">
@@ -223,7 +226,7 @@ function ReceiptRow({
 							{line.quantity} × {line.description}
 						</span>
 						<span className="font-medium">
-							{money(Number(line.amount || 0))}
+							{formatRM(Number(line.amount || 0))}
 						</span>
 					</div>
 				))}
@@ -388,14 +391,14 @@ export function PayrollVerifyPanel({
 							</div>
 							<p className="iz-tiny iz-muted mt-1">
 								{fill(t.agencyPvReview.selfDeclaredWarning, {
-									amount: money(sum(unbacked)),
+									amount: formatRM(sum(unbacked)),
 								})}
 							</p>
 							<ul className="mt-2 space-y-1">
 								{unbacked.map((line) => (
 									<li key={line.id} className="iz-tiny iz-muted2">
 										{line.lineDate ?? "—"} · {line.description} ·{" "}
-										{money(Number(line.amount || 0))}
+										{formatRM(Number(line.amount || 0))}
 									</li>
 								))}
 							</ul>
@@ -439,7 +442,7 @@ export function PayrollVerifyPanel({
 									)}
 								</div>
 							</div>
-							<div className="font-medium">{money(sum(groupLines))}</div>
+							<div className="font-medium">{formatRM(sum(groupLines))}</div>
 						</div>
 					))}
 				</div>

@@ -1,3 +1,4 @@
+import { specialEventFieldsFromShift } from "@agency-portal/lib/backend-shift-map";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 import type { Shift } from "@/services/shift";
 import type { ShiftAssignment } from "@/services/shift-assignment";
@@ -51,6 +52,10 @@ export function outletShiftRequestFromBackend(
 			a.status !== "no_show" &&
 			a.status !== "leave_approved",
 	);
+	// The special sub-type, by the same rule as the venue's own screens: the
+	// shift's own (0167), else its card's. This mapper never carried it, so every
+	// special night on /agency/outlets read as a bare "Special".
+	const special = specialEventFieldsFromShift(shift);
 	return {
 		id: shift.id,
 		outletName,
@@ -71,6 +76,8 @@ export function outletShiftRequestFromBackend(
 		languages: shift.languages ?? "",
 		event: shift.eventName ?? "",
 		eventKind: shift.eventKind,
+		specialEventType: special.specialEventType,
+		customSpecialEventName: special.customSpecialEventName,
 		// The event card's picture rides the shift payload (an agency cannot read
 		// another org's template list) — dropping it here is what blanked the
 		// cover on /agency/outlets while the roster dialogs showed it fine.

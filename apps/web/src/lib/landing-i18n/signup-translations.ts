@@ -86,9 +86,9 @@ export interface SignupTranslations {
 		/*
 		 * The refusals `POST /auth/register-member` sends, each keyed in
 		 * `member-signup-refusal.ts` on the server's exact English sentence.
+		 * A taken email or phone is `errors.signupNotCompleted` — one sentence
+		 * shared with the organisation sign-up, naming neither.
 		 */
-		errorEmailTaken: string;
-		errorPhoneTaken: string;
 		errorOrgUnavailable: string;
 		errorOrgUnreadable: string;
 		errorOwnerLane: string;
@@ -200,6 +200,61 @@ export interface SignupTranslations {
 		registrationFailed: string;
 		internalServerError: string;
 		unexpected: string;
+		/**
+		 * `POST /auth/register` and `POST /auth/register-member` answer a taken
+		 * email, phone or ID number with ONE sentence that names none of them
+		 * (owner, 29 Sep 2026: "General message, both") — `SIGNUP_NOT_COMPLETED`
+		 * in the backend's account-answers.ts, keyed in member-signup-refusal.ts.
+		 */
+		signupNotCompleted: string;
+	};
+	/**
+	 * THE EMAIL CODE — proof that the address typed is the person's own, asked
+	 * for BEFORE any account exists (owner, 30 Sep 2026: public sign-up must not
+	 * say whether an email has an account, except to someone who proved it is
+	 * theirs). Shared by the organisation form (its login email) and the
+	 * team-member form.
+	 *
+	 * The `server*` values are the reader's version of the server's exact
+	 * English sentences, keyed in `member-signup-refusal.ts`; English keeps the
+	 * server's own wording, so an English page reads unchanged.
+	 */
+	emailCode: {
+		title: string;
+		/** `{email}` is what the person typed — it says nothing about any account. */
+		lead: string;
+		leadNoEmail: string;
+		sendCode: string;
+		sending: string;
+		resendCode: string;
+		/** `{s}` — seconds until this address may ask again. */
+		resendIn: string;
+		codeLabel: string;
+		/** `{email}` — the address the live code went to. */
+		sentTo: string;
+		changeEmail: string;
+		/** Submit refused on the page: no code has been sent for this email. */
+		sendFirst: string;
+		/** Submit refused on the page: a code was sent, six digits are not typed. */
+		codeIncomplete: string;
+		/** The send never got a sentence back (network, empty body). */
+		sendFailed: string;
+		/** A sign-up refusal spent the code — beside the box, saying what next. */
+		newCodeNeeded: string;
+		/** A wrong code — the same code is still good for another try. */
+		retypeHint: string;
+		serverSent: string;
+		/** `{s}` — read out of the server's own sentence, never assumed. */
+		serverWait: string;
+		serverCouldNotSend: string;
+		serverTooManyCodes: string;
+		serverTooManyCodesForEmail: string;
+		serverEnterValidEmail: string;
+		serverVerifyFirst: string;
+		serverInvalidCode: string;
+		serverTooManyAttempts: string;
+		serverCodeExpired: string;
+		serverEmailHasAccount: string;
 	};
 	validation: {
 		companyNameRequired: string;
@@ -343,8 +398,6 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			yourDetails: "Your details",
 			passwordMin: "Password must be at least 6 characters",
 			nameRequired: "Enter your full name",
-			errorEmailTaken: "That email already has an account — sign in instead.",
-			errorPhoneTaken: "That phone number is already used by another account",
 			errorOrgUnavailable: "That organisation is not available to join.",
 			errorOrgUnreadable:
 				"Could not read the organisation you chose — choose it again.",
@@ -533,6 +586,44 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			internalServerError:
 				"Our server encountered an error. Please try again later.",
 			unexpected: "An unexpected error occurred. Please try again.",
+			signupNotCompleted:
+				"We couldn't complete sign-up — if you already have an account, sign in or reset your password.",
+		},
+		emailCode: {
+			title: "Verify your email",
+			lead: "We'll send a 6-digit code to {email}. Your account is only created once you enter it.",
+			leadNoEmail:
+				"Type your email above, then send yourself a 6-digit code. Your account is only created once you enter it.",
+			sendCode: "Send code",
+			sending: "Sending…",
+			resendCode: "Resend code",
+			resendIn: "Resend in {s}s",
+			codeLabel: "6-digit code",
+			sentTo: "Sent to {email}",
+			changeEmail: "Change email",
+			sendFirst: "Verify your email first — send yourself the 6-digit code",
+			codeIncomplete: "Enter the 6-digit code we emailed you",
+			sendFailed:
+				"Could not send the code. Check your connection and try again.",
+			newCodeNeeded: "Send a new code to continue.",
+			retypeHint: "Check the code in the email and type it again.",
+			serverSent:
+				"We sent a 6-digit code to that email — it expires in 10 minutes",
+			serverWait: "Wait {s}s before requesting another code",
+			serverCouldNotSend:
+				"Could not send the code — try again in a few minutes",
+			serverTooManyCodes:
+				"Too many verification codes requested. Please try again later.",
+			serverTooManyCodesForEmail:
+				"Too many verification codes requested for that email. Please try again later.",
+			serverEnterValidEmail: "Enter a valid email address",
+			serverVerifyFirst:
+				"Verify your email first — we will send you a 6-digit code",
+			serverInvalidCode: "Invalid code",
+			serverTooManyAttempts: "Too many attempts — request a new code",
+			serverCodeExpired: "That code has expired — request a new one",
+			serverEmailHasAccount:
+				"That email already has an account — sign in, or reset your password",
 		},
 		validation: {
 			companyNameRequired: "Company name is required",
@@ -658,8 +749,6 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			yourDetails: "您的资料",
 			passwordMin: "密码至少需要 6 个字符",
 			nameRequired: "请输入您的姓名",
-			errorEmailTaken: "该邮箱已有账号 —— 请直接登录。",
-			errorPhoneTaken: "该手机号已被其他账号使用",
 			errorOrgUnavailable: "该机构目前无法加入。",
 			errorOrgUnreadable: "无法读取您选择的机构 —— 请重新选择。",
 			errorOwnerLane: "请选择财务、董事或运营主管 —— 所有者由机构指定",
@@ -841,6 +930,37 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			registrationFailed: "注册失败，请重试。",
 			internalServerError: "服务器发生错误，请稍后再试。",
 			unexpected: "发生意外错误，请重试。",
+			signupNotCompleted:
+				"无法完成注册 —— 如果您已有账号，请直接登录或重设密码。",
+		},
+		emailCode: {
+			title: "验证您的邮箱",
+			lead: "我们会向 {email} 发送 6 位验证码。输入验证码后才会创建账号。",
+			leadNoEmail:
+				"请先在上方填写邮箱，再获取 6 位验证码。输入验证码后才会创建账号。",
+			sendCode: "发送验证码",
+			sending: "正在发送…",
+			resendCode: "重新发送",
+			resendIn: "{s} 秒后可重新发送",
+			codeLabel: "6 位验证码",
+			sentTo: "已发送至 {email}",
+			changeEmail: "更换邮箱",
+			sendFirst: "请先验证邮箱 —— 获取 6 位验证码",
+			codeIncomplete: "请输入邮件中的 6 位验证码",
+			sendFailed: "无法发送验证码。请检查网络连接后重试。",
+			newCodeNeeded: "请重新获取验证码以继续。",
+			retypeHint: "请核对邮件中的验证码后重新输入。",
+			serverSent: "我们已向该邮箱发送 6 位验证码 —— 10 分钟内有效",
+			serverWait: "请等待 {s} 秒后再获取验证码",
+			serverCouldNotSend: "无法发送验证码 —— 请几分钟后再试",
+			serverTooManyCodes: "验证码请求次数过多，请稍后再试。",
+			serverTooManyCodesForEmail: "该邮箱的验证码请求次数过多，请稍后再试。",
+			serverEnterValidEmail: "请输入有效的电子邮箱地址",
+			serverVerifyFirst: "请先验证您的邮箱 —— 我们会向您发送 6 位验证码",
+			serverInvalidCode: "验证码无效",
+			serverTooManyAttempts: "尝试次数过多 —— 请重新获取验证码",
+			serverCodeExpired: "验证码已过期 —— 请重新获取",
+			serverEmailHasAccount: "该邮箱已有账号 —— 请直接登录，或重设密码",
 		},
 		validation: {
 			companyNameRequired: "公司名称为必填项",

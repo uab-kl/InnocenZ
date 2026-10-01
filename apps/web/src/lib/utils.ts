@@ -90,6 +90,22 @@ export function formatPrice(value: number | string | null | undefined): string {
 	}).format(num);
 }
 
+/**
+ * A money figure WITH its currency: "RM 1,234.50", a negative "−RM 4.50" (U+2212,
+ * the sign before the currency — never "RM -4.50"), and "RM —" when there is no
+ * number, as `formatPrice` says it. Signed on what is printed, so a value that
+ * rounds to 0.00 prints unsigned. Same rule as the portals' `formatRM`
+ * (agency-portal/lib/format-rm.ts); `formatPrice` itself is left unchanged.
+ */
+export function formatPriceRm(
+	value: number | string | null | undefined,
+): string {
+	const num = typeof value === "string" ? Number(value) : value;
+	if (num == null || Number.isNaN(num)) return `RM ${formatPrice(value)}`;
+	const amount = formatPrice(Math.abs(num));
+	return `${num < 0 && /[1-9]/.test(amount) ? "−" : ""}RM ${amount}`;
+}
+
 export const statusColors: Record<string, string> = {
 	active:
 		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",

@@ -20,6 +20,7 @@ import {
 	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { useAgencyRecordedFloorSales } from "@agency-portal/hooks/use-agency-floor-sales";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
 import { useOutletSwapMutations } from "@agency-portal/hooks/use-outlet-swap-mutations";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
@@ -56,6 +57,8 @@ import {
 } from "@agency-portal/lib/roster-shift-filters";
 import {
 	dedupeLiveRosterByPr,
+	rosterWageBillRm,
+	rosterWeekHeadcount,
 	rosterWeekStart,
 	weekDayIsos,
 } from "@agency-portal/lib/roster-week-plan";
@@ -137,6 +140,13 @@ function AgencyRoster() {
 				: (weekDays[weekDays.length - 1] ?? weekStartIso),
 	});
 	const agencyRoster = backendRoster.slots;
+	// Tonight's Drinks / Tips as the SERVER recorded them (`shift_sale`), per
+	// slot — null on a demo session, which keeps its fixture engine. Live view
+	// only: Planning has no floor columns.
+	const { recordedBySlotId } = useAgencyRecordedFloorSales({
+		dateIso: DEFAULT_ROSTER_DATE_ISO,
+		enabled: viewMode === "live",
+	});
 	const prCheckInMeta = useStore((s) => s.prCheckInMeta);
 	const prSubRole = useStore((s) => s.prSubRole);
 	// `editRosterSlot`, `cancelRosterShift` and `flagRosterAttendance` were read
@@ -396,9 +406,15 @@ function AgencyRoster() {
 			),
 		[agencyRoster, weekDays],
 	);
+	// Each booking's own tier wage, from the server — see `rosterWageBillRm`.
 	const estLabour = useMemo(
-		() =>
-			weekScheduled.reduce((s, slot) => s + (slot.estPayout ?? 350), 0) * 1.08,
+		() => rosterWageBillRm(weekScheduled),
+		[weekScheduled],
+	);
+	// PEOPLE on the week, with the bookings beside them — the tile's label says
+	// PRs, and counting rows called one PR on five nights "5 PRs".
+	const weekHeadcount = useMemo(
+		() => rosterWeekHeadcount(weekScheduled),
 		[weekScheduled],
 	);
 
@@ -560,8 +576,15 @@ function AgencyRoster() {
 					) : (
 						<>
 							<span className="iz-roster-stat">
-								<b>{weekScheduled.length}</b>
+								<b>{weekHeadcount.prs}</b>
 								{t.roster.prsRosteredThisWeek}
+								<span aria-hidden="true">·</span>
+								{fill(
+									weekHeadcount.shifts === 1
+										? t.roster.weekShiftCountOne
+										: t.roster.weekShiftCountMany,
+									{ n: weekHeadcount.shifts },
+								)}
 							</span>
 							<span className="iz-roster-stat">
 								<b className="money">{formatRM(estLabour)}</b>
@@ -806,6 +829,7 @@ function AgencyRoster() {
 						happyHourEnd={outletWorkspace.happyHourEnd}
 						workspaceTierRates={outletWorkspace.tierRates}
 						commissionOnlyRates={outletWorkspace.commissionOnlyRates}
+						recordedBySlotId={recordedBySlotId}
 						canAssign={canAssign}
 						onEdit={openEdit}
 						onFlagNoShow={handleFlagNoShow}
