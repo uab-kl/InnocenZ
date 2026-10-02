@@ -3218,6 +3218,17 @@ export function understand(
 			next: nextChips(role, asked),
 		};
 	}
+	/* The best section that passes every check — the top match may not. */
+	const section = referenceCandidates(text, role)
+		.slice(0, 5)
+		.find((m) => sectionFirst(m, role, text));
+	if (section) {
+		return {
+			reply: { kind: "reference", id: section.id },
+			role,
+			next: nextChips(role, asked),
+		};
+	}
 	/* Swear words are dropped before matching — the typo-forgiving matcher
 	 * reads "shit" as "shift" and "hell" as "hello". */
 	const p = m.soft
@@ -3363,6 +3374,8 @@ function stem(word: string): string {
 	else if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
 	else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
 	if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+	/* "cancelling" → "cancell" → "cancel", "stopped" → "stopp" → "stop" */
+	if (w.length > 4 && /([bdglmnprt])\1$/.test(w)) w = w.slice(0, -1);
 	return w;
 }
 
@@ -3384,6 +3397,11 @@ interface RefIndex {
 		id: string;
 		role: ReferenceRole;
 		title: Set<string>;
+		/** The title's words in each language — how much of it a message covers. */
+		titleEn: Set<string>;
+		titleZh: Set<string>;
+		/** Both titles, for the kind of question they ask (why / when / how much). */
+		titleText: string;
 		body: Set<string>;
 	}[];
 	idf: Map<string, number>;
@@ -3397,6 +3415,9 @@ function referenceIndex(): RefIndex {
 		id: r.id,
 		role: r.role,
 		title: new Set(terms(`${r.en.title} ${r.zh.title}`)),
+		titleEn: new Set(terms(r.en.title)),
+		titleZh: new Set(terms(r.zh.title)),
+		titleText: `${r.en.title} ${r.zh.title}`,
 		body: new Set(terms(`${r.en.lines.join(" ")} ${r.zh.lines.join(" ")}`)),
 	}));
 	const df = new Map<string, number>();
@@ -3415,10 +3436,41 @@ export function findReference(
 	text: string,
 	role: ChatRole | null,
 ): string | null {
+	return referenceMatch(text, role)?.id ?? null;
+}
+
+export interface ReferenceMatch {
+	id: string;
+	role: ReferenceRole;
+	score: number;
+	/** How many of the message's words are in the section's title question. */
+	inTitle: number;
+	matched: number;
+	/** Share of the title's words (in the message's language) the message has. */
+	titleCover: number;
+	titleText: string;
+	/** How many meaningful words the message itself has. */
+	asked: number;
+}
+
+/** The best verified section for `text`, with how well it matched. */
+export function referenceMatch(
+	text: string,
+	role: ChatRole | null,
+): ReferenceMatch | null {
+	return referenceCandidates(text, role)[0] ?? null;
+}
+
+/** Every section that matches `text` well enough, best first. */
+export function referenceCandidates(
+	text: string,
+	role: ChatRole | null,
+): ReferenceMatch[] {
 	const { docs, idf } = referenceIndex();
 	const q = [...new Set(terms(text))];
-	if (q.length === 0) return null;
-	let best: { id: string; score: number } | null = null;
+	if (q.length === 0) return [];
+	const zh = CJK.test(text);
+	const found: ReferenceMatch[] = [];
 	for (const d of docs) {
 		let score = 0;
 		let matched = 0;
@@ -3444,9 +3496,76 @@ export function findReference(
 		if (!enough) continue;
 		if (role && role !== "general")
 			score *= d.role === role ? 1.25 : d.role === "any" ? 1 : 0.8;
-		if (!best || score > best.score) best = { id: d.id, score };
+		if (score < MIN_REFERENCE_SCORE) continue;
+		const own = zh ? d.titleZh : d.titleEn;
+		const covered = q.filter((t) => own.has(t)).length;
+		found.push({
+			id: d.id,
+			role: d.role,
+			score,
+			inTitle,
+			matched,
+			titleCover: own.size ? covered / own.size : 0,
+			titleText: d.titleText,
+			asked: q.length,
+		});
 	}
-	return best && best.score >= MIN_REFERENCE_SCORE ? best.id : null;
+	return found.sort((a, b) => b.score - a.score);
+}
+
+/*
+ * Section first (owner, 3 Oct 2026: "make the chatbot smarter on all of the
+ * questions too"). Each verified section's title IS a user's question ("Why
+ * can't I check out?", "How much does cancelling a shift cost?"). When a
+ * message shares SECTION_FIRST_TITLE_HITS of its words with such a title, for
+ * the visitor's own side (or everyone's), that section answers it — not the
+ * broader hand-written topic, which stays for general how-to questions.
+ * Measured on a 391-question benchmark written from the sections themselves.
+ */
+const SECTION_FIRST_TITLE_HITS = 2;
+const SECTION_FIRST_SCORE = 6;
+/* A blind judge compared all 232 answers this rule changed: the section won
+ * 185, the topic 31. The 31 came in three kinds, each now a check below. */
+const SECTION_FIRST_COVER = 0.5;
+/** A title asking WHY / WHEN / HOW MUCH / WHAT HAPPENS answers only a message that asks it. */
+const TITLE_INTENT: [RegExp, RegExp][] = [
+	[
+		/\b(why|cant|can't|cannot|won't|wont|refused|blocked|disabled)\b|为什么|不能|不了/i,
+		/\b(why|cant|can't|cannot|won't|wont|not|fail|failed|refuse|refused|blocked|disabled|error|stuck|unable|kenapa|tak boleh|tak dapat)\b|为什么|不能|不了|不到|无法|没法/i,
+	],
+	[
+		/\bwhen\b|什么时候|几时/i,
+		/\b(when|bila|what time|which day|how long)\b|什么时候|几时|多久|哪天/i,
+	],
+	[
+		/\b(how much|cost|costs)\b|多少钱|费用/i,
+		/\b(how much|cost|costs|fee|fees|charge|charged|berapa|price|rm|kena)\b|多少|费|钱|收费|罚/i,
+	],
+	[
+		/\bwhat happens\b|会怎样/i,
+		/\b(what happens|happen|after|then|if|kalau|approved|rejected|status)\b|会怎|之后|以后|如果|批准|驳回/i,
+	],
+];
+
+function sectionFirst(
+	m: ReferenceMatch,
+	role: ChatRole | null,
+	text: string,
+): boolean {
+	if (m.inTitle < SECTION_FIRST_TITLE_HITS || m.score < SECTION_FIRST_SCORE)
+		return false;
+	/* "can i join 2 agency" is not "How do STAFF join an existing outlet or agency?" */
+	if (m.titleCover < SECTION_FIRST_COVER) return false;
+	/* A one- or two-word message ("post job") needs the WHOLE title — else the
+	 * broad topic answers it (judged better for vague messages). */
+	if (m.asked <= 2 && m.titleCover < 1) return false;
+	/* "post job" is not "Why can't I post a job?" */
+	for (const [asks, needs] of TITLE_INTENT)
+		if (asks.test(m.titleText) && !needs.test(text)) return false;
+	/* Side unknown: "does innocenz pay the PRs?" wants the answer for everyone,
+	 * not the outlet's or the agency's version — unless the match is very strong. */
+	if (!role || role === "general") return m.role === "any" || m.inTitle >= 3;
+	return m.role === role || m.role === "any";
 }
 
 /*

@@ -217,6 +217,39 @@ describe("the written backup understands how people really ask (3 Oct 2026)", ()
 		}
 	});
 
+	it("answers a specific question from the section that asks it — the broad topic keeps the general ones", () => {
+		const cases: [string, ChatRole | null, string][] = [
+			// specific → the verified section whose title asks it
+			[
+				"how much will i kena charge if i cancel tonight shift",
+				"pr",
+				"ref-pr-cancel-fee",
+			],
+			[
+				"why the sign button not working on my voucher",
+				"pr",
+				"ref-pr-cant-sign",
+			],
+			[
+				"what does pending vs approved mean on my payment page",
+				"pr",
+				"ref-pr-day-status",
+			],
+			["how to change my password in the app", "pr", "ref-pr-security"],
+			// general or vague → the hand-written topic (judged better)
+			["post job", "outlet", "ou-postjob"],
+			["how do i sign my weekly voucher", "pr", "pr-sign"],
+			["can i join 2 agency", "pr", "pr-agencies"],
+			// side not said → the answer for everyone, not one side's version
+			["does innocenz pay the PRs?", null, "gen-money"],
+		];
+		for (const [text, role, id] of cases) {
+			const r = understand(text, role, new Set()).reply;
+			const got = r.kind === "reference" || r.kind === "topic" ? r.id : r.kind;
+			expect(got, text).toBe(id);
+		}
+	});
+
 	it("never answers chit-chat with a random reference section", () => {
 		for (const t of ["holiday plan to bali", "solve this math problem"]) {
 			expect(understand(t, null, new Set()).reply.kind, t).not.toBe(
