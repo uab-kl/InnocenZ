@@ -5,6 +5,11 @@ vi.mock('@/util/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn(), info:
 
 import {
   answerLandingChat,
+  clearAnswerCache,
+  clearModelRest,
+  conversation,
+  retryAfterMs,
+  MAX_HISTORY_TURNS,
   MAX_QUESTION_CHARS,
   parseLandingChatInput,
   redactPersonalData,
@@ -12,6 +17,7 @@ import {
   factsFor,
   parseModelReply,
   systemInstruction,
+  thinkingLevel,
 } from './landing-chat.service';
 
 const input = { question: 'How do PRs check in?', locale: 'en' as const, role: 'pr' as const };
@@ -21,7 +27,11 @@ function geminiReply(reply: unknown) {
   return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }), { status: 200 });
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  clearModelRest();
+  clearAnswerCache();
+});
 
 describe('parseLandingChatInput', () => {
   it('accepts a question, a language and a role', () => {
@@ -93,11 +103,61 @@ describe('factsFor', () => {
   });
 });
 
+describe('conversation (follow-up memory)', () => {
+  it('sends the earlier turns before the question, visitor first, alternating', () => {
+    const turns = conversation(
+      parseLandingChatInput({
+        ...input,
+        question: 'and how do I sign it?',
+        history: [
+          { from: 'assistant', text: 'Hi! Who are you?' },
+          { from: 'visitor', text: 'where is my weekly voucher' },
+          { from: 'assistant', text: 'On the **Payment tab**, under this week.' },
+        ],
+      })!,
+    );
+    expect(turns.map((t) => t.role)).toEqual(['user', 'model', 'user']);
+    expect(turns[0].parts[0].text).toBe('where is my weekly voucher');
+    expect(turns[2].parts[0].text).toBe('and how do I sign it?');
+  });
+
+  it('keeps only the last turns, trims long ones and masks personal details in them', () => {
+    const history = Array.from({ length: 12 }, (_, i) => ({
+      from: i % 2 ? ('assistant' as const) : ('visitor' as const),
+      text: i === 10 ? 'call me on 012-345 6789 ' + 'x'.repeat(3000) : `turn ${i}`,
+    }));
+    const parsed = parseLandingChatInput({ ...input, history })!;
+    expect(parsed.history).toHaveLength(MAX_HISTORY_TURNS);
+    expect(parsed.history!.every((t) => t.text.length <= 600)).toBe(true);
+    const sent = JSON.stringify(conversation(parsed));
+    expect(sent).not.toContain('345 6789');
+    expect(sent).not.toContain('turn 0');
+  });
+
+  it('treats history: null as no history instead of refusing the question', () => {
+    const parsed = parseLandingChatInput({ ...input, history: null });
+    expect(parsed).not.toBeNull();
+    expect(conversation(parsed!)).toEqual([{ role: 'user', parts: [{ text: 'How do PRs check in?' }] }]);
+  });
+
+  it('still answers a website that sends no history', () => {
+    expect(conversation(parseLandingChatInput(input)!)).toEqual([
+      { role: 'user', parts: [{ text: 'How do PRs check in?' }] },
+    ]);
+  });
+});
+
 describe('systemInstruction', () => {
   it('answers in the visitor language and only from the facts', () => {
     const zh = systemInstruction({ ...input, locale: 'zh' });
     expect(zh).toContain('Simplified Chinese');
     expect(zh).toContain('ONLY from the FACTS');
+  });
+
+  it('carries the generated facts itself, after the rules', () => {
+    const text = systemInstruction(input);
+    expect(text).toContain(factsFor(input));
+    expect(text.indexOf('ONLY from the FACTS')).toBeLessThan(text.indexOf(factsFor(input)));
   });
 });
 
@@ -112,6 +172,48 @@ describe('answerLandingChat', () => {
     expect((init as RequestInit).headers).toMatchObject({ 'x-goog-api-key': 'test-key' });
   });
 
+  it('a model Google refused with a wait is skipped until then — no wasted call', async () => {
+    const quota = () =>
+      new Response(JSON.stringify({ error: { code: 429, details: [{ retryDelay: '47911s' }] } }), { status: 429 });
+    const fetchMock = vi.fn().mockImplementation(async () => quota());
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await answerLandingChat(input)).toEqual({ ok: false, reason: 'upstream' });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(await answerLandingChat(input)).toEqual({ ok: false, reason: 'upstream' });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(retryAfterMs('{"retryDelay": "30s"}')).toBe(30_000);
+    expect(retryAfterMs('no hint')).toBe(60_000);
+  });
+
+  it('thinks "low" on every model, for speed', async () => {
+    expect(thinkingLevel('gemini-flash-lite-latest')).toBe('low');
+    expect(thinkingLevel('gemini-3.5-flash')).toBe('low');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('busy', { status: 503 }))
+      .mockResolvedValueOnce(geminiReply({ text: 'ok' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await answerLandingChat(input);
+    const levels = fetchMock.mock.calls.map(
+      (c) => JSON.parse(String((c[1] as RequestInit).body)).generationConfig.thinkingConfig.thinkingLevel,
+    );
+    expect(levels).toEqual(['low', 'low']);
+  });
+
+  it('answers a repeated first question from memory — no Gemini call, instant', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => geminiReply({ text: 'Tap **Check in**.' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = await answerLandingChat(input);
+    const again = await answerLandingChat({ ...input, question: '  how do PRs check in  ' });
+    expect(again).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // a follow-up, another language or another side is never served from memory
+    await answerLandingChat({ ...input, history: [{ from: 'visitor', text: 'hi' }] });
+    await answerLandingChat({ ...input, locale: 'zh' });
+    await answerLandingChat({ ...input, role: 'agency' });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it('tries the next model when the first is busy', async () => {
     const fetchMock = vi
       .fn()
@@ -119,7 +221,7 @@ describe('answerLandingChat', () => {
       .mockResolvedValueOnce(geminiReply({ text: 'Answer from the backup model.' }));
     vi.stubGlobal('fetch', fetchMock);
     const out = await answerLandingChat(input);
-    expect(out).toMatchObject({ ok: true, model: 'gemini-3.5-flash' });
+    expect(out).toMatchObject({ ok: true, model: 'gemini-3.1-flash-lite' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

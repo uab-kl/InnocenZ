@@ -24,7 +24,11 @@ import {
 	type LandingTranslations,
 	useLandingLocale,
 } from "@/lib/landing-i18n";
-import { askLandingAi } from "./landing-chat-ai";
+import {
+	askLandingAi,
+	type ChatTurn,
+	MAX_HISTORY_TURNS,
+} from "./landing-chat-ai";
 import {
 	answerRole,
 	CHAT_FALLBACK,
@@ -34,16 +38,18 @@ import {
 	type ChatReply,
 	type ChatRole,
 	FOLLOW_UPS,
+	fitsLocale,
 	groupSteps,
 	LEAD_INS,
-	MAX_CHIPS,
 	nextChips,
 	placeHeading,
 	ROLE_CHIPS,
+	referenceAnswer,
 	SMALL_TALK,
 	topicById,
 	understand,
 	type WrittenReply,
+	withAiFollowUp,
 } from "./landing-chat-knowledge";
 
 /*
@@ -216,6 +222,8 @@ function answerFor(
 			return SMALL_TALK[locale][reply.id];
 		case "fallback":
 			return CHAT_FALLBACK[locale];
+		case "reference":
+			return referenceAnswer(reply.id, locale) ?? CHAT_FALLBACK[locale];
 		case "ai":
 			/* Written in the other language before a switch: show the written answer
 			 * in the language now on screen, never a mixed conversation. */
@@ -311,7 +319,19 @@ function chipLabel(
 /** How long "typing…" shows before a bubble lands — longer text, longer wait. */
 function typingDelay(chars: number): number {
 	if (prefersReducedMotion()) return 120;
-	return Math.min(350 + chars * 6, 1200);
+	/* Quicker since 2 Oct 2026 (owner: "can make respond more faster?") — it was
+	 * 350 ms + 6 ms a character, up to 1.2 s a bubble. */
+	return Math.min(250 + chars * 3, 700);
+}
+
+/**
+ * An AI answer has already kept the visitor waiting while Gemini thought, so its
+ * first bubble lands at once and the rest follow quickly (owner, 2 Oct 2026:
+ * "make the chatbot fast respond speed"). Written answers keep the human pace.
+ */
+function aiBubbleGap(chars: number, first: boolean): number {
+	if (first || prefersReducedMotion()) return 0;
+	return Math.min(200 + chars * 2, 500);
 }
 
 export function LandingChatButton() {
@@ -351,6 +371,12 @@ export function LandingChatButton() {
 	const [draft, setDraft] = useState("");
 	/** Topics already answered, so they are not offered again. */
 	const asked = useRef(new Set<string>());
+	/**
+	 * What was said, in words, for the AI to follow a short follow-up ("and how
+	 * do I sign it?"). A ref, not `messages`: a reply still "being typed" is
+	 * already part of the conversation the visitor is answering.
+	 */
+	const turns = useRef<ChatTurn[]>([]);
 	/** The last typed question the bot could not answer, for the WhatsApp message. */
 	const nextId = useRef(1);
 	/** Bubbles still "being typed" — flushed at once if the visitor speaks again. */
@@ -504,6 +530,13 @@ export function LandingChatButton() {
 	const deliver = useCallback(
 		(reply: ChatReply, next: ChatChip[]) => {
 			const answer = answerFor(reply, locale, c);
+			turns.current.push({
+				from: "assistant",
+				text: [
+					answer.text,
+					...(answer.steps ?? []).map((s) => `${s.where}: ${s.what}`),
+				].join("\n"),
+			});
 			const parts: { part: BubblePart; chars: number; nextId?: string }[] = [
 				{ part: "text", chars: answer.text.length },
 			];
@@ -528,7 +561,10 @@ export function LandingChatButton() {
 			setChips([]);
 			let at = 0;
 			parts.forEach((p, i) => {
-				at += typingDelay(p.chars);
+				at +=
+					reply.kind === "ai"
+						? aiBubbleGap(p.chars, i === 0)
+						: typingDelay(p.chars);
 				const isLast = i === parts.length - 1;
 				const land = () => {
 					push({ from: "bot", reply, part: p.part, nextId: p.nextId });
@@ -592,35 +628,40 @@ export function LandingChatButton() {
 		aiRequest.current = request;
 		setTyping(true);
 		setChips([]);
-		void askLandingAi(question, locale, forRole, request.ctl.signal).then(
-			(ai) => {
-				if (request.ctl.signal.aborted || aiRequest.current !== request) return;
-				aiRequest.current = null;
-				if (!ai) {
-					deliver(backup, next);
-					return;
-				}
-				/* "Tell me more" leads the suggestions, as the follow-up asks. */
-				const chips: ChatChip[] = ai.more
-					? [{ kind: "ask" as const, text: ai.more }, ...next].slice(
-							0,
-							MAX_CHIPS,
-						)
-					: next;
-				deliver(
-					{
-						kind: "ai",
-						question,
-						typed,
-						locale,
-						answer: ai.answer,
-						more: ai.more,
-						backup,
-					},
-					chips,
-				);
-			},
-		);
+		const history = turns.current.slice(-MAX_HISTORY_TURNS);
+		turns.current.push({ from: "visitor", text: question });
+		void askLandingAi(
+			question,
+			locale,
+			forRole,
+			history,
+			request.ctl.signal,
+		).then((ai) => {
+			if (request.ctl.signal.aborted || aiRequest.current !== request) return;
+			aiRequest.current = null;
+			if (!ai) {
+				deliver(backup, next);
+				return;
+			}
+			/* A follow-up Gemini wrote in the other language (a 中文 question on the
+			 * English page) is dropped rather than shown inside an English sentence. */
+			const more = ai.more && fitsLocale(ai.more, locale) ? ai.more : undefined;
+			const chips = withAiFollowUp(more, next, (chip) =>
+				chipLabel(chip, locale, c),
+			);
+			deliver(
+				{
+					kind: "ai",
+					question,
+					typed,
+					locale,
+					answer: ai.answer,
+					more,
+					backup,
+				},
+				chips,
+			);
+		});
 	};
 
 	const ask = (text: string) => {
@@ -679,6 +720,7 @@ export function LandingChatButton() {
 		for (const p of pending.current) window.clearTimeout(p.timer);
 		pending.current = [];
 		asked.current = new Set();
+		turns.current = [];
 		setMessages([WELCOME]);
 		setChips(ROLE_CHIPS);
 		setRole(null);
@@ -918,7 +960,7 @@ export function LandingChatButton() {
 		}
 		const follow = FOLLOW_UPS[locale];
 		const template = follow.topic[m.id % follow.topic.length];
-		if (m.reply.kind === "ai" && m.reply.more)
+		if (m.reply.kind === "ai" && m.reply.more && m.reply.locale === locale)
 			return <p>{template.replace("{next}", m.reply.more)}</p>;
 		if (m.reply.kind === "intro" || !m.nextId) return <p>{follow.intro}</p>;
 		const nextChip = topicById(m.nextId)?.[locale].chip ?? "";
