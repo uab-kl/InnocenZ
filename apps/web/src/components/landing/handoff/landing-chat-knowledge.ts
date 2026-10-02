@@ -1962,6 +1962,10 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"看得到我在哪",
 			"看到我在哪",
 			"知道我在哪",
+			"24/7",
+			"always on",
+			"location on",
+			"location 24 hours",
 		],
 		en: {
 			chip: "Does it track PRs?",
@@ -3196,7 +3200,10 @@ export function understand(
 		return polite("offtopic");
 	/* OT and MC/leave mean something different to each side, so the side picks
 	 * the verified answer rather than one keyword (owner, 3 Oct 2026). */
-	const routed = overtimeSection(text, role) ?? leaveSection(text, role);
+	const routed =
+		overtimeSection(text, role) ??
+		leaveSection(text, role) ??
+		checkinSection(text, role);
 	if (routed === "pr-leave") {
 		return {
 			reply: { kind: "topic", id: "pr-leave" },
@@ -3514,6 +3521,95 @@ function leaveSection(text: string, role: ChatRole | null): string | null {
 	if (LEAVE_AFTER.test(text)) return "ref-pr-mc-after";
 	if (LEAVE_PLAN.test(text)) return "ref-pr-unavailable-days";
 	return "pr-leave";
+}
+
+/*
+ * Check-in SITUATIONS, by side (owner, 3 Oct 2026: "make the chatbot smarter
+ * on check-in questions too"). Only a specific situation is routed — check-in
+ * won't work, can't or forgot to check out, a missed shift, coming late, a
+ * no-show, where PRs checked in, the pin, the fence, tonight's statuses,
+ * fining late PRs. A plain "how do I check in / set up attendance" keeps its
+ * hand-written topic (null here). "Track my location" stays a privacy
+ * question and "my pay is late" is not about check-in.
+ */
+const CHECKIN =
+	/\b(check ?in|check-in|checkin|check ?out|check-out|checkout|clock ?(in|out)|punch|attendance|kehadiran|geo ?fence|fence|radius|pin|gps|location|no.?show|absent|turn up|turned up|didnt come|did not come|never came)\b|\b(come|came|coming|arrive|arrived|running|am|im) late\b|\blateness\b|\bchecked ?(in|out)\b|\bmiss(ed)? (my |the |a )?shift\b|签到|签退|签不到|签不了|打卡|打不到卡|打不了卡|退不了|定位|围栏|迟到|没来|缺勤|没签/i;
+/* Privacy, not check-in: "is my gps always on", "can agency see my location
+ * 24 hours", "background location ah?" keep the tracking answer. */
+const NOT_CHECKIN =
+	/\b(track|tracking|tracked|spy|monitor|follow me|background|always on|24\/7|24 ?hours?|recorded|see my location|watch me)\b|追踪|跟踪|监视|后台|一直定位/i;
+const SIDE_OUTLET =
+	/\b(pin|radius|fence|geofence|my venue|our venue|my outlet|our outlet|my bar|my club)\b|定位点|围栏|半径/i;
+const SIDE_AGENCY =
+	/\b(my prs|our prs|my pr|our pr|roster|proof|mark|no.?show button)\b|我的 ?pr|排班/i;
+const CANT_OUT =
+	/\b(cant|cannot|can't|unable|tak boleh|tak dapat|not able to|fail|failed|error|stuck)\b.{0,20}\b(check ?out|clock ?out|checkout)\b|签不了退|签退不了|退不了/i;
+const FORGOT_OUT =
+	/\b(forgot|forget|lupa|didnt|did not)\b.{0,20}\b(check ?out|clock ?out|checkout)\b|忘了签退|忘记签退|没签退/i;
+const MISSED =
+	/\b(missed|miss|forgot|forget|lupa|didnt|did not|never)\b.{0,20}\b(check ?in|checkin|clock ?in|shift)\b|\bno.?show\b|错过|没签到|忘了签到|忘记签到/i;
+const TROUBLE =
+	/\b(cant|cannot|can't|unable|not working|fail|failed|error|too far|far|distance|gps|location|mock|fake|wrong|why|stuck|tak boleh|tak dapat|refresh)\b|签不到|打不到|签不了|打不了|定位不准|太远|位置不对/i;
+const LATE =
+	/\b(come|came|coming|arrive|arrived|running|am|im) late\b|\blateness\b|迟到/i;
+const FINE = /\b(fine|fines|penalty|penalties|deduct|charge)\b|罚|扣/i;
+const WHO_TONIGHT =
+	/\b(who|status|statuses|on.?duty|booked|released|tonight|arrived|here)\b|谁|状态|在岗|今晚/i;
+const SET_PIN =
+	/\b(set|setup|set up|change|move|update|where|add|radius)\b|设置|设定|更改|修改/i;
+
+function checkinSection(text: string, role: ChatRole | null): string | null {
+	if (!CHECKIN.test(text) || NOT_CHECKIN.test(text)) return null;
+	const side =
+		role === "pr" || role === "agency" || role === "outlet"
+			? role
+			: SIDE_OUTLET.test(text)
+				? "outlet"
+				: SIDE_AGENCY.test(text)
+					? "agency"
+					: "pr";
+	if (side === "outlet") {
+		if (
+			LATE.test(text) ||
+			FINE.test(text) ||
+			/\babsent\b|缺勤|没来/i.test(text)
+		)
+			return "ref-outlet-no-penalties";
+		if (/\b(pin|radius)\b|定位点|半径/i.test(text) && SET_PIN.test(text))
+			return "ref-outlet-pin-setup";
+		if (
+			/\b(fence|geofence|far|gps|fake|mock|accuracy|leeway)\b|围栏|太远/i.test(
+				text,
+			)
+		)
+			return "ref-outlet-fence-rules";
+		if (WHO_TONIGHT.test(text)) return "ref-outlet-pr-status";
+		return null;
+	}
+	if (side === "agency") {
+		/* "deduct pay for no show" is a penalty-rule question, not the no-show steps. */
+		if (FINE.test(text)) return "ref-agency-penalty-rules";
+		if (
+			/\bno.?show\b|\b(absent|didnt come|did not come|never came|turn up|turned up)\b|没来|缺勤/i.test(
+				text,
+			)
+		)
+			return "ref-agency-no-show";
+		if (LATE.test(text) && FINE.test(text)) return "ref-agency-penalty-rules";
+		if (
+			/\b(where|location|proof|map|fence|within|outside)\b|位置|证明|地图/i.test(
+				text,
+			)
+		)
+			return "ref-agency-checkin-labels";
+		return null;
+	}
+	if (CANT_OUT.test(text)) return "ref-pr-cant-checkout";
+	if (FORGOT_OUT.test(text)) return "ref-pr-forgot-checkout";
+	if (MISSED.test(text)) return "ref-pr-missed-shift";
+	if (LATE.test(text)) return "ref-pr-wage";
+	if (TROUBLE.test(text)) return "ref-pr-checkin-trouble";
+	return null;
 }
 
 /** A reference section as a written answer: the first line, then the rest. */
