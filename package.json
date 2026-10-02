@@ -31,6 +31,7 @@
     "@nx/js": "23.0.1",
     "@nx/node": "23.0.1",
     "@nx/web": "23.0.1",
+    "@playwright/test": "^1.63.0",
     "@swc-node/register": "1.11.1",
     "@swc/cli": "~0.8.0",
     "@swc/core": "1.15.8",
