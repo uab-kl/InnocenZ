@@ -122,7 +122,8 @@ describe("the written backup understands how people really ask (3 Oct 2026)", ()
 			["cuti", "pr-leave"],
 			["demam tak boleh kerja", "pr-leave"],
 			["punch in", "pr-checkin"],
-			["打不到卡", "pr-checkin"],
+			// can't punch in → the check-in troubleshooting section (3 Oct check-in rule)
+			["打不到卡", "ref-pr-checkin-trouble"],
 			["pay slip", "pr-sign"],
 			["two agency", "pr-agencies"],
 			["underpaid", "pr-dispute"],
@@ -132,7 +133,8 @@ describe("the written backup understands how people really ask (3 Oct 2026)", ()
 		];
 		for (const [text, id] of cases) {
 			const r = understand(text, "pr", new Set()).reply;
-			expect(r.kind === "topic" ? r.id : r.kind, text).toBe(id);
+			const got = r.kind === "topic" || r.kind === "reference" ? r.id : r.kind;
+			expect(got, text).toBe(id);
 		}
 	});
 
@@ -181,6 +183,71 @@ describe("the written backup understands how people really ask (3 Oct 2026)", ()
 		// leaving an AGENCY is a different question
 		const away = understand("how to leave my agency", "pr", new Set()).reply;
 		expect(away.kind === "topic" ? away.id : away.kind).toBe("pr-agencies");
+	});
+
+	it("answers check-in situations from the asker's side", () => {
+		const cases: [string, ChatRole | null, string][] = [
+			["how do i check in", "pr", "pr-checkin"],
+			["cannot check in too far", "pr", "ref-pr-checkin-trouble"],
+			["签不到怎么办", "pr", "ref-pr-checkin-trouble"],
+			["tak boleh check in", "pr", "ref-pr-checkin-trouble"],
+			["why cant i check out", "pr", "ref-pr-cant-checkout"],
+			["忘了签退", "pr", "ref-pr-forgot-checkout"],
+			["missed my shift", "pr", "ref-pr-missed-shift"],
+			["i am late 10 minutes", "pr", "ref-pr-wage"],
+			["my PR didnt come tonight", "agency", "ref-agency-no-show"],
+			["where did my PR check in", "agency", "ref-agency-checkin-labels"],
+			["deduct pay for no show", "agency", "ref-agency-penalty-rules"],
+			["how to set the check in pin", "outlet", "ref-outlet-pin-setup"],
+			["who checked in tonight", "outlet", "ref-outlet-pr-status"],
+			["can i fine PR who come late", "outlet", "ref-outlet-no-penalties"],
+		];
+		for (const [text, role, id] of cases) {
+			const r = understand(text, role, new Set()).reply;
+			const got = r.kind === "reference" || r.kind === "topic" ? r.id : r.kind;
+			expect(got, text).toBe(id);
+		}
+		// privacy questions keep the tracking answer
+		for (const t of [
+			"is my gps always on",
+			"can agency see my location 24 hours",
+		]) {
+			const r = understand(t, null, new Set()).reply;
+			expect(r.kind === "topic" ? r.id : r.kind, t).toBe("gen-tracking");
+		}
+	});
+
+	it("answers a specific question from the section that asks it — the broad topic keeps the general ones", () => {
+		const cases: [string, ChatRole | null, string][] = [
+			// specific → the verified section whose title asks it
+			[
+				"how much will i kena charge if i cancel tonight shift",
+				"pr",
+				"ref-pr-cancel-fee",
+			],
+			[
+				"why the sign button not working on my voucher",
+				"pr",
+				"ref-pr-cant-sign",
+			],
+			[
+				"what does pending vs approved mean on my payment page",
+				"pr",
+				"ref-pr-day-status",
+			],
+			["how to change my password in the app", "pr", "ref-pr-security"],
+			// general or vague → the hand-written topic (judged better)
+			["post job", "outlet", "ou-postjob"],
+			["how do i sign my weekly voucher", "pr", "pr-sign"],
+			["can i join 2 agency", "pr", "pr-agencies"],
+			// side not said → the answer for everyone, not one side's version
+			["does innocenz pay the PRs?", null, "gen-money"],
+		];
+		for (const [text, role, id] of cases) {
+			const r = understand(text, role, new Set()).reply;
+			const got = r.kind === "reference" || r.kind === "topic" ? r.id : r.kind;
+			expect(got, text).toBe(id);
+		}
 	});
 
 	it("never answers chit-chat with a random reference section", () => {

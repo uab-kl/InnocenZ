@@ -1962,6 +1962,10 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"看得到我在哪",
 			"看到我在哪",
 			"知道我在哪",
+			"24/7",
+			"always on",
+			"location on",
+			"location 24 hours",
 		],
 		en: {
 			chip: "Does it track PRs?",
@@ -3196,7 +3200,10 @@ export function understand(
 		return polite("offtopic");
 	/* OT and MC/leave mean something different to each side, so the side picks
 	 * the verified answer rather than one keyword (owner, 3 Oct 2026). */
-	const routed = overtimeSection(text, role) ?? leaveSection(text, role);
+	const routed =
+		overtimeSection(text, role) ??
+		leaveSection(text, role) ??
+		checkinSection(text, role);
 	if (routed === "pr-leave") {
 		return {
 			reply: { kind: "topic", id: "pr-leave" },
@@ -3207,6 +3214,17 @@ export function understand(
 	if (routed) {
 		return {
 			reply: { kind: "reference", id: routed },
+			role,
+			next: nextChips(role, asked),
+		};
+	}
+	/* The best section that passes every check — the top match may not. */
+	const section = referenceCandidates(text, role)
+		.slice(0, 5)
+		.find((m) => sectionFirst(m, role, text));
+	if (section) {
+		return {
+			reply: { kind: "reference", id: section.id },
 			role,
 			next: nextChips(role, asked),
 		};
@@ -3356,6 +3374,8 @@ function stem(word: string): string {
 	else if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
 	else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
 	if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+	/* "cancelling" → "cancell" → "cancel", "stopped" → "stopp" → "stop" */
+	if (w.length > 4 && /([bdglmnprt])\1$/.test(w)) w = w.slice(0, -1);
 	return w;
 }
 
@@ -3377,6 +3397,11 @@ interface RefIndex {
 		id: string;
 		role: ReferenceRole;
 		title: Set<string>;
+		/** The title's words in each language — how much of it a message covers. */
+		titleEn: Set<string>;
+		titleZh: Set<string>;
+		/** Both titles, for the kind of question they ask (why / when / how much). */
+		titleText: string;
 		body: Set<string>;
 	}[];
 	idf: Map<string, number>;
@@ -3390,6 +3415,9 @@ function referenceIndex(): RefIndex {
 		id: r.id,
 		role: r.role,
 		title: new Set(terms(`${r.en.title} ${r.zh.title}`)),
+		titleEn: new Set(terms(r.en.title)),
+		titleZh: new Set(terms(r.zh.title)),
+		titleText: `${r.en.title} ${r.zh.title}`,
 		body: new Set(terms(`${r.en.lines.join(" ")} ${r.zh.lines.join(" ")}`)),
 	}));
 	const df = new Map<string, number>();
@@ -3408,10 +3436,41 @@ export function findReference(
 	text: string,
 	role: ChatRole | null,
 ): string | null {
+	return referenceMatch(text, role)?.id ?? null;
+}
+
+export interface ReferenceMatch {
+	id: string;
+	role: ReferenceRole;
+	score: number;
+	/** How many of the message's words are in the section's title question. */
+	inTitle: number;
+	matched: number;
+	/** Share of the title's words (in the message's language) the message has. */
+	titleCover: number;
+	titleText: string;
+	/** How many meaningful words the message itself has. */
+	asked: number;
+}
+
+/** The best verified section for `text`, with how well it matched. */
+export function referenceMatch(
+	text: string,
+	role: ChatRole | null,
+): ReferenceMatch | null {
+	return referenceCandidates(text, role)[0] ?? null;
+}
+
+/** Every section that matches `text` well enough, best first. */
+export function referenceCandidates(
+	text: string,
+	role: ChatRole | null,
+): ReferenceMatch[] {
 	const { docs, idf } = referenceIndex();
 	const q = [...new Set(terms(text))];
-	if (q.length === 0) return null;
-	let best: { id: string; score: number } | null = null;
+	if (q.length === 0) return [];
+	const zh = CJK.test(text);
+	const found: ReferenceMatch[] = [];
 	for (const d of docs) {
 		let score = 0;
 		let matched = 0;
@@ -3437,9 +3496,76 @@ export function findReference(
 		if (!enough) continue;
 		if (role && role !== "general")
 			score *= d.role === role ? 1.25 : d.role === "any" ? 1 : 0.8;
-		if (!best || score > best.score) best = { id: d.id, score };
+		if (score < MIN_REFERENCE_SCORE) continue;
+		const own = zh ? d.titleZh : d.titleEn;
+		const covered = q.filter((t) => own.has(t)).length;
+		found.push({
+			id: d.id,
+			role: d.role,
+			score,
+			inTitle,
+			matched,
+			titleCover: own.size ? covered / own.size : 0,
+			titleText: d.titleText,
+			asked: q.length,
+		});
 	}
-	return best && best.score >= MIN_REFERENCE_SCORE ? best.id : null;
+	return found.sort((a, b) => b.score - a.score);
+}
+
+/*
+ * Section first (owner, 3 Oct 2026: "make the chatbot smarter on all of the
+ * questions too"). Each verified section's title IS a user's question ("Why
+ * can't I check out?", "How much does cancelling a shift cost?"). When a
+ * message shares SECTION_FIRST_TITLE_HITS of its words with such a title, for
+ * the visitor's own side (or everyone's), that section answers it — not the
+ * broader hand-written topic, which stays for general how-to questions.
+ * Measured on a 391-question benchmark written from the sections themselves.
+ */
+const SECTION_FIRST_TITLE_HITS = 2;
+const SECTION_FIRST_SCORE = 6;
+/* A blind judge compared all 232 answers this rule changed: the section won
+ * 185, the topic 31. The 31 came in three kinds, each now a check below. */
+const SECTION_FIRST_COVER = 0.5;
+/** A title asking WHY / WHEN / HOW MUCH / WHAT HAPPENS answers only a message that asks it. */
+const TITLE_INTENT: [RegExp, RegExp][] = [
+	[
+		/\b(why|cant|can't|cannot|won't|wont|refused|blocked|disabled)\b|为什么|不能|不了/i,
+		/\b(why|cant|can't|cannot|won't|wont|not|fail|failed|refuse|refused|blocked|disabled|error|stuck|unable|kenapa|tak boleh|tak dapat)\b|为什么|不能|不了|不到|无法|没法/i,
+	],
+	[
+		/\bwhen\b|什么时候|几时/i,
+		/\b(when|bila|what time|which day|how long)\b|什么时候|几时|多久|哪天/i,
+	],
+	[
+		/\b(how much|cost|costs)\b|多少钱|费用/i,
+		/\b(how much|cost|costs|fee|fees|charge|charged|berapa|price|rm|kena)\b|多少|费|钱|收费|罚/i,
+	],
+	[
+		/\bwhat happens\b|会怎样/i,
+		/\b(what happens|happen|after|then|if|kalau|approved|rejected|status)\b|会怎|之后|以后|如果|批准|驳回/i,
+	],
+];
+
+function sectionFirst(
+	m: ReferenceMatch,
+	role: ChatRole | null,
+	text: string,
+): boolean {
+	if (m.inTitle < SECTION_FIRST_TITLE_HITS || m.score < SECTION_FIRST_SCORE)
+		return false;
+	/* "can i join 2 agency" is not "How do STAFF join an existing outlet or agency?" */
+	if (m.titleCover < SECTION_FIRST_COVER) return false;
+	/* A one- or two-word message ("post job") needs the WHOLE title — else the
+	 * broad topic answers it (judged better for vague messages). */
+	if (m.asked <= 2 && m.titleCover < 1) return false;
+	/* "post job" is not "Why can't I post a job?" */
+	for (const [asks, needs] of TITLE_INTENT)
+		if (asks.test(m.titleText) && !needs.test(text)) return false;
+	/* Side unknown: "does innocenz pay the PRs?" wants the answer for everyone,
+	 * not the outlet's or the agency's version — unless the match is very strong. */
+	if (!role || role === "general") return m.role === "any" || m.inTitle >= 3;
+	return m.role === role || m.role === "any";
 }
 
 /*
@@ -3514,6 +3640,95 @@ function leaveSection(text: string, role: ChatRole | null): string | null {
 	if (LEAVE_AFTER.test(text)) return "ref-pr-mc-after";
 	if (LEAVE_PLAN.test(text)) return "ref-pr-unavailable-days";
 	return "pr-leave";
+}
+
+/*
+ * Check-in SITUATIONS, by side (owner, 3 Oct 2026: "make the chatbot smarter
+ * on check-in questions too"). Only a specific situation is routed — check-in
+ * won't work, can't or forgot to check out, a missed shift, coming late, a
+ * no-show, where PRs checked in, the pin, the fence, tonight's statuses,
+ * fining late PRs. A plain "how do I check in / set up attendance" keeps its
+ * hand-written topic (null here). "Track my location" stays a privacy
+ * question and "my pay is late" is not about check-in.
+ */
+const CHECKIN =
+	/\b(check ?in|check-in|checkin|check ?out|check-out|checkout|clock ?(in|out)|punch|attendance|kehadiran|geo ?fence|fence|radius|pin|gps|location|no.?show|absent|turn up|turned up|didnt come|did not come|never came)\b|\b(come|came|coming|arrive|arrived|running|am|im) late\b|\blateness\b|\bchecked ?(in|out)\b|\bmiss(ed)? (my |the |a )?shift\b|签到|签退|签不到|签不了|打卡|打不到卡|打不了卡|退不了|定位|围栏|迟到|没来|缺勤|没签/i;
+/* Privacy, not check-in: "is my gps always on", "can agency see my location
+ * 24 hours", "background location ah?" keep the tracking answer. */
+const NOT_CHECKIN =
+	/\b(track|tracking|tracked|spy|monitor|follow me|background|always on|24\/7|24 ?hours?|recorded|see my location|watch me)\b|追踪|跟踪|监视|后台|一直定位/i;
+const SIDE_OUTLET =
+	/\b(pin|radius|fence|geofence|my venue|our venue|my outlet|our outlet|my bar|my club)\b|定位点|围栏|半径/i;
+const SIDE_AGENCY =
+	/\b(my prs|our prs|my pr|our pr|roster|proof|mark|no.?show button)\b|我的 ?pr|排班/i;
+const CANT_OUT =
+	/\b(cant|cannot|can't|unable|tak boleh|tak dapat|not able to|fail|failed|error|stuck)\b.{0,20}\b(check ?out|clock ?out|checkout)\b|签不了退|签退不了|退不了/i;
+const FORGOT_OUT =
+	/\b(forgot|forget|lupa|didnt|did not)\b.{0,20}\b(check ?out|clock ?out|checkout)\b|忘了签退|忘记签退|没签退/i;
+const MISSED =
+	/\b(missed|miss|forgot|forget|lupa|didnt|did not|never)\b.{0,20}\b(check ?in|checkin|clock ?in|shift)\b|\bno.?show\b|错过|没签到|忘了签到|忘记签到/i;
+const TROUBLE =
+	/\b(cant|cannot|can't|unable|not working|fail|failed|error|too far|far|distance|gps|location|mock|fake|wrong|why|stuck|tak boleh|tak dapat|refresh)\b|签不到|打不到|签不了|打不了|定位不准|太远|位置不对/i;
+const LATE =
+	/\b(come|came|coming|arrive|arrived|running|am|im) late\b|\blateness\b|迟到/i;
+const FINE = /\b(fine|fines|penalty|penalties|deduct|charge)\b|罚|扣/i;
+const WHO_TONIGHT =
+	/\b(who|status|statuses|on.?duty|booked|released|tonight|arrived|here)\b|谁|状态|在岗|今晚/i;
+const SET_PIN =
+	/\b(set|setup|set up|change|move|update|where|add|radius)\b|设置|设定|更改|修改/i;
+
+function checkinSection(text: string, role: ChatRole | null): string | null {
+	if (!CHECKIN.test(text) || NOT_CHECKIN.test(text)) return null;
+	const side =
+		role === "pr" || role === "agency" || role === "outlet"
+			? role
+			: SIDE_OUTLET.test(text)
+				? "outlet"
+				: SIDE_AGENCY.test(text)
+					? "agency"
+					: "pr";
+	if (side === "outlet") {
+		if (
+			LATE.test(text) ||
+			FINE.test(text) ||
+			/\babsent\b|缺勤|没来/i.test(text)
+		)
+			return "ref-outlet-no-penalties";
+		if (/\b(pin|radius)\b|定位点|半径/i.test(text) && SET_PIN.test(text))
+			return "ref-outlet-pin-setup";
+		if (
+			/\b(fence|geofence|far|gps|fake|mock|accuracy|leeway)\b|围栏|太远/i.test(
+				text,
+			)
+		)
+			return "ref-outlet-fence-rules";
+		if (WHO_TONIGHT.test(text)) return "ref-outlet-pr-status";
+		return null;
+	}
+	if (side === "agency") {
+		/* "deduct pay for no show" is a penalty-rule question, not the no-show steps. */
+		if (FINE.test(text)) return "ref-agency-penalty-rules";
+		if (
+			/\bno.?show\b|\b(absent|didnt come|did not come|never came|turn up|turned up)\b|没来|缺勤/i.test(
+				text,
+			)
+		)
+			return "ref-agency-no-show";
+		if (LATE.test(text) && FINE.test(text)) return "ref-agency-penalty-rules";
+		if (
+			/\b(where|location|proof|map|fence|within|outside)\b|位置|证明|地图/i.test(
+				text,
+			)
+		)
+			return "ref-agency-checkin-labels";
+		return null;
+	}
+	if (CANT_OUT.test(text)) return "ref-pr-cant-checkout";
+	if (FORGOT_OUT.test(text)) return "ref-pr-forgot-checkout";
+	if (MISSED.test(text)) return "ref-pr-missed-shift";
+	if (LATE.test(text)) return "ref-pr-wage";
+	if (TROUBLE.test(text)) return "ref-pr-checkin-trouble";
+	return null;
 }
 
 /** A reference section as a written answer: the first line, then the rest. */
