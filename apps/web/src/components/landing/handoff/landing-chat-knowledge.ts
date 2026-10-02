@@ -1,4 +1,11 @@
 import type { LandingLocale } from "@/lib/landing-i18n";
+import {
+	asksWhoItIs,
+	isAbuseWord,
+	mannersOf,
+	OFF_TOPIC,
+} from "./landing-chat-manners";
+import { CHAT_REFERENCE } from "./landing-chat-reference";
 
 /*
  * What the landing-page chat knows, and how it understands a typed question.
@@ -18,7 +25,8 @@ import type { LandingLocale } from "@/lib/landing-i18n";
  *
  * DELIBERATELY LEFT OUT, because it is not live or not proven:
  *   - receipt scan and venue swap (Beta), subscription prices (Beta);
- *   - Ratings (the rating is not saved yet);
+ *   - the outlet Ratings PAGE (hidden from the menu) — rating a PR from Today →
+ *     PR tonight IS live and reaches the supplying agency (re-checked 2 Oct 2026);
  *   - how auto-assign is built — the roster banner is LABELLED "AI auto-assign"
  *     (中文 AI 智能派班), so answers use that label and say what it does (it
  *     proposes; nothing is saved until the agency confirms), never "no AI";
@@ -121,6 +129,10 @@ export const CHAT_INTROS: Record<
 					what: "Tap Login at the top of this page, then tap “Sign up as Outlet or PR Agency” on the login page and choose PR Agency — or message us for a demo first.",
 				},
 				{
+					where: "Settings",
+					what: "Until the InnocenZ team approves your sign-up, the portal shows only Settings — you get an email when everything opens.",
+				},
+				{
 					where: "Manage PR",
 					what: "Your PRs and their tier. New PRs who ask to join arrive in Approvals.",
 				},
@@ -130,7 +142,7 @@ export const CHAT_INTROS: Record<
 				},
 				{
 					where: "Approvals",
-					what: "New PRs, MC and leave, and a venue's request to cut staff on a quiet night.",
+					what: "New PRs and PRs asking to leave, MC and leave, venues asking to partner or to cut staff on a quiet night, and staff asking to join your team.",
 				},
 				{
 					where: "Payroll",
@@ -150,12 +162,20 @@ export const CHAT_INTROS: Record<
 					what: "Tap Login at the top of this page, then tap “Sign up as Outlet or PR Agency” on the login page and choose Outlet — or message us for a demo first.",
 				},
 				{
+					where: "Settings",
+					what: "Until the InnocenZ team approves your sign-up, the portal shows only Settings — you get an email when everything opens.",
+				},
+				{
 					where: "Settings → Attendance",
 					what: "Pin your venue and set the check-in fence — 10 m to 1,000 m, 50 m by default.",
 				},
 				{
 					where: "Workspace",
 					what: "Set your rate card per tier and your drinks price list.",
+				},
+				{
+					where: "Settings → Agency Partnerships",
+					what: "Ask the agencies you work with to partner with you; Post Job opens once one accepts.",
 				},
 				{
 					where: "Post Job",
@@ -233,6 +253,10 @@ export const CHAT_INTROS: Record<
 					what: "点本页顶部的「登录」，在登录页点「注册为门店或 PR 经纪公司」，账户类型选「PR 代理」 — 或先联系我们预约演示。",
 				},
 				{
+					where: "设置",
+					what: "InnocenZ 团队审核通过前，门户只显示「设置」— 开通后会收到邮件。",
+				},
+				{
 					where: "PR 管理",
 					what: "你的 PR 和他们的等级。申请加入的新 PR 会出现在「审批」。",
 				},
@@ -242,7 +266,7 @@ export const CHAT_INTROS: Record<
 				},
 				{
 					where: "审批",
-					what: "新 PR、病假和请假，以及场所在冷清夜晚的减人请求。",
+					what: "新 PR 和申请解约的 PR、病假和请假、门店的合作申请或冷清夜晚的减人请求，以及申请加入团队的员工。",
 				},
 				{
 					where: "薪资",
@@ -262,10 +286,18 @@ export const CHAT_INTROS: Record<
 					what: "点本页顶部的「登录」，在登录页点「注册为门店或 PR 经纪公司」，账户类型选「门店」 — 或先联系我们预约演示。",
 				},
 				{
+					where: "设置",
+					what: "InnocenZ 团队审核通过前，门户只显示「设置」— 开通后会收到邮件。",
+				},
+				{
 					where: "设置 → 考勤",
 					what: "标注场所位置并设定签到范围 — 10 米到 1,000 米，默认 50 米。",
 				},
 				{ where: "工作区", what: "设定每个等级的费率表和酒水价目表。" },
+				{
+					where: "设置 → 经纪公司合作",
+					what: "向合作的经纪公司提出合作申请；有一家接受后「发布职位」才可用。",
+				},
 				{ where: "发布职位", what: "订 PR：选择日期和每个等级需要的人数。" },
 				{ where: "今天", what: "今晚的阵容，实时 — 谁已预订、在岗或已签退。" },
 				{ where: "报表", what: "你的净销售额和利润率。" },
@@ -318,6 +350,20 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"下载",
 			"安装",
 			"应用",
+			"apk",
+			"google play",
+			"playstore",
+			"appstore",
+			"ios",
+			"aplikasi",
+			"muat turun",
+			"daftar pr",
+			"daftar akaun pr",
+			"daftar sebagai pr",
+			"become pr",
+			"join as pr",
+			"苹果",
+			"安卓",
 		],
 		en: {
 			chip: "How do I get the app?",
@@ -371,6 +417,20 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"上班",
 			"今晚",
 			"今天",
+			"syif",
+			"jadual",
+			"malam ni",
+			"malam ini",
+			"tugasan",
+			"got job",
+			"where is venue",
+			"排班表",
+			"有班",
+			"星期的班",
+			"周的班",
+			"调班",
+			"换班",
+			"顶班",
 		],
 		en: {
 			chip: "Where are my shifts?",
@@ -420,6 +480,28 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"签退",
 			"距离",
 			"太远",
+			"punch",
+			"kehadiran",
+			"location wrong",
+			"wrong location",
+			"location error",
+			"out of range",
+			"outside fence",
+			"claim ot",
+			"claim overtime",
+			"打不到卡",
+			"打不了卡",
+			"签不到",
+			"定位不准",
+			"位置不对",
+			"lokasi",
+			"打卡记录",
+			"签到记录",
+			"leave early",
+			"go home early",
+			"balik awal",
+			"先走",
+			"早走",
 		],
 		en: {
 			chip: "How do I check in?",
@@ -433,7 +515,7 @@ export const CHAT_TOPICS: ChatTopic[] = [
 					},
 					{
 						where: "Check-In",
-						what: "Check out when you finish. Your hours are recorded from these two taps.",
+						what: "Check out when you finish. Your pay counts the time between these two taps that falls inside the shift's scheduled hours; time after the end is paid only if your agency approves it as overtime.",
 					},
 				],
 			},
@@ -448,7 +530,10 @@ export const CHAT_TOPICS: ChatTopic[] = [
 						where: "签到",
 						what: "距离太远？它会告诉你离场所多远 — 走近一点再试。",
 					},
-					{ where: "签到", what: "下班时签退。你的工时就按这两次记录。" },
+					{
+						where: "签到",
+						what: "下班时签退。薪资按这两次之间、落在排定班次时间内的时长计算；超过结束时间的部分，要经纪公司批准为加班才会付。",
+					},
 				],
 			},
 		},
@@ -476,6 +561,22 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"佣金",
 			"小费",
 			"酒水",
+			"i earn",
+			"gaji",
+			"bayar",
+			"bayaran",
+			"duit",
+			"upload receipt",
+			"log receipt",
+			"submit receipt",
+			"上传小票",
+			"出粮",
+			"发粮",
+			"粮期",
+			"提成",
+			"钱几时",
+			"钱什么时候",
+			"how much per hour",
 		],
 		en: {
 			chip: "Where do I see my pay?",
@@ -529,6 +630,48 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"错",
 			"少了",
 			"投诉",
+			"appeal",
+			"complaint",
+			"underpaid",
+			"underpay",
+			"short pay",
+			"pay short",
+			"short paid",
+			"wrong pay",
+			"pay wrong",
+			"salary wrong",
+			"wrong salary",
+			"money missing",
+			"missing money",
+			"tips missing",
+			"missing tips",
+			"pay not enough",
+			"salary not enough",
+			"not enough pay",
+			"salah",
+			"kurang bayar",
+			"gaji kurang",
+			"kurang gaji",
+			"gaji salah",
+			"少给",
+			"少付",
+			"少算",
+			"钱少",
+			"工资少",
+			"薪水少",
+			"钱不够",
+			"粮不够",
+			"工资不够",
+			"钱不见",
+			"小费不见",
+			"佣金不见",
+			"deduct",
+			"deduction",
+			"扣钱",
+			"gaji tak cukup",
+			"duit tak cukup",
+			"paid less",
+			"pay less",
 		],
 		en: {
 			chip: "My pay looks wrong",
@@ -583,6 +726,17 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"薪资单",
 			"记录",
 			"历史",
+			"pay slip",
+			"slip",
+			"slip gaji",
+			"payment history",
+			"pay history",
+			"download payslip",
+			"tandatangan",
+			"签单",
+			"粮单",
+			"工资单",
+			"下载pdf",
 		],
 		en: {
 			chip: "How do I sign my voucher?",
@@ -643,6 +797,34 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"休息",
 			"不可接班",
 			"取消",
+			"cuti",
+			"demam",
+			"nak off",
+			"minta off",
+			"cannot come",
+			"cant come",
+			"cannot make it",
+			"cant make it",
+			"emergency leave",
+			"got emergency",
+			"on holiday",
+			"go holiday",
+			"take holiday",
+			"vacation",
+			"balik kampung",
+			"生病",
+			"不舒服",
+			"发烧",
+			"不能上班",
+			"不能来",
+			"来不了",
+			"去不了",
+			"休假",
+			"放假",
+			"didnt show up",
+			"ada emergency",
+			"tak dapat datang",
+			"tak boleh datang",
 		],
 		en: {
 			chip: "MC, leave or a day off",
@@ -700,6 +882,32 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"换公司",
 			"加入经纪",
 			"等级",
+			"two agency",
+			"2 agency",
+			"2 agencies",
+			"many agency",
+			"multiple agency",
+			"multiple agencies",
+			"switch agency",
+			"quit agency",
+			"resign",
+			"other agency",
+			"another company",
+			"two company",
+			"change company",
+			"tukar agensi",
+			"keluar agensi",
+			"dua agensi",
+			"2 agensi",
+			"agensi lain",
+			"两间公司",
+			"两间经纪",
+			"换经纪",
+			"退出公司",
+			"退出经纪",
+			"离开公司",
+			"离开经纪",
+			"cancel agency",
 		],
 		en: {
 			chip: "Can I work for two agencies?",
@@ -753,6 +961,27 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"分配",
 			"冲突",
 			"替补",
+			"put pr",
+			"jadual",
+			"susun syif",
+			"atur syif",
+			"安排pr",
+			"调人",
+			"换人",
+			"补人",
+			"补位",
+			"replace pr",
+			"ganti pr",
+			"backup pr",
+			"standby pr",
+			"double book",
+			"unfilled",
+			"open demand",
+			"manpower",
+			"move pr",
+			"调班",
+			"换班",
+			"顶班",
 		],
 		en: {
 			chip: "How does the roster work?",
@@ -815,6 +1044,22 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"没来",
 			"缺勤",
 			"证明",
+			"attendance",
+			"kehadiran",
+			"didnt turn up",
+			"did not turn up",
+			"never turn up",
+			"didnt show up",
+			"noshow",
+			"ponteng",
+			"live map",
+			"放飞机",
+			"没出现",
+			"缺席",
+			"旷工",
+			"打卡记录",
+			"签到记录",
+			"tak datang",
 		],
 		en: {
 			chip: "Proof a PR was there",
@@ -822,7 +1067,7 @@ export const CHAT_TOPICS: ChatTopic[] = [
 				text: "Every check-in records how far the PR was from the venue pin.",
 				steps: [
 					{
-						where: "Roster → Check-in locations",
+						where: "Roster → Live → Check-in locations",
 						what: "A map per venue showing where each PR checked in and whether it was inside the fence.",
 					},
 				],
@@ -835,7 +1080,7 @@ export const CHAT_TOPICS: ChatTopic[] = [
 				text: "每次签到都会记录 PR 离场所定位点有多远。",
 				steps: [
 					{
-						where: "排班 → 签到位置",
+						where: "排班 → 实时 → 签到位置",
 						what: "每个场所一张地图，显示每位 PR 在哪里签到、是否在范围内。",
 					},
 				],
@@ -863,6 +1108,18 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"加班",
 			"小票",
 			"发薪",
+			"payslip",
+			"gaji",
+			"wage",
+			"commission",
+			"tip",
+			"drink",
+			"dispute",
+			"出粮",
+			"粮单",
+			"薪水",
+			"bayar pr",
+			"slip gaji",
 		],
 		en: {
 			chip: "How does payroll work?",
@@ -930,6 +1187,16 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"申请",
 			"病假",
 			"请假",
+			"join agency",
+			"cancel agency",
+			"resign",
+			"cuti",
+			"lulus",
+			"批假",
+			"pending request",
+			"pending approval",
+			"outlet partnership",
+			"partner with us",
 		],
 		en: {
 			chip: "Approvals",
@@ -945,8 +1212,20 @@ export const CHAT_TOPICS: ChatTopic[] = [
 						what: "See the MC photo, then approve or reject.",
 					},
 					{
+						where: "Approvals → Cancel Agency",
+						what: "A PR asking to leave your agency — approve or reject.",
+					},
+					{
 						where: "Approvals → Outlet → Cutlost",
 						what: "A venue's request to release PRs on a quiet night.",
+					},
+					{
+						where: "Approvals → Outlet → Outlet Partnership",
+						what: "A venue asking to work with you — accept or decline.",
+					},
+					{
+						where: "Approvals → New member",
+						what: "Staff asking to join your team — pick the role, then approve or decline.",
 					},
 				],
 			},
@@ -964,7 +1243,19 @@ export const CHAT_TOPICS: ChatTopic[] = [
 						where: "审批 → 病假 / 请假",
 						what: "查看病假单照片，然后批准或拒绝。",
 					},
+					{
+						where: "审批 → 解约申请",
+						what: "PR 申请离开你的经纪公司 — 批准或拒绝。",
+					},
 					{ where: "审批 → 门店 → 缺班损失", what: "场所在冷清夜晚请求放人。" },
+					{
+						where: "审批 → 门店 → 门店合作",
+						what: "门店申请与你合作 — 接受或拒绝。",
+					},
+					{
+						where: "审批 → 新成员",
+						what: "员工申请加入团队 — 选择职位后通过或拒绝。",
+					},
 				],
 			},
 		},
@@ -984,6 +1275,21 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"罚",
 			"费用",
 			"取消费",
+			"late penalty",
+			"late fine",
+			"no show",
+			"late",
+			"denda",
+			"potong gaji",
+			"deduct",
+			"deduction",
+			"扣钱",
+			"扣薪",
+			"扣薪水",
+			"扣粮",
+			"扣工资",
+			"扣除",
+			"last minute cancel",
 		],
 		en: {
 			chip: "Rules and cancellation fees",
@@ -1029,6 +1335,12 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"角色",
 			"成员",
 			"权限",
+			"add admin",
+			"access right",
+			"accountant",
+			"manager",
+			"同事",
+			"邀请",
 		],
 		en: {
 			chip: "My staff and roles",
@@ -1037,9 +1349,14 @@ export const CHAT_TOPICS: ChatTopic[] = [
 				steps: [
 					{
 						where: "Settings",
-						what: "Invite your staff and give each one a role, such as Financial Head. Each role only gets the pages it needs.",
+						what: "Tap “Invite a team member” and invite staff who already have an InnocenZ login as Financial Head or Director. They accept from the email link (valid 7 days).",
+					},
+					{
+						where: "Approvals → New member",
+						what: "Staff without a login sign up with “Sign up as a team member”, then wait here for you to approve them.",
 					},
 				],
+				note: "Only the owner (or Guarantor) manages the team. Each role only gets the pages it needs.",
 			},
 		},
 		zh: {
@@ -1049,9 +1366,14 @@ export const CHAT_TOPICS: ChatTopic[] = [
 				steps: [
 					{
 						where: "设置",
-						what: "邀请员工并给每人一个角色，例如财务主管。每个角色只获得它需要的页面。",
+						what: "点「邀请团队成员」，以财务主管或总监身份邀请已有 InnocenZ 账号的员工；对方在邮件链接中接受（7 天内有效）。",
+					},
+					{
+						where: "审批 → 新成员",
+						what: "还没有账号的员工用「注册为团队成员」申请，然后在这里等你批准。",
 					},
 				],
+				note: "只有东主（或担保人）管理团队。每个角色只获得它需要的页面。",
 			},
 		},
 	},
@@ -1073,31 +1395,38 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"范围",
 			"签到",
 			"位置",
+			"gps",
+			"distance",
+			"clock in",
+			"lokasi",
+			"kehadiran",
+			"距离",
+			"考勤",
 		],
 		en: {
 			chip: "Set up attendance",
 			answer: {
-				text: "Pay only for PRs who are really at your door.",
+				text: "Know which PRs are really at your door.",
 				steps: [
 					{
 						where: "Settings → Attendance",
 						what: "Pin your venue and set the fence — from 10 m to 1,000 m, 50 m by default.",
 					},
 				],
-				note: "A PR outside the fence cannot check in.",
+				note: "With a pin, a PR outside the fence cannot check in (the phone's GPS accuracy can add up to 30 m). With no pin, check-ins are accepted from anywhere.",
 			},
 		},
 		zh: {
 			chip: "设置出勤",
 			answer: {
-				text: "只为真正到你门口的 PR 付钱。",
+				text: "确认哪些 PR 真的到了你门口。",
 				steps: [
 					{
 						where: "设置 → 考勤",
 						what: "标注场所位置并设定范围 — 10 米到 1,000 米，默认 50 米。",
 					},
 				],
-				note: "在范围外的 PR 无法签到。",
+				note: "设置定位点后，范围外的 PR 无法签到（手机 GPS 精度最多可放宽 30 米）；没有定位点时，任何地点的签到都会被接受。",
 			},
 		},
 	},
@@ -1120,6 +1449,14 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"招",
 			"要人",
 			"日历",
+			"more pr",
+			"extra pr",
+			"order pr",
+			"post shift",
+			"叫pr",
+			"要pr",
+			"manpower",
+			"agency partnership",
 		],
 		en: {
 			chip: "How do I book PRs?",
@@ -1135,6 +1472,7 @@ export const CHAT_TOPICS: ChatTopic[] = [
 						what: "Day by day, see what you asked for against what was supplied.",
 					},
 				],
+				note: "You need at least one agency that has approved your outlet (Settings → “Agency Partnerships”) before you can post. A Director sees Post Job read-only.",
 			},
 		},
 		zh: {
@@ -1145,6 +1483,7 @@ export const CHAT_TOPICS: ChatTopic[] = [
 					{ where: "发布职位", what: "选择日期和每个等级需要的人数。" },
 					{ where: "日历", what: "逐日对比你要的人数和实际供应的人数。" },
 				],
+				note: "至少要有一家经纪公司批准你的门店（「设置」→「经纪公司合作」）才能发布。总监只能以只读方式查看「发布职位」。",
 			},
 		},
 	},
@@ -1164,6 +1503,14 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"今天",
 			"在岗",
 			"阵容",
+			"malam ini",
+			"malam ni",
+			"谁上班",
+			"prs arrive",
+			"pr arrived",
+			"labour cost",
+			"labor cost",
+			"wage bill",
 		],
 		en: {
 			chip: "Who's here tonight?",
@@ -1206,6 +1553,24 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"减人",
 			"放人",
 			"人太多",
+			"quiet tonight",
+			"slow tonight",
+			"business slow",
+			"slow business",
+			"no customer",
+			"sepi",
+			"lengang",
+			"生意不好",
+			"生意差",
+			"没客",
+			"提早下班",
+			"先回家",
+			"reduce headcount",
+			"reduce pr",
+			"fewer pr",
+			"sepi malam",
+			"pr先走",
+			"pr先回家",
 		],
 		en: {
 			chip: "A quiet night",
@@ -1256,6 +1621,12 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"欢乐时光",
 			"欢乐时段",
 			"等级",
+			"minuman",
+			"senarai harga",
+			"kadar",
+			"per hour",
+			"时薪",
+			"entitlement",
 		],
 		en: {
 			chip: "Rates and price list",
@@ -1299,6 +1670,14 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"利润",
 			"营业额",
 			"数据",
+			"we earn",
+			"we make",
+			"laporan",
+			"jualan",
+			"statistic",
+			"analytic",
+			"收益",
+			"盈利",
 		],
 		en: {
 			chip: "Reports",
@@ -1334,6 +1713,17 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"财务",
 			"经理",
 			"隐私",
+			"permission",
+			"role",
+			"member",
+			"权限",
+			"角色",
+			"成员",
+			"add admin",
+			"access right",
+			"accountant",
+			"同事",
+			"邀请",
 		],
 		en: {
 			chip: "My team",
@@ -1342,7 +1732,11 @@ export const CHAT_TOPICS: ChatTopic[] = [
 				steps: [
 					{
 						where: "Settings → Team",
-						what: "Invite your Financial Head and Ops Head. A Director can view but not change.",
+						what: "The Owner or Guarantor invites staff who already have an InnocenZ account as Financial Head, Ops Head or Director; they accept by email. A Director can view but not change.",
+					},
+					{
+						where: "Approvals",
+						what: "New staff tap “Sign up as a team member” on the sign-up page first; their request waits here for you.",
 					},
 				],
 				note: "You see who works at your venue — never a PR's IC, address or location history.",
@@ -1355,7 +1749,11 @@ export const CHAT_TOPICS: ChatTopic[] = [
 				steps: [
 					{
 						where: "设置 → 团队",
-						what: "邀请财务主管和运营主管。总监只能查看，不能修改。",
+						what: "东主或担保人可邀请已有 InnocenZ 账号的员工，角色可选财务主管、运营主管或总监；对方通过邮件接受。总监只能查看，不能修改。",
+					},
+					{
+						where: "审批",
+						what: "新员工先在注册页点「注册为团队成员」；申请会在这里等你处理。",
 					},
 				],
 				note: "你能看到谁在你的场所工作 — 但看不到 PR 的身份证、地址或位置记录。",
@@ -1381,6 +1779,48 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"介绍",
 			"干什么",
 			"做什么的",
+			"whats innocenz",
+			"wat is innocenz",
+			"whats this",
+			"explain innocenz",
+			"what does your company do",
+			"what your company do",
+			"how it works",
+			"how it work",
+			"how does this work",
+			"how does this thing work",
+			"what do you offer",
+			"you guys offer",
+			"what do you provide",
+			"services do you provide",
+			"give me an overview",
+			"quick overview",
+			"what features",
+			"innocenz features",
+			"what can innocenz do",
+			"kind of platform",
+			"what platform",
+			"whats the point",
+			"innocenz solve",
+			"who is this for",
+			"who is innocenz for",
+			"who uses innocenz",
+			"why innocenz",
+			"why should i use",
+			"benefit",
+			"advantage",
+			"what is the use",
+			"what this app for",
+			"what is this app",
+			"干嘛的",
+			"干什么用",
+			"有什么功能",
+			"公司做什么",
+			"你们做什么",
+			"这个怎么用",
+			"apa itu innocenz",
+			"innocenz buat apa",
+			"innocenz untuk apa",
 		],
 		en: {
 			chip: "What is InnocenZ?",
@@ -1419,6 +1859,22 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"不支持",
 			"自拍",
 			"人工智能",
+			"face recognition",
+			"facial",
+			"face id",
+			"take selfie",
+			"dont do",
+			"doesnt do",
+			"drawback",
+			"disadvantage",
+			"weakness",
+			"downside",
+			"fully automatic",
+			"自拍打卡",
+			"拍照打卡",
+			"人脸识别",
+			"刷脸",
+			"tak boleh buat",
 		],
 		en: {
 			chip: "What can't InnocenZ do?",
@@ -1432,7 +1888,7 @@ export const CHAT_TOPICS: ChatTopic[] = [
 					},
 					{
 						where: "Location",
-						what: "Track anyone. The phone's location is used when the PR taps check in or check out.",
+						what: "Track anyone. The app reads location only while the Check-In screen is open before a check-in, and sends it only with the check-in and check-out taps.",
 					},
 					{
 						where: "Assigning",
@@ -1457,7 +1913,7 @@ export const CHAT_TOPICS: ChatTopic[] = [
 					},
 					{
 						where: "定位",
-						what: "追踪任何人。只在 PR 点签到或签退时使用手机位置。",
+						what: "追踪任何人。App 只在「签到」页面打开、尚未签到时读取位置，并只在签到和签退时发送。",
 					},
 					{
 						where: "派班",
@@ -1481,17 +1937,42 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"追踪",
 			"监视",
 			"一直定位",
+			"track location",
+			"track me",
+			"spy on",
+			"know where i am",
+			"see where i am",
+			"gps always on",
+			"location always on",
+			"background location",
+			"in background",
+			"see my location",
+			"know my location",
+			"location record",
+			"record location",
+			"location 24/7",
+			"jejak",
+			"jejak lokasi",
+			"追踪我",
+			"跟踪我",
+			"一直追踪",
+			"监控",
+			"后台定位",
+			"一直开着",
+			"看得到我在哪",
+			"看到我在哪",
+			"知道我在哪",
 		],
 		en: {
 			chip: "Does it track PRs?",
 			answer: {
-				text: "No. The phone's location is used when the PR taps check in or check out, to prove they're at the venue — there's no tracking in between.",
+				text: "No. The app reads the phone's location only while the PR has the Check-In screen open before checking in (to show how far the venue is), and sends it to InnocenZ only when the PR taps check in or check out — there is no background tracking.",
 			},
 		},
 		zh: {
 			chip: "会追踪 PR 吗？",
 			answer: {
-				text: "不会。只在 PR 点签到或签退时使用手机位置，证明人在场所 — 中间不会追踪。",
+				text: "不会。App 只在 PR 打开「签到」页面、尚未签到时读取手机位置（用来显示离场所多远），只有在 PR 点签到或签退时才把位置发送给 InnocenZ — 不会在后台追踪。",
 			},
 		},
 	},
@@ -1509,6 +1990,37 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"银行",
 			"谁付钱",
 			"谁发钱",
+			"who pay",
+			"who will pay",
+			"who transfer",
+			"money go through",
+			"pay through innocenz",
+			"payout through innocenz",
+			"payout from innocenz",
+			"paid by innocenz",
+			"get paid by innocenz",
+			"handle pay",
+			"hold money",
+			"innocenz bank in",
+			"collect money",
+			"money flow",
+			"money move",
+			"谁发工资",
+			"谁发薪",
+			"谁出粮",
+			"谁发粮",
+			"是谁出",
+			"谁付工资",
+			"谁出钱",
+			"你们发工资",
+			"平台发工资",
+			"经过平台",
+			"经过你们平台",
+			"帮忙发工资",
+			"代发",
+			"siapa bayar",
+			"siapa yang bayar",
+			"siapa bayar gaji",
 		],
 		en: {
 			chip: "Does InnocenZ pay PRs?",
@@ -1541,6 +2053,35 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"订阅",
 			"免费",
 			"费用",
+			"charging",
+			"charges for",
+			"you charge",
+			"monthly fee",
+			"per month",
+			"which package",
+			"what package",
+			"package plan",
+			"subscription package",
+			"quotation",
+			"quote",
+			"trial period",
+			"free trial",
+			"harga",
+			"berapa harga",
+			"ringgit sebulan",
+			"berapa sebulan",
+			"yuran",
+			"langganan",
+			"pakej",
+			"月费",
+			"年费",
+			"价钱",
+			"要钱",
+			"收不收费",
+			"discount",
+			"promo",
+			"折扣",
+			"优惠",
 		],
 		en: {
 			chip: "How much does it cost?",
@@ -1575,6 +2116,17 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"登录",
 			"账号",
 			"加入",
+			"daftar",
+			"daftar akaun",
+			"pendaftaran",
+			"registration",
+			"onboarding",
+			"onboard",
+			"try innocenz",
+			"become member",
+			"sign me up",
+			"开户",
+			"登记",
 		],
 		en: {
 			chip: "Where do I start?",
@@ -1589,6 +2141,10 @@ export const CHAT_TOPICS: ChatTopic[] = [
 					{
 						where: "PR",
 						what: "Get the InnocenZ app from your agency and tap Create an account — you can pick your agency as you sign up, or later in Profile → Edit profile.",
+					},
+					{
+						where: "Team member",
+						what: "Joining an outlet or agency already on InnocenZ? On the sign-up page tap “Sign up as a team member” and pick the organisation; its owner approves you.",
 					},
 				],
 			},
@@ -1606,6 +2162,10 @@ export const CHAT_TOPICS: ChatTopic[] = [
 					{
 						where: "PR",
 						what: "向经纪公司索取 InnocenZ App，点「创建账号」— 注册时就可以选择经纪公司，之后也可以在「我的」→「编辑资料」里添加。",
+					},
+					{
+						where: "团队成员",
+						what: "要加入已在 InnocenZ 上的门店或经纪公司？在注册页点「注册为团队成员」并选择机构，由东主批准。",
 					},
 				],
 			},
@@ -1628,6 +2188,12 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"繁体",
 			"简体",
 			"马来",
+			"mandarin",
+			"bm",
+			"tamil",
+			"inggeris",
+			"华语",
+			"华文",
 		],
 		en: {
 			chip: "Languages",
@@ -1659,6 +2225,25 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"忘记",
 			"验证码",
 			"登录不了",
+			"kata laluan",
+			"cant log in",
+			"cannot log in",
+			"cant sign in",
+			"cannot sign in",
+			"unable to login",
+			"unable to log in",
+			"login fail",
+			"account locked",
+			"locked out",
+			"wrong password",
+			"登不进",
+			"进不去",
+			"登入不了",
+			"登陆不了",
+			"cannot access",
+			"cant access",
+			"tak boleh login",
+			"tak dapat login",
 		],
 		en: {
 			chip: "Forgot my password",
@@ -1692,6 +2277,22 @@ export const CHAT_TOPICS: ChatTopic[] = [
 			"演示",
 			"客服",
 			"真人",
+			"customer service",
+			"customer support",
+			"cs",
+			"hotline",
+			"live agent",
+			"real agent",
+			"live chat",
+			"book a demo",
+			"request demo",
+			"cakap dengan",
+			"support team",
+			"pm me",
+			"有电话吗",
+			"联系电话",
+			"客服电话",
+			"你们的人",
 		],
 		en: {
 			chip: "Talk to our team",
@@ -1712,9 +2313,29 @@ export const CHAT_TOPICS: ChatTopic[] = [
 
 /* -------------------------------------------------------------- small talk -- */
 
-export type SmallTalkId = "hello" | "thanks" | "bye" | "ok";
+/*
+ * "who", "rude" and "offtopic" were added on 2 Oct 2026 (owner, screenshot:
+ * "are you stupid" answered "I'm not sure … ask our team on WhatsApp"). These
+ * written replies are the BACKUP — shown when Gemini cannot answer (no key, or
+ * the free key's 500-a-day cap is used up) — so they need the same manners.
+ */
+export type SmallTalkId =
+	| "hello"
+	| "thanks"
+	| "bye"
+	| "ok"
+	| "who"
+	| "rude"
+	| "offtopic";
 
-const SMALL_TALK_KEYWORDS: Record<SmallTalkId, string[]> = {
+/* "who", "rude" and "offtopic" are read by exact rules in
+ * landing-chat-manners.ts, never by these fuzzy keywords: "what are you" and
+ * "real person" here took "what are you guys charging?" and "talk to a real
+ * person" away from their answers (red team, 2 Oct 2026). */
+const SMALL_TALK_KEYWORDS: Record<
+	Exclude<SmallTalkId, "who" | "rude" | "offtopic">,
+	string[]
+> = {
 	hello: [
 		"hi",
 		"hello",
@@ -1754,9 +2375,11 @@ const SMALL_TALK_KEYWORDS: Record<SmallTalkId, string[]> = {
 		"好的",
 		"明白",
 		"知道了",
-		"好",
 	],
 };
+/* A lone 好 is "ok" only as the WHOLE message: as a keyword it answered
+ * 好贵 ("so expensive") and 好像有bug ("seems buggy") with "Great." */
+const OK_ALONE = /^(好|好吧|好啊|好滴|好嘞|行|嗯嗯?)[!！。.~～]*$/;
 
 export const SMALL_TALK: Record<
 	LandingLocale,
@@ -1769,6 +2392,15 @@ export const SMALL_TALK: Record<
 		thanks: { text: "You're welcome! Anything else I can help with?" },
 		bye: { text: "Bye for now — I'm here whenever you need me." },
 		ok: { text: "Great. What else would you like to know?" },
+		who: {
+			text: "I'm InnocenZ's assistant — a bot that answers from InnocenZ's own guide, here to help with shifts, check-in, pay, rosters and bookings. Are you a PR, an agency or an outlet?",
+		},
+		rude: {
+			text: "Let's keep our chat respectful, please. I'm happy to help with anything about InnocenZ — are you a PR, an agency or an outlet?",
+		},
+		offtopic: {
+			text: "That one's a little outside what I know — I'm InnocenZ's assistant, so I'm best with shifts, check-in, pay, rosters and bookings. Try one of the topics below!",
+		},
 	},
 	zh: {
 		hello: {
@@ -1777,6 +2409,15 @@ export const SMALL_TALK: Record<
 		thanks: { text: "不客气！还有什么可以帮你？" },
 		bye: { text: "再见 — 需要时随时找我。" },
 		ok: { text: "好的。还想了解什么？" },
+		who: {
+			text: "我是 InnocenZ 的助手 — 一个根据 InnocenZ 官方说明回答问题的机器人，可以帮你了解班次、签到、薪资、排班和订 PR。你是 PR、经纪公司还是场所？",
+		},
+		rude: {
+			text: "请保持礼貌交流，谢谢。我很乐意帮你了解 InnocenZ 的任何问题 — 你是 PR、经纪公司还是场所？",
+		},
+		offtopic: {
+			text: "这个超出我能回答的范围了 — 我是 InnocenZ 的助手，最擅长班次、签到、薪资、排班和订 PR 的问题。试试下面的话题吧！",
+		},
 	},
 };
 
@@ -1898,7 +2539,19 @@ function editDistance(a: string, b: string, max: number): number {
 	return d[a.length][b.length];
 }
 
-const SUFFIXES = new Set(["s", "es", "ed", "d", "ing", "led", "ling"]);
+/* "ment"/"ments" since 2 Oct 2026 (owner: "pay and payment") — "payment"
+ * reads as "pay", "settlement" as "settle". */
+const SUFFIXES = new Set([
+	"s",
+	"es",
+	"ed",
+	"d",
+	"ing",
+	"led",
+	"ling",
+	"ment",
+	"ments",
+]);
 
 /** 1 = the same word (or its plural / -ed / -ing), 0.8 = a likely typo, 0 = no. */
 function sameWord(said: string, keyword: string): number {
@@ -2051,11 +2704,260 @@ function mentionedRole(p: Prepared): SpecificRole | null {
 	return named.length === 1 ? named[0] : null;
 }
 
+/*
+ * Is the message about InnocenZ at all? If not ("we are family", "recommend a
+ * bar"), the backup answer is a polite redirect, not "ask our team on
+ * WhatsApp" — the hand-off stays for real questions it cannot answer.
+ */
+const DOMAIN_EXTRA = [
+	"innocenz",
+	"pr",
+	"prs",
+	"agency",
+	"outlet",
+	"venue",
+	"shift",
+	"shifts",
+	"pay",
+	"paid",
+	"salary",
+	"wage",
+	"voucher",
+	"roster",
+	"check",
+	"checkin",
+	"booking",
+	"book",
+	"job",
+	"app",
+	"login",
+	"account",
+	"password",
+	"otp",
+	"code",
+	"bank",
+	"receipt",
+	"commission",
+	"tips",
+	"drinks",
+	"mc",
+	"leave",
+	"swap",
+	"rate",
+	"tier",
+	"subscription",
+	"bill",
+	"invoice",
+	"approval",
+	"sign",
+	"signup",
+	"register",
+	"portal",
+	"payroll",
+	"dispute",
+	"overtime",
+	"ot",
+	// Malay, so "bila gaji masuk" still gets help
+	"gaji",
+	"harga",
+	"langganan",
+	"yuran",
+	"cuti",
+	"daftar",
+	"syif",
+	"bayar",
+	"akaun",
+	// "what are you offering?" is a question about the product
+	"offer",
+	"offers",
+	"offering",
+	"features",
+	"feature",
+	"services",
+];
+const DOMAIN_ZH =
+	/班|签到|签退|薪|工资|排班|经纪|场所|门店|结算|付款|账号|登录|注册|病假|请假|佣金|小费|酒水|收据|审批|订阅|账单/;
+/* Everyday words the topic keywords also use ("tell me about", "how does it
+ * work") — they say nothing about InnocenZ, so "tell me a joke" is not one. */
+const EVERYDAY = new Set([
+	"what",
+	"how",
+	"you",
+	"about",
+	"work",
+	"works",
+	"tell",
+	"does",
+	"can",
+	"and",
+	"for",
+	"this",
+	"that",
+	"get",
+	"see",
+	"where",
+	"when",
+	"why",
+	"who",
+	"need",
+	"want",
+	"have",
+	"will",
+	"much",
+	"any",
+	"not",
+	"with",
+	"from",
+	"there",
+	"they",
+	"them",
+	"help",
+	"know",
+	"use",
+	"make",
+	"way",
+	"ask",
+	"just",
+	"only",
+	"also",
+	"into",
+	"out",
+	"one",
+	"all",
+	"now",
+	"new",
+	"more",
+	"still",
+	"then",
+	"than",
+	"has",
+	"had",
+	"did",
+	"was",
+	"were",
+	"are",
+	"his",
+	"her",
+	"she",
+	"yes",
+	"please",
+	"thanks",
+	"thank",
+	"hello",
+	"whats",
+	"youre",
+	"old",
+	"best",
+	"name",
+	"created",
+	"off",
+	/* Malay and Manglish fillers (vocabulary workflow, 3 Oct 2026): the new
+	 * keywords carry them ("tak dapat datang", "siapa bayar gaji"), and without
+	 * this list chit-chat built on them ("apa khabar", "ada tak tempat best")
+	 * stopped getting the polite off-topic redirect (41 → 5 of 49). */
+	"tak",
+	"ada",
+	"apa",
+	"siapa",
+	"datang",
+	"dapat",
+	"boleh",
+	"yang",
+	"buat",
+	"untuk",
+	"nak",
+	"ini",
+	"itu",
+	"dua",
+	"lain",
+	"minta",
+	"sebagai",
+	"keluar",
+	"balik",
+	"cakap",
+	"dengan",
+	"berapa",
+	"kata",
+	"kurang",
+	"saya",
+	"aku",
+	"kita",
+	"mana",
+	"bila",
+	"macam",
+	"sini",
+	"sana",
+	"lah",
+	"leh",
+	"lor",
+	"wei",
+	"got",
+	"guys",
+	"kind",
+	"quick",
+	"explain",
+	"become",
+	"double",
+	"multiple",
+	"unable",
+	"fewer",
+	"flow",
+	"wat",
+	"emergency",
+	"backup",
+	"replace",
+	"less",
+	"very",
+	"really",
+	"much",
+]);
+let domain: Set<string> | null = null;
+
+/** Names InnocenZ itself (the hand-picked words, not the whole guide) — so the
+ * early off-topic check never fires on "can PR cancel a shift in bad weather". */
+function namesInnocenz(p: Prepared): boolean {
+	return (
+		p.words.some((w) => DOMAIN_EXTRA.includes(w)) || DOMAIN_ZH.test(p.compact)
+	);
+}
+
+/*
+ * The vocabulary is every word the guide itself uses — topic keywords and
+ * answers, and the whole AI reference — so "what does the bell tell me?" or
+ * "how they calculate my OT?" is still a question about InnocenZ. A sweep of
+ * 465 real questions found 31 called off-topic when only keywords were used.
+ * 中文 is never called off-topic: without spaces between words there is no
+ * reliable test, and a wrong redirect costs a real question its WhatsApp help.
+ */
+function aboutInnocenz(p: Prepared): boolean {
+	if (CJK.test(p.compact)) return true;
+	if (!domain) {
+		const known = new Set(DOMAIN_EXTRA);
+		const add = (text: string) => {
+			for (const w of prepare(text).words)
+				if (w.length >= 3 && !EVERYDAY.has(w)) known.add(w);
+		};
+		for (const t of CHAT_TOPICS) {
+			t.keywords.forEach(add);
+			add(t.en.chip);
+			add(answerLines(t.en.answer, t.role, "en").join(" "));
+		}
+		for (const r of CHAT_REFERENCE)
+			add(`${r.en.title} ${r.en.lines.join(" ")}`);
+		domain = known;
+	}
+	const known = domain;
+	return p.words.some((w) => known.has(w)) || DOMAIN_ZH.test(p.compact);
+}
+
 function smallTalk(p: Prepared): SmallTalkId | null {
+	if (OK_ALONE.test(p.compact)) return "ok";
 	if (p.words.length > 5 || p.compact.length > 24) return null;
 	let best: SmallTalkId | null = null;
 	let bestScore = 0;
-	for (const id of Object.keys(SMALL_TALK_KEYWORDS) as SmallTalkId[]) {
+	for (const id of Object.keys(
+		SMALL_TALK_KEYWORDS,
+	) as (keyof typeof SMALL_TALK_KEYWORDS)[]) {
 		const s = score(p, SMALL_TALK_KEYWORDS[id]);
 		if (s > bestScore) {
 			best = id;
@@ -2073,6 +2975,9 @@ export type ChatReply =
 	| { kind: "topic"; id: string }
 	| { kind: "small"; id: SmallTalkId }
 	| { kind: "fallback"; question: string }
+	/* A section of the AI's verified reference (landing-chat-reference.ts),
+	 * found by `findReference` when no short topic matches. */
+	| { kind: "reference"; id: string }
 	/* Gemini's answer, written from `factSheet()` — only these verified facts,
 	 * never its own knowledge — in the same shape as a written answer, so it
 	 * renders with the same page headings and numbered steps. */
@@ -2114,6 +3019,27 @@ export const ROLE_CHIPS: ChatChip[] = [
 ];
 
 export const MAX_CHIPS = 4;
+
+/**
+ * The AI's "tell me more" leads the suggestions, as the follow-up asks — minus
+ * any written chip that asks the same question. Gemini often picks a question
+ * that is already a chip ("What is InnocenZ?" after an off-topic message), and
+ * the same button then sat beside itself (2 Oct 2026). Compared on the words
+ * alone: case, spacing, quotes and the closing "?" / "？" do not count.
+ */
+export function withAiFollowUp(
+	more: string | undefined,
+	next: ChatChip[],
+	labelOf: (chip: ChatChip) => string,
+): ChatChip[] {
+	if (!more) return next;
+	const words = (s: string) =>
+		s.toLowerCase().replace(/[\s?？.。!！'"‘’“”「」]+/g, "");
+	return [
+		{ kind: "ask" as const, text: more },
+		...next.filter((chip) => words(labelOf(chip)) !== words(more)),
+	].slice(0, MAX_CHIPS);
+}
 
 /**
  * What to offer next: close matches first, then this role's topics, then
@@ -2254,7 +3180,42 @@ export function understand(
 	role: ChatRole | null,
 	asked: ReadonlySet<string>,
 ): Understanding {
-	const p = prepare(text);
+	const said = prepare(text);
+	const m = mannersOf(text);
+	const polite = (id: SmallTalkId): Understanding => ({
+		reply: { kind: "small", id },
+		role,
+		next: role ? nextChips(role, asked) : ROLE_CHIPS,
+	});
+	/* Order matters (red team, 2 Oct 2026): a slur or threat is never answered
+	 * as anything else; "who are you" and plain chit-chat ("what's the weather
+	 * today") go before the topics, whose keywords would grab "today". */
+	if (m.hard) return polite("rude");
+	if (asksWhoItIs(text)) return polite("who");
+	if (OFF_TOPIC.test(text.toLowerCase()) && !namesInnocenz(said))
+		return polite("offtopic");
+	/* OT and MC/leave mean something different to each side, so the side picks
+	 * the verified answer rather than one keyword (owner, 3 Oct 2026). */
+	const routed = overtimeSection(text, role) ?? leaveSection(text, role);
+	if (routed === "pr-leave") {
+		return {
+			reply: { kind: "topic", id: "pr-leave" },
+			role,
+			next: nextChips(role, new Set(asked).add("pr-leave")),
+		};
+	}
+	if (routed) {
+		return {
+			reply: { kind: "reference", id: routed },
+			role,
+			next: nextChips(role, asked),
+		};
+	}
+	/* Swear words are dropped before matching — the typo-forgiving matcher
+	 * reads "shit" as "shift" and "hell" as "hello". */
+	const p = m.soft
+		? { ...said, words: said.words.filter((w) => !isAbuseWord(w)) }
+		: said;
 	const stated = statedRole(p);
 	const context: ChatRole | null = stated ?? role;
 
@@ -2269,6 +3230,9 @@ export function understand(
 		.sort((a, b) => b.total - a.total);
 
 	const best = ranked[0];
+	/* Swearing with a real question ("this is shit why cannot check in") gets
+	 * the answer; swearing with nothing to answer is asked to keep it polite. */
+	if (m.soft && !(best && m.asking)) return polite("rude");
 	if (best) {
 		/* Close runners-up become the next suggestions — but only from the
 		 * visitor's own side: a PR asking about check-in is not offered the
@@ -2310,11 +3274,262 @@ export function understand(
 		};
 	}
 
+	/* No short topic fits: answer from the verified reference before giving up
+	 * (owner, 2 Oct 2026, screenshot: "payment" → "I'm not sure …"). */
+	const found = findReference(text, role);
+	if (found) {
+		return {
+			reply: { kind: "reference", id: found },
+			role,
+			next: nextChips(role, asked),
+		};
+	}
+
+	if (!aboutInnocenz(p)) {
+		return {
+			reply: { kind: "small", id: "offtopic" },
+			role,
+			next: role ? nextChips(role, asked) : ROLE_CHIPS,
+		};
+	}
+
 	return {
 		reply: { kind: "fallback", question: text.trim() },
 		role,
 		next: nextChips(role, asked),
 	};
+}
+
+/* ------------------------------------------------- reference look-up (backup) -- */
+
+/*
+ * When Gemini cannot answer, the written backup still has the 160 verified
+ * reference sections. A small search finds the best one:
+ *  - English words are cut to a stem, so "payment" finds "pay";
+ *  - 中文 is matched in two-character pieces (there are no spaces);
+ *  - rare words count more than common ones, a title three times a line;
+ *  - sections for the visitor's own side lead;
+ *  - below MIN_REFERENCE_SCORE nothing is returned, so chit-chat never gets a
+ *    random section.
+ */
+const MIN_REFERENCE_SCORE = 4;
+const ZH_COMMON = new Set([
+	"什么",
+	"怎么",
+	"可以",
+	"我的",
+	"你们",
+	"这个",
+	"一个",
+	"是不",
+	"不是",
+	"如果",
+	"为什",
+	"么时",
+	"时候",
+	"哪里",
+	"要怎",
+	"怎样",
+	"有没",
+	"没有",
+	"多少",
+	"需要",
+	"吗？",
+	"我们",
+	"他们",
+	"现在",
+	"今天",
+]);
+
+/* Two-letter words that mean something here; every other short word ("we",
+ * "is", "my") is noise that once matched "we are family" to a section. */
+const SHORT_TERMS = new Set(["pr", "ot", "mc", "ic", "pv"]);
+
+/* A piece holding a filler character (怎么, 用吗, 以在 …) says nothing about the
+ * subject, and counting it made short 中文 questions miss their section. */
+const ZH_FILLER =
+	/[怎么吗呢吧的了是我你他她它们这那个在要会能可以把被让给就都也还很太啊呀嘛哦]/;
+
+function stem(word: string): string {
+	let w = word;
+	if (w.length > 6 && w.endsWith("ment")) w = w.slice(0, -4);
+	else if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
+	else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
+	if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+	return w;
+}
+
+function terms(text: string): string[] {
+	const p = prepare(text);
+	const out = p.words
+		.filter((w) => (w.length >= 3 || SHORT_TERMS.has(w)) && !EVERYDAY.has(w))
+		.map(stem);
+	for (const run of text.match(/[㐀-鿿豈-﫿]+/g) ?? [])
+		for (let i = 0; i + 1 < run.length; i++) {
+			const bi = run.slice(i, i + 2);
+			if (!ZH_COMMON.has(bi) && !ZH_FILLER.test(bi)) out.push(bi);
+		}
+	return out;
+}
+
+interface RefIndex {
+	docs: {
+		id: string;
+		role: ReferenceRole;
+		title: Set<string>;
+		body: Set<string>;
+	}[];
+	idf: Map<string, number>;
+}
+type ReferenceRole = (typeof CHAT_REFERENCE)[number]["role"];
+let refIndex: RefIndex | null = null;
+
+function referenceIndex(): RefIndex {
+	if (refIndex) return refIndex;
+	const docs = CHAT_REFERENCE.map((r) => ({
+		id: r.id,
+		role: r.role,
+		title: new Set(terms(`${r.en.title} ${r.zh.title}`)),
+		body: new Set(terms(`${r.en.lines.join(" ")} ${r.zh.lines.join(" ")}`)),
+	}));
+	const df = new Map<string, number>();
+	for (const d of docs)
+		for (const t of new Set([...d.title, ...d.body]))
+			df.set(t, (df.get(t) ?? 0) + 1);
+	const n = docs.length;
+	const idf = new Map<string, number>();
+	for (const [t, c] of df) idf.set(t, Math.log((n + 1) / (c + 0.5)));
+	refIndex = { docs, idf };
+	return refIndex;
+}
+
+/** The id of the verified reference section that best answers `text`, if any. */
+export function findReference(
+	text: string,
+	role: ChatRole | null,
+): string | null {
+	const { docs, idf } = referenceIndex();
+	const q = [...new Set(terms(text))];
+	if (q.length === 0) return null;
+	let best: { id: string; score: number } | null = null;
+	for (const d of docs) {
+		let score = 0;
+		let matched = 0;
+		let inTitle = 0;
+		for (const t of q) {
+			const w = idf.get(t) ?? 0;
+			if (d.title.has(t)) {
+				score += 3 * w;
+				matched++;
+				inTitle++;
+			} else if (d.body.has(t)) {
+				score += w;
+				matched++;
+			}
+		}
+		/* One loose word is not a match — "holiday plan to bali" once got the
+		 * unavailable-days section. Two of the message's words, and at least
+		 * half of them, must be found; a question of one or two words may match
+		 * on a title word ("available in singapore?"). */
+		const enough =
+			(matched >= 2 && matched * 2 >= q.length) ||
+			(q.length <= 2 && inTitle >= 1);
+		if (!enough) continue;
+		if (role && role !== "general")
+			score *= d.role === role ? 1.25 : d.role === "any" ? 1 : 0.8;
+		if (!best || score > best.score) best = { id: d.id, score };
+	}
+	return best && best.score >= MIN_REFERENCE_SCORE ? best.id : null;
+}
+
+/*
+ * Overtime means something different to each side (owner, 3 Oct 2026: "make
+ * the chatbot smarter on OT questions too"): a PR wants how it is counted and
+ * paid, an agency where to approve it, an outlet its OT rate. No single keyword
+ * can say that — every bare "OT" keyword stole another topic's questions — so
+ * the side picks the verified section; with no side, the words do ("approve",
+ * "claims", 审批 → agency; "rate", "tier", "per hour" → outlet; else the PR).
+ */
+const OVERTIME = /\b(ot|overtime|over time|over-time|lebih masa)\b|加班/i;
+const OT_AGENCY =
+	/\b(approve|approval|approvals|approving|reject|claims|payroll|decide|lulus)\b|审批|批准|核准/i;
+const OT_OUTLET = /\b(rate|rates|tier|tiers|per hour|rm\/hr|card)\b|费率|等级/i;
+
+function overtimeSection(text: string, role: ChatRole | null): string | null {
+	if (!OVERTIME.test(text)) return null;
+	if (role === "pr") return "ref-pr-overtime";
+	if (role === "agency") return "ref-agency-overtime";
+	if (role === "outlet") return "ref-outlet-rate-card";
+	if (OT_AGENCY.test(text)) return "ref-agency-overtime";
+	if (OT_OUTLET.test(text)) return "ref-outlet-rate-card";
+	return "ref-pr-overtime";
+}
+
+/*
+ * MC and leave, by side (owner, 3 Oct 2026: "make the chatbot smarter on MC
+ * and leave questions too"). A PR asking HOW gets the hand-written "MC, leave
+ * or a day off" topic; what happens next, fines and planning days off get
+ * their verified sections. An agency gets approving, the MC cap rule or
+ * filling the gap; an outlet how the gap is filled, or what it can't see.
+ * Leaving an AGENCY ("leave my agency", 退出公司) and leaving EARLY ("can I
+ * leave early", 先走) are other questions and are left to the topics.
+ */
+const LEAVE =
+	/\b(mc|mcs|medical|sick|leave|cuti|demam|fever|ill|day off|off day|unavailable|not available)\b|病假|请假|休假|生病|不舒服|发烧|不可接班/i;
+const NOT_LEAVE =
+	/\bleave (my |the |this |an? |our )?(agency|agencies|company|agensi)\b|\bleave (early|now|first)\b|\bkeluar agensi\b|退出|离开(公司|经纪)|先走|早走/i;
+const LEAVE_AFTER =
+	/\b(after|approved|rejected|status|pending|happens|result|outcome|accepted)\b|批准了|驳回|结果|之后|以后|审核中/i;
+const LEAVE_FINE =
+	/\b(fine|fines|penalty|penalties|deduct|deducted|deduction|cap|max|maximum|limit|how many|kena)\b|罚|扣|上限|几天/i;
+const LEAVE_PLAN =
+	/\b(undo|plan|advance|ahead|block|reopen|in advance)\b|预先|提前|取消不可|恢复/i;
+const LEAVE_AGENCY =
+	/\b(approve|approval|approvals|reject|decide|excuse)\b|审批|批准|核准/i;
+const LEAVE_RULE =
+	/\b(rule|rules|cap|max|limit|fine|penalty|penalties)\b|规则|罚|上限/i;
+const LEAVE_GAP =
+	/\b(replace|replacement|backfill|cover|gap|short|who will come)\b|补位|替补|补人|缺人/i;
+const LEAVE_PRIVACY =
+	/\b(photo|see|view|proof|letter|document)\b|照片|证明|看到/i;
+
+function leaveSection(text: string, role: ChatRole | null): string | null {
+	if (!LEAVE.test(text) || NOT_LEAVE.test(text)) return null;
+	const side =
+		role === "agency" || role === "outlet" || role === "pr"
+			? role
+			: LEAVE_AGENCY.test(text) || LEAVE_GAP.test(text)
+				? "agency"
+				: "pr";
+	if (side === "agency") {
+		if (LEAVE_RULE.test(text)) return "ref-agency-penalty-rules";
+		if (LEAVE_GAP.test(text)) return "ref-agency-backfill";
+		return "ref-agency-mc-decision";
+	}
+	if (side === "outlet")
+		return LEAVE_PRIVACY.test(text)
+			? "ref-shared-privacy-outlet"
+			: "ref-agency-backfill";
+	if (LEAVE_FINE.test(text)) return "ref-pr-penalties";
+	if (LEAVE_AFTER.test(text)) return "ref-pr-mc-after";
+	if (LEAVE_PLAN.test(text)) return "ref-pr-unavailable-days";
+	return "pr-leave";
+}
+
+/** A reference section as a written answer: the first line, then the rest. */
+export function referenceAnswer(
+	id: string,
+	locale: LandingLocale,
+): ChatAnswer | null {
+	const r = CHAT_REFERENCE.find((s) => s.id === id);
+	if (!r) return null;
+	const [first, ...rest] = r[locale].lines;
+	return rest.length ? { text: first, note: rest.join(" ") } : { text: first };
+}
+
+/** A follow-up question in the page's language — no 中文 text inside an English sentence. */
+export function fitsLocale(text: string, locale: LandingLocale): boolean {
+	return locale === "zh" || !CJK.test(text);
 }
 
 /* ------------------------------------------------------------ AI fact sheet -- */
@@ -2379,6 +3594,16 @@ export function factSheet(
 		const local = t[locale];
 		sections.push(
 			`## ${local.chip} (${FOR_WHOM[locale][t.role]})\n${answerLines(local.answer, t.role, locale).join("\n")}`,
+		);
+	}
+	/* The deeper reference only the AI reads (landing-chat-reference.ts). */
+	const reference = [...CHAT_REFERENCE].sort(
+		(a, b) => order(a.role) - order(b.role),
+	);
+	for (const r of reference) {
+		const local = r[locale];
+		sections.push(
+			`## ${local.title} (${FOR_WHOM[locale][r.role]})\n${local.lines.join("\n")}`,
 		);
 	}
 	return sections.join("\n\n");

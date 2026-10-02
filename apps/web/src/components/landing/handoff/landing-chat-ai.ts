@@ -6,10 +6,19 @@ import type { ChatAnswer, ChatRole } from "./landing-chat-knowledge";
 const WAIT_MS = 20_000;
 /** Matches the backend's MAX_QUESTION_CHARS. */
 const MAX_QUESTION_CHARS = 500;
+/** Match the backend's MAX_HISTORY_TURNS and per-turn cut. */
+export const MAX_HISTORY_TURNS = 6;
+const MAX_TURN_CHARS = 600;
 
 export interface AiAnswer {
 	answer: ChatAnswer;
 	more?: string;
+}
+
+/** One earlier line of the chat, so a follow-up ("and how do I sign it?") is understood. */
+export interface ChatTurn {
+	from: "visitor" | "assistant";
+	text: string;
 }
 
 /**
@@ -26,6 +35,7 @@ export async function askLandingAi(
 	question: string,
 	locale: LandingLocale,
 	role: ChatRole | null,
+	history: ChatTurn[],
 	signal?: AbortSignal,
 ): Promise<AiAnswer | null> {
 	/* AbortSignal.any / .timeout are missing on Safari before 17.4, so one local
@@ -43,6 +53,10 @@ export async function askLandingAi(
 				question: question.slice(0, MAX_QUESTION_CHARS),
 				locale,
 				role,
+				history: history.slice(-MAX_HISTORY_TURNS).map((t) => ({
+					from: t.from,
+					text: t.text.slice(0, MAX_TURN_CHARS),
+				})),
 			}),
 			signal: ctl.signal,
 		});
