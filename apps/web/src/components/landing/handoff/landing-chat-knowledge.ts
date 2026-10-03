@@ -2425,6 +2425,34 @@ export const SMALL_TALK: Record<
 	},
 };
 
+/** The visitor's own words to quote back: about eight words (or 20 中文 characters) at most, as written. */
+export function quoteOf(text: string): string {
+	const t = text.trim().replace(/\s+/g, " ").replace(/[?？!！.。~]+$/, "");
+	if (/[㐀-鿿]/.test(t)) return t.length > 20 ? `${t.slice(0, 20)}…` : t;
+	const words = t.split(" ");
+	return words.length > 8 ? `${words.slice(0, 8).join(" ")}…` : t;
+}
+
+/*
+ * The written backup's off-topic reply, in the same words Gemini is told to use
+ * (owner, 3 Oct 2026: "i'm not really sure about <what the user said>, I am
+ * InnocenZ's assistant and happy to help you with how InnocenZ works and how to
+ * join"). Without a quote (it swore, or nothing was kept) the plain line shows.
+ */
+export function offTopicAnswer(
+	locale: LandingLocale,
+	said: string | undefined,
+): ChatAnswer {
+	if (!said) return SMALL_TALK[locale].offtopic;
+	return locale === "zh"
+		? {
+				text: `我不太确定“${said}”是什么意思，不过我是 InnocenZ 的助手，很乐意帮你了解 InnocenZ 怎么用、怎么加入。`,
+			}
+		: {
+				text: `I'm not really sure about “${said}”, but I'm InnocenZ's assistant and happy to help you with how InnocenZ works and how to join.`,
+			};
+}
+
 export const CHAT_FALLBACK: Record<LandingLocale, ChatAnswer> = {
 	en: {
 		text: "Hmm, I'm not sure about that one — and I'd rather not give you a wrong answer. Try one of the topics below, or ask our team directly on WhatsApp.",
@@ -2977,7 +3005,8 @@ export type ChatReply =
 	| { kind: "welcome" }
 	| { kind: "intro"; role: ChatRole }
 	| { kind: "topic"; id: string }
-	| { kind: "small"; id: SmallTalkId }
+	/* `said`: the visitor's own words, quoted back by the off-topic reply. */
+	| { kind: "small"; id: SmallTalkId; said?: string }
 	| { kind: "fallback"; question: string }
 	/* A section of the AI's verified reference (landing-chat-reference.ts),
 	 * found by `findReference` when no short topic matches. */
@@ -3186,18 +3215,21 @@ export function understand(
 ): Understanding {
 	const said = prepare(text);
 	const m = mannersOf(text);
-	const polite = (id: SmallTalkId): Understanding => ({
-		reply: { kind: "small", id },
+	const polite = (id: SmallTalkId, quote?: string): Understanding => ({
+		reply: { kind: "small", id, ...(quote ? { said: quote } : {}) },
 		role,
 		next: role ? nextChips(role, asked) : ROLE_CHIPS,
 	});
+	/* Off-topic replies quote the visitor's own words back (owner, 3 Oct
+	 * 2026: "I'm not really sure about …") — never words that swear. */
+	const quote = m.hard || m.soft ? undefined : quoteOf(text);
 	/* Order matters (red team, 2 Oct 2026): a slur or threat is never answered
 	 * as anything else; "who are you" and plain chit-chat ("what's the weather
 	 * today") go before the topics, whose keywords would grab "today". */
 	if (m.hard) return polite("rude");
 	if (asksWhoItIs(text)) return polite("who");
 	if (OFF_TOPIC.test(text.toLowerCase()) && !namesInnocenz(said))
-		return polite("offtopic");
+		return polite("offtopic", quote);
 	/* OT and MC/leave mean something different to each side, so the side picks
 	 * the verified answer rather than one keyword (owner, 3 Oct 2026). */
 	const routed =
@@ -3303,13 +3335,7 @@ export function understand(
 		};
 	}
 
-	if (!aboutInnocenz(p)) {
-		return {
-			reply: { kind: "small", id: "offtopic" },
-			role,
-			next: role ? nextChips(role, asked) : ROLE_CHIPS,
-		};
-	}
+	if (!aboutInnocenz(p)) return polite("offtopic", quote);
 
 	return {
 		reply: { kind: "fallback", question: text.trim() },
@@ -3402,6 +3428,9 @@ interface RefIndex {
 		titleZh: Set<string>;
 		/** Both titles, for the kind of question they ask (why / when / how much). */
 		titleText: string;
+		/** Each other way people ask this section (`asks`), as words. */
+		asks: Set<string>[];
+		askWords: Set<string>;
 		body: Set<string>;
 	}[];
 	idf: Map<string, number>;
@@ -3418,11 +3447,16 @@ function referenceIndex(): RefIndex {
 		titleEn: new Set(terms(r.en.title)),
 		titleZh: new Set(terms(r.zh.title)),
 		titleText: `${r.en.title} ${r.zh.title}`,
+		asks: (r.asks ?? [])
+			.map((a) => new Set(terms(a)))
+			.filter((a) => a.size > 0),
+		askWords: new Set((r.asks ?? []).flatMap((a) => terms(a))),
 		body: new Set(terms(`${r.en.lines.join(" ")} ${r.zh.lines.join(" ")}`)),
 	}));
 	const df = new Map<string, number>();
+	/* The other phrasings count too, or their own words would weigh nothing. */
 	for (const d of docs)
-		for (const t of new Set([...d.title, ...d.body]))
+		for (const t of new Set([...d.title, ...d.askWords, ...d.body]))
 			df.set(t, (df.get(t) ?? 0) + 1);
 	const n = docs.length;
 	const idf = new Map<string, number>();
@@ -3477,7 +3511,8 @@ export function referenceCandidates(
 		let inTitle = 0;
 		for (const t of q) {
 			const w = idf.get(t) ?? 0;
-			if (d.title.has(t)) {
+			/* A word from one of the section's other phrasings counts like a title word. */
+			if (d.title.has(t) || d.askWords.has(t)) {
 				score += 3 * w;
 				matched++;
 				inTitle++;
@@ -3498,14 +3533,17 @@ export function referenceCandidates(
 			score *= d.role === role ? 1.25 : d.role === "any" ? 1 : 0.8;
 		if (score < MIN_REFERENCE_SCORE) continue;
 		const own = zh ? d.titleZh : d.titleEn;
-		const covered = q.filter((t) => own.has(t)).length;
+		const cover = (words: Set<string>) =>
+			words.size ? q.filter((t) => words.has(t)).length / words.size : 0;
+		/* Covered = the best fit among the title and the other phrasings. */
+		const titleCover = Math.max(cover(own), ...d.asks.map(cover));
 		found.push({
 			id: d.id,
 			role: d.role,
 			score,
 			inTitle,
 			matched,
-			titleCover: own.size ? covered / own.size : 0,
+			titleCover,
 			titleText: d.titleText,
 			asked: q.length,
 		});

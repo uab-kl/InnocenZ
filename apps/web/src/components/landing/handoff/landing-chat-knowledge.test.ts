@@ -4,6 +4,8 @@ import {
 	type ChatRole,
 	fitsLocale,
 	MAX_CHIPS,
+	offTopicAnswer,
+	quoteOf,
 	topicById,
 	understand,
 	withAiFollowUp,
@@ -103,6 +105,22 @@ describe("the written backup's manners (shown when Gemini cannot answer)", () =>
 		expect(kindOf("how do I change my bank account number")).not.toBe(
 			"offtopic",
 		);
+	});
+
+	it("quotes the visitor's own words in the written off-topic reply — never a swear (3 Oct)", () => {
+		const r = understand("we are family", null, new Set()).reply;
+		expect(r).toMatchObject({ kind: "small", id: "offtopic", said: "we are family" });
+		expect(offTopicAnswer("en", "we are family").text).toBe(
+			"I'm not really sure about “we are family”, but I'm InnocenZ's assistant and happy to help you with how InnocenZ works and how to join.",
+		);
+		expect(offTopicAnswer("zh", "我想回家").text).toContain("我不太确定“我想回家”是什么意思");
+		// long messages are shortened; swearing is never echoed
+		expect(quoteOf("one two three four five six seven eight nine ten")).toBe(
+			"one two three four five six seven eight…",
+		);
+		const swore = understand("what the fuck is the weather today", null, new Set()).reply;
+		expect(swore.kind === "small" && swore.said).toBeFalsy();
+		expect(offTopicAnswer("en", undefined).text).not.toContain("not really sure");
 	});
 
 	it("keeps a 中文 follow-up out of an English sentence", () => {
@@ -247,6 +265,38 @@ describe("the written backup understands how people really ask (3 Oct 2026)", ()
 			const r = understand(text, role, new Set()).reply;
 			const got = r.kind === "reference" || r.kind === "topic" ? r.id : r.kind;
 			expect(got, text).toBe(id);
+		}
+	});
+
+	it("knows the everyday ways people ask a section — Manglish, Malay, 中文 (3 Oct phrasings)", () => {
+		const cases: [string, ChatRole | null, string][] = [
+			["daftar akaun isi apa", "pr", "ref-pr-signup-steps"],
+			["注册要填哪些资料", "pr", "ref-pr-signup-steps"],
+			["kod pengesahan tak sampai whatsapp", "pr", "ref-shared-codes"],
+			["tukar password", "pr", "ref-pr-security"],
+			["删除我的账号", "pr", "ref-pr-delete-account"],
+			["cancel dispute", "pr", "ref-pr-dispute-followup"],
+		];
+		for (const [text, role, id] of cases) {
+			const r = understand(text, role, new Set()).reply;
+			expect(r.kind === "reference" ? r.id : r.kind, text).toBe(id);
+		}
+	});
+
+	it("keeps chit-chat out of the sections those phrasings reach", () => {
+		// each once got a random section from a loose phrasing ("teh tarik" →
+		// the dispute answer, via "tarik balik dispute") before the verifier cut it
+		for (const t of [
+			"teh tarik",
+			"nak tidur dah",
+			"nama awak siapa",
+			"awak comel",
+			"why is the sky blue",
+			"我想回家",
+		]) {
+			expect(understand(t, null, new Set()).reply.kind, t).not.toBe(
+				"reference",
+			);
 		}
 	});
 

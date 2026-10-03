@@ -106,7 +106,16 @@ router.post(
   validInput,
   platformDailyLimiter,
   async (_req: Request, res: Response) => {
-    const outcome = await answerLandingChat(res.locals.chatInput as LandingChatInput);
+    // The browser drops a question when a newer one is asked; stop spending the
+    // free quota on an answer nobody will read. `res` 'close' also fires after a
+    // normal reply, hence the writableEnded check (req 'close' can fire as soon
+    // as the body has been read).
+    const visitorGone = new AbortController();
+    res.on('close', () => {
+      if (!res.writableEnded) visitorGone.abort();
+    });
+    const outcome = await answerLandingChat(res.locals.chatInput as LandingChatInput, visitorGone.signal);
+    if (visitorGone.signal.aborted) return;
     if (outcome.ok) {
       res.json({ success: true, message: 'OK', data: { reply: outcome.reply } });
       return;
