@@ -16,6 +16,13 @@ export interface ReferenceSection {
 	role: "pr" | "agency" | "outlet" | "any";
 	en: { title: string; lines: string[] };
 	zh: { title: string; lines: string[] };
+	/**
+	 * Other ways people ask this (casual English, Manglish, Malay, Malaysian
+	 * 中文) — read only by the written backup's matcher, never sent to Gemini.
+	 * A title has one phrasing; "kod pengesahan tak sampai" and "never receive
+	 * the otp leh" are the same question as "I didn't get my verification code".
+	 */
+	asks?: string[];
 }
 
 export const CHAT_REFERENCE: ReferenceSection[] = [
@@ -23,6 +30,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-signup-steps",
 		role: "pr",
+		asks: [
+			"sign up steps",
+			"registration need what",
+			"create account need fill what details ah",
+			"sign up must fill measurements ah",
+			"daftar akaun isi apa",
+			"langkah daftar akaun",
+			"注册要准备什么",
+			"注册要填哪些资料",
+			"注册账号要拍身份证吗",
+		],
 		en: {
 			title: "What do I fill in to create an account?",
 			lines: [
@@ -43,6 +61,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-signup-agency",
 		role: "pr",
+		asks: [
+			"sign up without agency",
+			"profile shows awaiting approval",
+			"no agency yet can register or not",
+			"joining on my own still need agency approve ah",
+			"daftar tanpa agensi",
+			"没有经纪公司能注册吗",
+			"自行加入要批准吗",
+			"没公司可以先注册吗",
+		],
 		en: {
 			title: "Do I need an agency before I sign up?",
 			lines: [
@@ -63,6 +91,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-added-by-agency",
 		role: "pr",
+		asks: [
+			"agency already added me",
+			"agency already registered my number, how to sign up",
+			"agency key in my number already, how to login ah",
+			"agency added me but i got no password leh",
+			"公司已经加了我",
+			"经纪公司已经帮我建档，怎么登录",
+			"公司加了我还要注册吗",
+		],
 		en: {
 			title: "My agency already added me — how do I get in?",
 			lines: [
@@ -81,6 +118,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-code-not-received",
 		role: "pr",
+		asks: [
+			"no otp received",
+			"otp expired already, how to resend ah",
+			"收不到OTP",
+			"WhatsApp 没收到验证码",
+			"验证码过期了怎么重发",
+		],
 		en: {
 			title: "I didn't get my verification code",
 			lines: [
@@ -101,6 +145,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-signin-trouble",
 		role: "pr",
+		asks: [
+			"cant log in",
+			"login says wrong phone number or password",
+			"app cannot login leh",
+			"登录不了",
+			"登录失败说密码错误",
+			"登录被锁了要等多久",
+		],
 		en: {
 			title: "I can't sign in to the PR app",
 			lines: [
@@ -121,6 +173,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-today-tab",
 		role: "pr",
+		asks: [
+			"today tab",
+			"where see dress code for tonight shift ah",
+			"today page",
+			"today say no shift scheduled, why ah",
+			"skrin today",
+			"今日页面",
+			"今晚的班在哪里看服装要求",
+			"今日班卡显示什么",
+		],
 		en: {
 			title: "What does the Today tab show?",
 			lines: [
@@ -141,6 +203,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-todo",
 		role: "pr",
+		asks: [
+			"todo list",
+			"todo card cannot dismiss",
+			"how to clear todo card ah",
+			"todo say nothing to do, means what ah",
+			"senarai todo",
+			"apa ada dalam senarai todo",
+			"待办事项",
+			"待办卡片删不掉",
+			"待办有哪些事",
+		],
 		en: {
 			title: "What is in the TO-DO list?",
 			lines: [
@@ -159,6 +232,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-calendar-colours",
 		role: "pr",
+		asks: [
+			"agency schedule colours",
+			"calendar amber pending means what ah",
+			"schedule got red and bright red, what different ah",
+			"green gold amber colour in schedule means what",
+			"warna jadual agensi",
+			"排班颜色",
+			"排班表的颜色代表什么",
+			"日历黄色红色是什么意思",
+		],
 		en: {
 			title: "What do the colours in Agency schedule mean?",
 			lines: [
@@ -179,6 +262,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-unavailable-days",
 		role: "pr",
+		asks: [
+			"reopen a day i marked unavailable",
+			"accidentally block my day, how to unblock leh",
+			"already got shift that day cannot block ah",
+			"取消没空的日子",
+			"提前标记没空",
+			"已经有班的日子不能标记没空吗",
+		],
 		en: {
 			title: "How do I undo or plan my unavailable days?",
 			lines: [
@@ -199,6 +290,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-cancel-fee",
 		role: "pr",
+		asks: [
+			"how much charge if i cancel last minute",
+			"charged for cancelling or not",
+			"cancellation rules where to see ah",
+			"caj batal syif",
+			"caj pembatalan last minit",
+			"取消费",
+			"临时取消班要扣多少钱",
+			"取消班有罚钱吗",
+		],
 		en: {
 			title: "How much does cancelling a shift cost?",
 			lines: [
@@ -219,6 +320,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-cancel-how",
 		role: "pr",
+		asks: [
+			"cancel my shift how",
+			"where is the cancel button",
+			"how to cancel shift ah, need reason",
+			"batal syif",
+			"怎么取消班次",
+			"取消班要写理由吗",
+		],
 		en: {
 			title: "How do I cancel a shift?",
 			lines: [
@@ -239,6 +348,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-mc-after",
 		role: "pr",
+		asks: [
+			"what happens after mc submitted",
+			"leave request rejected still must work?",
+			"mc approved then shift gone from calendar ah",
+			"mc awaiting agency review means what",
+			"请病假之后会怎样",
+			"请假被驳回还要上班吗",
+			"MC批准了之后那个班呢",
+		],
 		en: {
 			title: "What happens after I send an MC or leave request?",
 			lines: [
@@ -261,6 +379,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-missed-shift",
 		role: "pr",
+		asks: [
+			"missed my shift",
+			"wrongly marked no-show, how ah",
+			"terlepas syif",
+			"ponteng syif apa jadi",
+			"错过班次",
+			"没去上班会被记缺席吗",
+			"没去上班会怎样",
+		],
 		en: {
 			title: "What if I miss a shift?",
 			lines: [
@@ -281,6 +408,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-checkin-trouble",
 		role: "pr",
+		asks: [
+			"check in cannot leh, gps problem",
+			"refresh gps also cannot check in ah",
+			"签不到",
+			"打卡不了说距离太远",
+			"定位不准签不了到",
+		],
 		en: {
 			title: "Why won't check-in work?",
 			lines: [
@@ -303,6 +437,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-wage",
 		role: "pr",
+		asks: [
+			"leave early wage cut by minute",
+			"day pay how calculate",
+			"short 5 min still full day rate ah",
+			"gaji harian",
+			"kiraan gaji harian",
+			"日薪怎么计算",
+			"早退扣日薪吗",
+			"一天的人工怎么算",
+		],
 		en: {
 			title: "How is my daily wage worked out?",
 			lines: [
@@ -323,6 +467,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-log-drinks",
 		role: "pr",
+		asks: [
+			"log drinks",
+			"record drinks tips and services",
+			"scan receipt for drinks how ah",
+			"self log drinks where one ah",
+			"rekod minuman",
+			"masukkan tip dan minuman",
+			"scan resit minuman",
+			"记录酒水",
+			"怎么扫描小票记录酒水",
+			"登记小费和酒水",
+		],
 		en: {
 			title: "How do I log drinks, tips and services?",
 			lines: [
@@ -345,6 +501,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-receipt-review",
 		role: "pr",
+		asks: [
+			"receipt pending",
+			"after submit receipt what happens",
+			"self log receipt still pending, can edit or delete ah",
+			"resit pending",
+			"edit resit self-log",
+			"小票待审批",
+			"小票登记后公司会改金额吗",
+			"收据还在待处理",
+		],
 		en: {
 			title: "What happens to a receipt after I log it?",
 			lines: [
@@ -367,6 +533,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-cant-checkout",
 		role: "pr",
+		asks: [
+			"cant check out",
+			"check out stuck says photo missing",
+			"cannot checkout leh, every drink need photo ah",
+			"nothing logged can still check out ah",
+			"tak boleh check out",
+			"签不了退",
+			"退不了说少了照片",
+			"下班退不了要拍照吗",
+		],
 		en: {
 			title: "Why can't I check out?",
 			lines: [
@@ -387,6 +563,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-forgot-checkout",
 		role: "pr",
+		asks: [
+			"forgot to check out",
+			"forgot checkout, still got pay ah",
+			"terlupa daftar keluar",
+			"忘记签退",
+			"昨晚忘记打卡下班",
+		],
 		en: {
 			title: "I forgot to check out — what now?",
 			lines: [
@@ -407,6 +590,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-overtime",
 		role: "pr",
+		asks: [
+			"check out late the extra minutes got pay ah",
+			"kerja lewat kira macam mana",
+			"超时有钱拿吗",
+			"超过下班时间有算钱吗",
+			"超过下班时间还在做有钱吗",
+		],
 		en: {
 			title: "Do I get paid overtime?",
 			lines: [
@@ -429,6 +619,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-day-status",
 		role: "pr",
+		asks: [
+			"day status meaning",
+			"verified vs approved",
+			"my day still pending why ah",
+			"deducted status on the day means what ah",
+			"status pending approved disputed",
+			"已核实是什么意思",
+			"付款页的每日状态",
+			"状态待处理是什么意思",
+		],
 		en: {
 			title: "What do PENDING, APPROVED, DISPUTED, VERIFIED mean?",
 			lines: [
@@ -449,6 +649,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-penalties",
 		role: "pr",
+		asks: [
+			"my penalty",
+			"fined this week why",
+			"kena fine this week for what ah",
+			"penalty pending or deducted means what",
+			"denda dipotong ke",
+			"罚款卡",
+			"为什么被罚款",
+			"罚款显示待处理是什么意思",
+		],
 		en: {
 			title: "What is the PENALTIES THIS WEEK card?",
 			lines: [
@@ -469,6 +679,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-two-agency-pay",
 		role: "pr",
+		asks: [
+			"two agencies pay split",
+			"work 2 agency how many voucher",
+			"two agency means two voucher ah",
+			"which agency pays for which shift one",
+			"gaji kedua-dua agensi berasingan ke",
+			"kerja dua agensi, baucar berasingan ke",
+			"gaji dibahagi antara agensi macam mana",
+			"两家公司的薪水怎么分",
+			"两间公司分开出粮吗",
+			"两家经纪公司两张结算单吗",
+		],
 		en: {
 			title: "I work for two agencies — how is my pay split?",
 			lines: [
@@ -487,6 +709,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-voucher-when",
 		role: "pr",
+		asks: [
+			"weekly voucher when",
+			"last week pv not here yet leh",
+			"voucher say not sent to you yet, when ah",
+			"结算单几时来",
+			"上个星期的PV几时有",
+			"PV还没收到",
+		],
 		en: {
 			title: "When does my weekly voucher arrive?",
 			lines: [
@@ -507,6 +737,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-cant-sign",
 		role: "pr",
+		asks: [
+			"cant sign voucher",
+			"sign button greyed out cannot sign pv",
+			"cannot sign pv leh, dispute still open",
+			"pv sign button cannot press ah",
+			"tak boleh sign pv",
+			"tak boleh tandatangan pv",
+			"baucar tak boleh sign",
+			"结算单不能签",
+			"为什么PV不能签名",
+			"结算单签名按钮按不了",
+		],
 		en: {
 			title: "Why can't I sign my voucher?",
 			lines: [
@@ -527,6 +769,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-after-sign",
 		role: "pr",
+		asks: [
+			"after sign voucher when paid",
+			"signed pv then what",
+			"agency reopen signed voucher must sign again ah",
+			"签了PV之后什么时候出粮",
+			"签完结算单之后呢",
+			"签了之后几时收到钱",
+		],
 		en: {
 			title: "What happens after I sign the voucher?",
 			lines: [
@@ -547,6 +797,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-bank-details",
 		role: "pr",
+		asks: [
+			"add bank details",
+			"fill bank info",
+			"payment say add your bank details, where ah",
+			"change bank account in app how ah",
+			"akaun bank",
+			"isi akaun bank",
+			"tukar nombor akaun bank",
+			"银行户口",
+			"填银行户口号码",
+			"银行资料在哪里改",
+		],
 		en: {
 			title: "Where do I add my bank details?",
 			lines: [
@@ -567,6 +829,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-dispute-followup",
 		role: "pr",
+		asks: [
+			"cancel dispute",
+			"withdraw dispute",
+			"dispute status where see ah",
+			"dispute result got or not",
+			"batalkan dispute",
+			"batal dispute",
+			"争议可以取消吗",
+			"争议怎么撤回",
+			"争议结果在哪里看",
+		],
 		en: {
 			title: "How do I follow up on or cancel a dispute?",
 			lines: [
@@ -587,6 +860,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-swap",
 		role: "pr",
+		asks: [
+			"swap request",
+			"agency ask me swap outlet, can decline or not",
+			"swap your answer is needed means what ah",
+			"swap outlet",
+			"换班请求",
+			"换门店要同意吗",
+			"公司叫我换去别的场所可以拒绝吗",
+		],
 		en: {
 			title: "What is an outlet swap request?",
 			lines: [
@@ -607,6 +889,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-released-early",
 		role: "pr",
+		asks: [
+			"released early",
+			"venue send me home early how much pay",
+			"outlet ask me go back early, wage how ah",
+			"quiet night release early still got paid ah",
+			"提早收工",
+			"生意不好提早放工薪水怎么算",
+		],
 		en: {
 			title: "What if the venue sends me home early?",
 			lines: [
@@ -625,6 +915,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-notifications",
 		role: "pr",
+		asks: [
+			"bell notifications",
+			"no push notification",
+			"new shift got whatsapp message or not ah",
+			"bell only update every minute ah",
+			"notifikasi loceng",
+			"铃铛通知",
+			"App里会收到什么通知",
+		],
 		en: {
 			title: "What does the bell tell me?",
 			lines: [
@@ -647,6 +946,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-history",
 		role: "pr",
+		asks: [
+			"past shifts",
+			"past payments",
+			"payment history where ah",
+			"sejarah syif",
+			"sejarah gaji",
+			"以前的出粮记录",
+			"薪资记录",
+			"下载以前的PV",
+		],
 		en: {
 			title: "How do I find past shifts and payments?",
 			lines: [
@@ -667,6 +976,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-tier",
 		role: "pr",
+		asks: [
+			"my tier meaning",
+			"tier i to tier v difference",
+			"two agency give different tier ah",
+			"tier affect my pay or not ah",
+			"tier saya",
+			"我的等级",
+			"等级的意思是什么",
+			"两家公司等级不一样",
+		],
 		en: {
 			title: "What is my tier and what does it change?",
 			lines: [
@@ -685,6 +1004,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-commission",
 		role: "pr",
+		asks: [
+			"commission rate",
+			"how commission calculated",
+			"commission count how one",
+			"commission calculate how ah",
+			"kira komisen",
+			"komisen happy hour",
+			"peratus komisen minuman",
+			"佣金怎么计算",
+			"佣金几巴仙",
+			"欢乐时段佣金不一样吗",
+		],
 		en: {
 			title: "How is my commission worked out?",
 			lines: [
@@ -705,6 +1036,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-leave-agency",
 		role: "pr",
+		asks: [
+			"leave agency",
+			"quit agency refused",
+			"want resign from agency but cannot leh",
+			"berhenti agensi",
+			"退出经纪公司",
+			"想退出公司被拒绝",
+			"离开经纪公司要批准吗",
+		],
 		en: {
 			title: "Why can't I leave an agency?",
 			lines: [
@@ -725,6 +1065,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-security",
 		role: "pr",
+		asks: [
+			"change password",
+			"update password",
+			"change email where ah",
+			"new phone number how to update leh",
+			"tukar kata laluan",
+			"tukar password",
+			"tukar nombor telefon dan emel",
+			"改密码",
+			"换手机号码",
+			"改电邮",
+		],
 		en: {
 			title: "How do I change my password, phone or email?",
 			lines: [
@@ -745,6 +1097,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-delete-account",
 		role: "pr",
+		asks: [
+			"delete account",
+			"remove my account",
+			"delete account then payroll history still keep ah",
+			"want delete account, data all gone ah",
+			"padam akaun",
+			"hapus akaun",
+			"hapuskan akaun saya",
+			"删除我的账号",
+			"删掉账号后资料会怎样",
+			"注销账号",
+		],
 		en: {
 			title: "How do I delete my account?",
 			lines: [
@@ -763,6 +1127,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-profile-edit",
 		role: "pr",
+		asks: [
+			"edit profile",
+			"change nickname",
+			"age cannot edit why ah",
+			"comcard how to update ah",
+			"edit profil",
+			"tukar gambar galeri",
+			"改昵称",
+			"改个人资料",
+			"相册照片可以放几张",
+		],
 		en: {
 			title: "What can I change on my profile?",
 			lines: [
@@ -783,6 +1158,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-privacy",
 		role: "pr",
+		asks: [
+			"can outlet see my ic",
+			"can the venue see my ic",
+			"outlet can see my bank details or address ah",
+			"outlet know my exact position or not",
+			"maklumat peribadi",
+			"场所看得到我的身份证号码吗",
+			"谁看得到我的地址",
+			"门店能看到我的银行资料吗",
+		],
 		en: {
 			title: "Who can see my personal details?",
 			lines: [
@@ -803,6 +1188,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-choose-shifts",
 		role: "pr",
+		asks: [
+			"apply shift",
+			"pick my own shifts",
+			"can pick shift myself or not",
+			"where to apply job in app ah",
+			"mohon syif",
+			"macam mana nak mohon kerja",
+			"自己选班",
+			"怎么申请班次",
+			"可以自己挑班吗",
+		],
 		en: {
 			title: "Can I choose or apply for shifts myself?",
 			lines: [
@@ -823,6 +1219,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-delete-account",
 		role: "pr",
+		asks: [
+			"delete account without app",
+			"uninstalled app how to close account",
+			"no app already, want delete account how ah",
+			"can whatsapp innocenz to delete account or not",
+			"padam akaun tanpa app",
+			"padam akaun melalui whatsapp",
+			"没有App怎么删除账号",
+			"WhatsApp InnocenZ删除账号",
+			"删了App还能删除账号吗",
+		],
 		en: {
 			title: "How does a PR delete their account?",
 			lines: [
@@ -843,6 +1250,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-pr-signup",
 		role: "pr",
+		asks: [
+			"pr register need what",
+			"pr sign up need what documents",
+			"pr register need ic number and address ah",
+			"become pr need fill in what one",
+			"daftar pr",
+			"dokumen untuk daftar pr",
+			"PR要怎么注册",
+			"做PR注册需要什么资料",
+			"PR注册要填地址和出生日期吗",
+		],
 		en: {
 			title: "What does a PR fill in to sign up?",
 			lines: [
@@ -863,6 +1281,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-pr-i-forgot-to-log-a-receipt-can-i-add-it-a",
 		role: "pr",
+		asks: [
+			"forgot to log receipt",
+			"add drink after check out",
+			"already check out, can add back drinks or not",
+			"forgot scan receipt, can claim commission later ah",
+			"resit tertinggal tak rekod",
+			"漏了小票",
+			"签退后补小票",
+			"签退后发现漏记收据",
+		],
 		en: {
 			title: "I forgot to log a receipt — can I add it after check-out?",
 			lines: [
@@ -884,6 +1312,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-signup",
 		role: "agency",
+		asks: [
+			"register pr agency what documents ssm licence",
+			"how to sign up as pr agency ah",
+			"agency registration only malaysia company and +60 number ah",
+			"daftar agensi kena isi dokumen apa",
+			"经纪公司注册",
+			"注册PR公司要SSM和营业执照吗",
+			"经纪公司开户要准备什么资料",
+		],
 		en: {
 			title: "How does an agency sign up?",
 			lines: [
@@ -904,6 +1341,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-after-signup",
 		role: "agency",
+		asks: [
+			"what happens after agency register",
+			"after registration only settings page open",
+			"after sign up agency only settings can open ah",
+			"agency approved then billing start which week ah",
+			"注册后等审核",
+			"注册之后只能打开设置",
+			"注册之后等多久才批准",
+		],
 		en: {
 			title: "What happens after we register?",
 			lines: [
@@ -922,6 +1368,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-roles",
 		role: "agency",
+		asks: [
+			"financial head director guarantor permissions",
+			"can director edit anything or view only",
+			"guarantor cannot pay subscription ah",
+			"financial head can approve pr join or not ah",
+			"director agensi boleh buat apa",
+			"peranan financial head dalam agensi",
+			"财务主管权限",
+			"总监只能查看吗",
+		],
 		en: {
 			title: "What can each team role do?",
 			lines: [
@@ -942,6 +1398,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-invite-staff",
 		role: "agency",
+		asks: [
+			"invite team member or employee to agency portal",
+			"give finance staff a login",
+			"how to invite my staff by email ah",
+			"jemput ahli pasukan sebagai financial head atau director",
+			"pautan jemputan tamat tempoh",
+			"邀请同事进经纪公司后台",
+			"同事加进团队",
+			"邀请链接过期",
+		],
 		en: {
 			title: "How do I add a staff member?",
 			lines: [
@@ -962,6 +1428,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-staff-requests",
 		role: "agency",
+		asks: [
+			"someone asked to join our staff",
+			"got staff request join our team where to approve ah",
+			"lulus permintaan ahli pasukan",
+			"新成员申请",
+			"有人申请加入团队在哪里批",
+			"新成员待审批",
+		],
 		en: {
 			title: "Someone asked to join our staff. Where is it?",
 			lines: [
@@ -980,6 +1454,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-staff-change",
 		role: "agency",
+		asks: [
+			"change staff role to financial head or director",
+			"cannot remove myself from team why",
+			"how to remove staff from agency ah",
+			"deactivate a team member and remove access",
+			"tukar peranan atau role staf",
+			"更改员工角色",
+			"把员工从团队删除",
+			"改成员职位",
+			"停用或恢复成员",
+		],
 		en: {
 			title: "How do I change a role or remove a staff member?",
 			lines: [
@@ -1000,6 +1485,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-choose-org",
 		role: "agency",
+		asks: [
+			"switch between two agencies",
+			"choose your organisation after login",
+			"my login got 2 agency how to switch ah",
+			"switch organisation must sign out sign in again ah",
+			"tukar antara agensi lain",
+			"切换机构",
+			"换到另一个机构",
+			"一个账号两家公司切换",
+		],
 		en: {
 			title: "I work for two organisations. How do I switch?",
 			lines: [
@@ -1018,6 +1513,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-pr-join-review",
 		role: "agency",
+		asks: [
+			"approve pr application to join",
+			"check new pr ic photos before approve",
+			"new pr apply join our agency how to approve ah",
+			"reject pr join must give reason ah",
+			"semak dan luluskan PR yang mohon sertai agensi",
+			"审核PR加入申请",
+			"新PR申请加入怎么批准",
+			"驳回PR要填理由吗",
+		],
 		en: {
 			title: "How do I review a PR who wants to join?",
 			lines: [
@@ -1038,6 +1543,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-add-pr",
 		role: "agency",
+		asks: [
+			"add pr to roster myself",
+			"manually add pr with ic and mobile",
+			"can agency add pr ourselves without pr apply ah",
+			"agensi masukkan PR terus tanpa permohonan",
+			"自己添加PR",
+			"手动把PR加进名单",
+			"帮PR建档",
+		],
 		en: {
 			title: "Can I add a PR to our roster myself?",
 			lines: [
@@ -1058,6 +1572,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-pr-departure",
 		role: "agency",
+		asks: [
+			"pr leaving agency approve departure",
+			"pr resign from agency",
+			"pr want to quit our agency how ah",
+			"why cannot approve departure got unpaid voucher",
+			"luluskan PR tinggalkan agensi",
+			"permohonan PR keluar agensi",
+			"PR解约申请",
+			"PR退出公司",
+			"批准解约",
+		],
 		en: {
 			title: "A PR asked to leave our agency. What now?",
 			lines: [
@@ -1076,6 +1601,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-pr-tier",
 		role: "agency",
+		asks: [
+			"set pr tier",
+			"change pr pay class commission only",
+			"how to change pr tier ah",
+			"pay class basic or commission where to set one",
+			"tetapkan tier PR",
+			"PR等级",
+			"改PR的薪资级别",
+			"PR的等级在哪里改",
+		],
 		en: {
 			title: "How do I set a PR's tier and pay class?",
 			lines: [
@@ -1096,6 +1631,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-pr-card",
 		role: "agency",
+		asks: [
+			"pr card warn flag",
+			"att percentage manage pr",
+			"pr card got warn what meaning ah",
+			"att got dash not zero why one",
+			"peratus kehadiran kad PR",
+			"amaran rating PR rendah",
+			"PR卡片警告",
+			"出勤率是什么意思",
+			"PR卡片数字标记",
+		],
 		en: {
 			title: "What do the figures and flags on a PR's card mean?",
 			lines: [
@@ -1116,6 +1662,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-broadcast",
 		role: "agency",
+		asks: [
+			"broadcast message to prs",
+			"send announcement to all pr",
+			"can blast message to all pr ah",
+			"how to send notice all pr one shot",
+			"broadcast mesej PR agensi",
+			"群发给PR",
+			"给所有PR发通知",
+			"一次过通知全部PR",
+		],
 		en: {
 			title: "Can I send a message to my PRs?",
 			lines: [
@@ -1136,6 +1692,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-assign",
 		role: "agency",
+		asks: [
+			"assign pr to shift",
+			"book or schedule pr into shift",
+			"how to put pr into outlet shift ah",
+			"agency can post shift ourselves or not ah",
+			"letak PR dalam syif",
+			"macam mana agensi assign PR ke syif outlet",
+			"给PR排班",
+			"排PR上班",
+		],
 		en: {
 			title: "How do I put a PR on a shift?",
 			lines: [
@@ -1156,6 +1722,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-assign-refused",
 		role: "agency",
+		asks: [
+			"roster wont let me assign pr",
+			"assign pr refused why",
+			"why cannot put pr in shift ah",
+			"fully staffed cannot assign pr",
+			"shift not published yet cannot assign lah",
+			"PR排不进去",
+			"PR排不了班",
+			"已排满不能加PR",
+		],
 		en: {
 			title: "Why can't I assign this PR?",
 			lines: [
@@ -1174,6 +1750,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-roster-labels",
 		role: "agency",
+		asks: [
+			"roster labels meaning",
+			"scheduled on duty checked out meaning",
+			"roster swap pending what meaning ah",
+			"pr late still scheduled why ah",
+			"排班标签",
+			"排班表上的标签意思",
+			"换班待处理是什么意思",
+		],
 		en: {
 			title: "What do the labels on roster cells mean?",
 			lines: [
@@ -1192,6 +1777,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-move-remove",
 		role: "agency",
+		asks: [
+			"move pr to another shift",
+			"cannot remove pr already started why",
+			"tukar PR ke outlet lain",
+			"把PR换到别的门店",
+			"移除PR",
+			"把PR从班次拿掉",
+		],
 		en: {
 			title: "How do I move or remove a PR from a shift?",
 			lines: [
@@ -1212,6 +1805,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-no-show",
 		role: "agency",
+		asks: [
+			"pr didnt turn up",
+			"auto mark absent after 3 hours ah",
+			"PR tak datang kerja",
+			"PR没来上班",
+			"标记缺勤",
+			"PR放飞机",
+		],
 		en: {
 			title: "What happens when a PR doesn't turn up?",
 			lines: [
@@ -1232,6 +1833,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-checkin-labels",
 		role: "agency",
+		asks: [
+			"check in locations within fence",
+			"within fence outside meaning",
+			"pr check in no location why ah",
+			"lokasi check in PR outside",
+			"签到位置标签",
+			"围栏内围栏外",
+			"打卡位置无位置信息",
+		],
 		en: {
 			title: "What do the check-in location labels mean?",
 			lines: [
@@ -1252,6 +1862,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-open-demand",
 		role: "agency",
+		asks: [
+			"which outlet still need pr",
+			"open demand seats to fill",
+			"outlet short people where to see ah",
+			"venue still short how many pr ah",
+			"门店缺人",
+			"门店空缺",
+			"待分配需求",
+			"门店点名要的PR",
+		],
 		en: {
 			title: "Where do I see what venues still need?",
 			lines: [
@@ -1272,6 +1892,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-auto-assign",
 		role: "agency",
+		asks: [
+			"how ai pick prs",
+			"auto assign ranking order",
+			"auto assign confirm then save ah",
+			"AI智能派班",
+			"智能派班怎么选人",
+			"自动派班优先谁",
+		],
 		en: {
 			title: "How does “AI auto-assign” pick PRs?",
 			lines: [
@@ -1290,6 +1918,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-mc-decision",
 		role: "agency",
+		asks: [
+			"approve pr mc what happens",
+			"reject mc pr back on shift",
+			"approve mc pr kena penalty or not ah",
+			"pr mc i reject then how ah",
+			"luluskan cuti PR",
+			"批准病假会怎样",
+			"驳回MC",
+			"批准请假之后",
+		],
 		en: {
 			title: "What happens when I approve or reject an MC?",
 			lines: [
@@ -1310,6 +1948,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-backfill",
 		role: "agency",
+		asks: [
+			"backfill needed card",
+			"replace pr who cancelled shift",
+			"pr cancel last minute how to find replacement ah",
+			"pick replacement pr how ah",
+			"补位",
+			"找人顶班",
+			"PR退出班次找人替",
+		],
 		en: {
 			title: "How do I fill a gap when someone drops out?",
 			lines: [
@@ -1330,6 +1977,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-cutlost",
 		role: "agency",
+		asks: [
+			"approve cut loss request",
+			"outlet release pr early approve",
+			"outlet want send pr home early approve how ah",
+			"cutlost approve pr still got pay or not ah",
+			"lulus cut loss outlet",
+			"减损申请",
+			"批准缺班损失",
+			"门店要PR提早收工",
+		],
 		en: {
 			title: "What happens if I approve a venue's cut-loss request?",
 			lines: [
@@ -1350,6 +2007,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-partnership",
 		role: "agency",
+		asks: [
+			"outlet link with agency",
+			"outlet want partner with us where approve ah",
+			"how to end or stop partnership with venue ah",
+			"outlet cannot post job to us why ah",
+			"kerjasama outlet dengan agensi",
+			"outlet nak jadi rakan kongsi agensi",
+			"门店合作申请",
+			"结束合作",
+			"门店跟经纪公司合作",
+		],
 		en: {
 			title: "How do venues start working with our agency?",
 			lines: [
@@ -1370,6 +2038,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-payroll-tabs",
 		role: "agency",
+		asks: [
+			"this week last week payment week",
+			"payment week tab meaning",
+			"payroll got 3 week tab what different ah",
+			"this week cannot sign yet why ah",
+			"本周上周结算周",
+			"结算周是什么",
+			"本周和上周有什么不同",
+		],
 		en: {
 			title: "What are This Week, Last Week and Payment Week?",
 			lines: [
@@ -1390,6 +2067,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-pv-status",
 		role: "agency",
+		asks: [
+			"voucher status meaning",
+			"pending agency review meaning",
+			"pv status to pay what meaning ah",
+			"pending pr review or disputed means what ah",
+			"付款单状态",
+			"待经纪公司审核是什么意思",
+			"待付款状态",
+		],
 		en: {
 			title: "What does each voucher status mean?",
 			lines: [
@@ -1410,6 +2096,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-receipts",
 		role: "agency",
+		asks: [
+			"approve all receipts",
+			"edit receipt quantity commission",
+			"pr receipt wrong can edit or not ah",
+			"semak resit PR",
+			"betulkan kuantiti resit",
+			"核对小票",
+			"PR收据批准",
+			"收据数量错了",
+		],
 		en: {
 			title: "How do I check a PR's receipts?",
 			lines: [
@@ -1430,6 +2126,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-disputes",
 		role: "agency",
+		asks: [
+			"pr dispute drinks tips accept reject",
+			"accept dispute money change or not",
+			"pr raise dispute how settle ah",
+			"urus pertikaian PR",
+			"PR pertikai tips minuman",
+			"PR对酒水小费有争议",
+			"驳回PR争议",
+			"接受争议金额会变吗",
+		],
 		en: {
 			title: "How do I handle a PR's dispute?",
 			lines: [
@@ -1450,6 +2156,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-overtime",
 		role: "agency",
+		asks: [
+			"approve overtime claim",
+			"ot claim approve reject",
+			"ot claim where approve ah",
+			"reject ot can undo or not ah",
+			"lulus tuntutan OT PR",
+			"加班审批",
+			"批准PR加班",
+			"加班申请撤回",
+		],
 		en: {
 			title: "How is overtime approved?",
 			lines: [
@@ -1470,6 +2186,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-sign-send",
 		role: "agency",
+		asks: [
+			"when can sign voucher",
+			"send to pr for e-sign greyed",
+			"send button grey cannot press why ah",
+			"when can sign pv send pr ah",
+			"bila boleh tandatangan baucar",
+			"hantar PV kepada PR untuk tandatangan",
+			"butang hantar kelabu",
+			"什么时候签付款单",
+			"发送给PR签署按钮灰色",
+			"几时可以签付款单",
+		],
 		en: {
 			title: "When and how do I sign and send a voucher?",
 			lines: [
@@ -1490,6 +2218,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-sunday-hold",
 		role: "agency",
+		asks: [
+			"sunday run didnt send vouchers",
+			"vouchers held on sunday",
+			"why sunday pv not auto send ah",
+			"pv stuck pending agency review after sunday why ah",
+			"周日付款单没发出",
+			"周日批处理",
+			"星期天付款单没自动发",
+		],
 		en: {
 			title: "Why didn't the Sunday run send my vouchers?",
 			lines: [
@@ -1508,6 +2245,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-mark-paid",
 		role: "agency",
+		asks: [
+			"mark voucher as paid",
+			"already bank in pr how to mark paid ah",
+			"cannot mark as paid pr not signed",
+			"tanda PV bayar",
+			"标记已付款",
+			"出粮后怎么登记",
+			"批量标记已付款",
+		],
 		en: {
 			title: "How do I record that a PR has been paid?",
 			lines: [
@@ -1528,6 +2274,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-fees",
 		role: "agency",
+		asks: [
+			"waive cancellation fee on voucher",
+			"add penalty into voucher",
+			"pr cancel shift fee auto add pv ah",
+			"void penalty how ah",
+			"kecualikan atau batalkan caj pembatalan",
+			"yuran batal syif dalam baucar",
+			"罚款计入付款单",
+			"豁免取消费",
+			"扣钱加到付款单",
+		],
 		en: {
 			title: "How do penalties and cancellation fees reach a voucher?",
 			lines: [
@@ -1548,6 +2305,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-penalty-rules",
 		role: "agency",
+		asks: [
+			"penalty rules agency set",
+			"mc cap per month fine",
+			"can set fine for late pr ah",
+			"cancellation penalty percent how set ah",
+			"peraturan denda agensi",
+			"had MC sebulan",
+			"罚款规则",
+			"迟到罚款设定",
+			"每月病假上限",
+		],
 		en: {
 			title: "What penalty rules can I set?",
 			lines: [
@@ -1566,6 +2334,12 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-history",
 		role: "agency",
+		asks: [
+			"past paid vouchers",
+			"old voucher where to see ah",
+			"过往付款单",
+			"已付薪资单记录",
+		],
 		en: {
 			title: "Where are past vouchers, and can I download them?",
 			lines: [
@@ -1584,6 +2358,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-override",
 		role: "agency",
+		asks: [
+			"correct voucher after signed",
+			"override signed pv",
+			"pv signed already got mistake can change ah",
+			"edit paid voucher how ah",
+			"付款单签署后更正",
+			"已签付款单改错",
+			"撤改已签署付款单",
+		],
 		en: {
 			title: "Can I correct a voucher after it is signed?",
 			lines: [
@@ -1602,6 +2385,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-subscription-tier",
 		role: "agency",
+		asks: [
+			"subscription tier decided",
+			"subscription tier change by itself why ah",
+			"pv more than 150 how ah",
+			"tier langganan agensi",
+			"bagaimana tier langganan ditentukan",
+			"订阅等级",
+			"订阅等级按PV数量",
+			"PV数量决定等级",
+		],
 		en: {
 			title: "How is our InnocenZ subscription tier decided?",
 			lines: [
@@ -1622,6 +2415,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-billing",
 		role: "agency",
+		asks: [
+			"subscription bill due",
+			"pay innocenz bill",
+			"subscription bill due when ah",
+			"today red banner overdue bill why ah",
+			"tarikh akhir bayar bil",
+			"bil langganan tertunggak",
+			"订阅账单到期",
+			"账单逾期红色横幅",
+			"订阅费几时要付",
+		],
 		en: {
 			title: "When is our subscription bill due?",
 			lines: [
@@ -1642,6 +2446,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-notifications",
 		role: "agency",
+		asks: [
+			"agency notifications",
+			"bell unread count",
+			"bell notify me what ah",
+			"notifikasi agensi",
+			"loceng notifikasi beritahu apa",
+			"pemberitahuan agensi",
+			"通知铃铛",
+			"经纪公司收到什么通知提醒",
+			"侧边菜单数字",
+		],
 		en: {
 			title: "What will the bell notify me about?",
 			lines: [
@@ -1662,6 +2477,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-agency-plans",
 		role: "agency",
+		asks: [
+			"agency plan how much",
+			"weekly price for agency per pv",
+			"agency package how much ah",
+			"starter plus growth plan price how much ah",
+			"harga pakej agensi",
+			"berapa kos langganan agensi seminggu",
+			"harga pelan agensi",
+			"经纪公司套餐",
+			"经纪公司配套多少钱",
+			"经纪公司每周收费",
+		],
 		en: {
 			title: "How much does an agency plan cost?",
 			lines: [
@@ -1682,6 +2509,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-custom-price",
 		role: "agency",
+		asks: [
+			"custom price",
+			"how to get custom pricing over 150 pv ah",
+			"reset to normal subscription how ah",
+			"harga custom agensi",
+			"minta harga khas",
+			"mohon sebut harga",
+			"定制价格",
+			"申请报价",
+			"回到常规订阅",
+		],
 		en: {
 			title: "How does an agency get a Custom price?",
 			lines: [
@@ -1702,6 +2540,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-how-do-i-plan-next-week-s-roster-quickly",
 		role: "agency",
+		asks: [
+			"plan next week roster",
+			"next week roster quickly",
+			"go to next week roster how ah",
+			"下周排班",
+			"快速排下周的班",
+			"下周班表快速安排",
+		],
 		en: {
 			title: "How do I plan next week's roster quickly?",
 			lines: [
@@ -1724,6 +2570,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-agency-can-i-export-a-whole-week-s-vouchers-at",
 		role: "agency",
+		asks: [
+			"export whole week vouchers",
+			"bank payment file",
+			"download all pv at once ah",
+			"整周付款单导出",
+			"银行出粮文件",
+			"银行付款文件",
+			"一次导出全部付款单",
+		],
 		en: {
 			title:
 				"Can I export a whole week's vouchers at once, or a file for the bank?",
@@ -1746,6 +2601,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-signup-details",
 		role: "outlet",
+		asks: [
+			"what documents do i need to register my outlet",
+			"outlet sign up need ssm number and business licence?",
+			"register outlet need what ah, ssm, licence, ic all must upload ka",
+			"how to sign up my bar lah, what details to fill",
+			"pendaftaran outlet perlukan maklumat apa",
+			"门店注册要准备哪些资料",
+			"注册酒吧要SSM号码和营业执照吗",
+		],
 		en: {
 			title: "What do I need to sign my outlet up?",
 			lines: [
@@ -1766,6 +2630,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-after-signup",
 		role: "outlet",
+		asks: [
+			"signed up my outlet but portal says pending review",
+			"after register outlet only settings page can open",
+			"outlet kena suspend, only settings can open leh",
+			"门店注册后显示待审核怎么办",
+			"注册后多久批准开通",
+			"门店被停用了只能打开设置",
+		],
 		en: {
 			title: "What happens after I sign up?",
 			lines: [
@@ -1788,6 +2660,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-link-agency",
 		role: "outlet",
+		asks: [
+			"how to connect my outlet with an agency",
+			"request agency partnership",
+			"how to add agency partner to my outlet ah",
+			"agency partnership still awaiting approval leh",
+			"how to end partnership with an agency",
+			"macam mana nak sambung outlet dengan agensi",
+			"门店怎么跟经纪公司合作关联",
+			"结束和经纪公司的合作会怎样",
+		],
 		en: {
 			title: "How do I link my outlet to an agency?",
 			lines: [
@@ -1810,6 +2692,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-cannot-post",
 		role: "outlet",
+		asks: [
+			"post job button greyed out",
+			"cant post job, it says no agency yet",
+			"post job cannot press one lah, why",
+			"why cannot post shift ah, it say overlap or over daily limit",
+			"butang post job tak boleh tekan",
+			"为什么发布不了职位",
+			"发布职位按钮按不了，灰色的",
+			"发班被拒说重叠或超过每日上限",
+		],
 		en: {
 			title: "Why can't I post a job?",
 			lines: [
@@ -1830,6 +2722,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-pin-setup",
 		role: "outlet",
+		asks: [
+			"how to set check in location for my venue",
+			"set the geofence pin and radius",
+			"how to set the gps pin for check in ah",
+			"check in radius can set how many metre lah",
+			"macam mana nak set lokasi check in outlet",
+			"tukar radius check in kedai",
+			"怎么设置门店打卡定位",
+			"签到定位点在哪里设置",
+		],
 		en: {
 			title: "How do I set the check-in pin?",
 			lines: [
@@ -1850,6 +2752,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-fence-rules",
 		role: "outlet",
+		asks: [
+			"how does the check in fence decide distance",
+			"no pin set can pr check in from anywhere",
+			"how many metres away then cannot check in lah",
+			"GPS palsu tak boleh check in ke",
+			"签到围栏怎么算距离",
+			"PR距离门店太远打卡不了",
+			"没有设定位PR在哪里都能打卡吗",
+		],
 		en: {
 			title: "How does the check-in fence decide?",
 			lines: [
@@ -1872,6 +2783,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-rate-card",
 		role: "outlet",
+		asks: [
+			"how to set daily wage for each pr tier",
+			"change tier 1 wage then all tier change ah",
+			"how to set ot per hour and commission % lah",
+			"set kadar OT sejam untuk PR",
+			"怎么设置各等级PR的日薪",
+			"加班每小时薪水怎么算",
+			"各等级的酒水佣金和小费百分比在哪里设",
+		],
 		en: {
 			title: "How do I set the pay rates for each tier?",
 			lines: [
@@ -1894,6 +2814,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-price-lists",
 		role: "outlet",
+		asks: [
+			"difference between drinks price and service entitlement",
+			"how to move item from drinks to services ah",
+			"tips cannot rename or delete one meh",
+			"酒水价格表在哪里加",
+			"服务项目和酒水价格有什么分别",
+			"小费那一行为什么删不掉",
+		],
 		en: {
 			title: "What are Drinks Price and Service Entitlement?",
 			lines: [
@@ -1916,6 +2844,11 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-happy-hour",
 		role: "outlet",
+		asks: [
+			"happy hour drink discount %",
+			"欢乐时段怎么设置",
+			"happy hour 酒水折扣在哪里设",
+		],
 		en: {
 			title: "How does happy hour work?",
 			lines: [
@@ -1934,6 +2867,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-set-prices-banner",
 		role: "outlet",
+		asks: [
+			"today page says set your prices",
+			"set your prices banner wont go away",
+			"why today got set your prices ah",
+			"the set prices banner keep showing leh, i put 0",
+			"今天页面一直显示请先设置价格",
+			"价格设了0还是提示设置价格",
+			"设置价格的横幅不消失",
+		],
 		en: {
 			title: "Why does “Today” say “Set your prices”?",
 			lines: [
@@ -1952,6 +2894,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-event-cards",
 		role: "outlet",
+		asks: [
+			"what are the event cards in post job",
+			"how to make my own event template",
+			"post job got 12 cards what is that ah",
+			"how to add cover picture for event card lah",
+			"kad acara dalam post job untuk apa",
+			"padam kad contoh acara",
+			"发布职位里的活动卡片是什么",
+			"怎么新增活动模板",
+			"怎么删掉示例活动卡片",
+		],
 		en: {
 			title: "What are the event cards in “Post Job”?",
 			lines: [
@@ -1972,6 +2925,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-postjob-form",
 		role: "outlet",
+		asks: [
+			"how to fill in the post job form",
+			"post one shift for many dates",
+			"post job how to split people needed per tier ah",
+			"how to put dress code and preferred language lah",
+			"macam mana isi borang post job",
+			"nak post syif untuk seminggu sekali gus",
+			"tukar bayaran tier untuk syif ini sahaja",
+			"怎么填写发布职位的班次",
+			"这一班的等级薪水可以单独改吗",
+		],
 		en: {
 			title: "How do I fill in a “Post Job” shift?",
 			lines: [
@@ -1994,6 +2958,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-special-event",
 		role: "outlet",
+		asks: [
+			"how to set up a special event",
+			"special event can use own drink price ah",
+			"vip night own prices how lah",
+			"product launch event how to post",
+			"macam mana buat acara khas",
+			"特别活动怎么设置价格",
+			"VIP活动可以用不同酒水价格吗",
+			"包场活动怎么发",
+		],
 		en: {
 			title: "How do special events and their prices work?",
 			lines: [
@@ -2014,6 +2988,7 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-named-prs",
 		role: "outlet",
+		asks: ["可以指定PR吗", "能点名要我想要的PR来上班吗"],
 		en: {
 			title: "Can I ask for specific PRs?",
 			lines: [
@@ -2034,6 +3009,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-send-to",
 		role: "outlet",
+		asks: [
+			"send one job to two agencies",
+			"post shift to multiple agencies",
+			"send to tick only one agency cannot untick leh",
+			"boleh hantar job ke beberapa agensi",
+			"一个职位可以发给几家经纪公司",
+			"同一个班发给多家公司",
+			"已发布的班次能换经纪公司吗",
+		],
 		en: {
 			title: "Can one job go to more than one agency?",
 			lines: [
@@ -2054,6 +3038,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-post-button",
 		role: "outlet",
+		asks: [
+			"what happens after i press post",
+			"posted many shifts one failed none posted",
+			"add another shift then post all at once",
+			"press post then agency get notification ah",
+			"one shift refused all also not posted leh",
+			"按发布后会怎样",
+			"一个班被拒其他也没发出去",
+			"发布后经纪公司会收到通知吗",
+		],
 		en: {
 			title: "What happens when I press Post?",
 			lines: [
@@ -2074,6 +3068,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-change-withdraw",
 		role: "outlet",
+		asks: [
+			"how to cancel a posted shift",
+			"edit shift after posting",
+			"where is withdraw shift button",
+			"tonight shift cannot withdraw leh",
+			"怎么取消已发布的班次",
+			"发错班次怎么修改",
+			"今天的班不能撤回怎么办",
+		],
 		en: {
 			title: "How do I change or cancel a posted shift?",
 			lines: [
@@ -2094,6 +3097,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-calendar-colours",
 		role: "outlet",
+		asks: [
+			"calendar colours meaning",
+			"what does lavender sealed mean on the calendar",
+			"the count red amber green on calendar lah",
+			"日历上的颜色是什么意思",
+			"日历班次红色黄色代表什么",
+			"日历绿色蓝色灰色是什么状态",
+		],
 		en: {
 			title: "What do the colours on the Calendar mean?",
 			lines: [
@@ -2114,6 +3125,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-close-shift",
 		role: "outlet",
+		asks: [
+			"how to close a shift after the night ends",
+			"close shift button on calendar",
+			"cannot close shift before it ends",
+			"night finish already how to close shift ah",
+			"close shift then pr wages affected or not",
+			"夜场结束后怎么结束班次",
+			"关闭班次会影响薪水吗",
+			"关闭班次后还能加人吗",
+		],
 		en: {
 			title: "How do I close a finished night?",
 			lines: [
@@ -2134,6 +3155,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-today-cards",
 		role: "outlet",
+		asks: [
+			"what do shift cards on today show",
+			"today shift shows expired",
+			"could not load tonight notice",
+			"got 2 shift today how to pick which card lah",
+			"kad syif dalam today tunjuk apa",
+			"today keluar could not load tonight",
+			"今天页的班次卡片显示什么",
+			"班次卡片显示Expired是什么意思",
+			"显示无法加载今晚是什么情况",
+		],
 		en: {
 			title: "What do the shift cards on “Today” show?",
 			lines: [
@@ -2156,6 +3188,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-pr-status",
 		role: "outlet",
+		asks: [
+			"pr status booked on duty released meaning",
+			"pr shows released on today",
+			"booked amber means not check in yet ah",
+			"PR状态BOOKED是什么意思",
+			"怎么看PR有没有打卡签到",
+		],
 		en: {
 			title: "What do the PR statuses on “Today” mean?",
 			lines: [
@@ -2176,6 +3215,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-log-sales",
 		role: "outlet",
+		asks: [
+			"how to record sales for the night",
+			"where to key in drink sales ah",
+			"log sales cannot after closed leh",
+			"rekod jualan minuman setiap PR",
+			"isi angka jualan untuk PR",
+			"怎么记录当晚销售额",
+			"每个PR的酒水销售在哪里输入",
+			"关班后还能记录销售吗",
+		],
 		en: {
 			title: "How do I record sales for a night?",
 			lines: [
@@ -2196,6 +3245,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-labour-cost",
 		role: "outlet",
+		asks: [
+			"what is labour cost on today",
+			"labor cost vs budget variance",
+			"labour cost how calculate ah",
+			"today labour cost over budget meaning lah",
+			"anggaran kos gaji malam ni",
+			"今天页的人力成本是什么",
+			"人力成本怎么算的",
+			"今晚工资成本预算大概多少",
+		],
 		en: {
 			title: "What is the labour cost on “Today”?",
 			lines: [
@@ -2214,6 +3273,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-rate-pr",
 		role: "outlet",
+		asks: [
+			"how to give rating stars to a pr",
+			"give stars to pr after checkout",
+			"rate button not showing on pr card",
+			"how to give review to pr ah",
+			"rate again will replace the old rating ah",
+			"macam mana nak bagi rating PR",
+			"bagi bintang kepada PR",
+			"怎么给PR评分",
+			"给PR打星星评价",
+			"评分按钮在哪里",
+		],
 		en: {
 			title: "How do I rate a PR?",
 			lines: [
@@ -2234,6 +3305,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-cut-loss-detail",
 		role: "outlet",
+		asks: [
+			"how does reduce cutlost work",
+			"cut open slots nobody filled",
+			"cutlost pending agency means what ah",
+			"macam mana nak kurangkan PR malam ni",
+			"减少缺班损失怎么用",
+			"取消没人填的空位",
+		],
 		en: {
 			title: "How does “Reduce cutlost” work?",
 			lines: [
@@ -2256,6 +3335,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-notifications",
 		role: "outlet",
+		asks: [
+			"what notifications does an outlet get",
+			"sidebar count number on approvals",
+			"the number at the sidebar what is it ah",
+			"outlet bell notification got what lah",
+			"notifikasi apa outlet dapat",
+			"loceng pemberitahuan outlet",
+			"门店会收到什么通知",
+			"侧边栏的数字是什么",
+			"铃铛会提醒什么",
+		],
 		en: {
 			title: "What notifications and badges does an outlet get?",
 			lines: [
@@ -2276,6 +3366,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-reports-detail",
 		role: "outlet",
+		asks: [
+			"how are my reports calculated",
+			"net sales and margin how worked out",
+			"report net sales why so low ah",
+			"top performing prs how rank one",
+			"laporan jualan bersih dikira macam mana",
+			"报表的净销售怎么算",
+			"报表为什么没有算待审核的小票",
+			"表现最好的PR怎么排名",
+		],
 		en: {
 			title: "How are my “Reports” worked out?",
 			lines: [
@@ -2298,6 +3398,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-history",
 		role: "outlet",
+		asks: [
+			"what does history show",
+			"past shifts list per pr",
+			"where to see who worked last week ah",
+			"history why no deduction show leh",
+			"历史记录显示什么",
+			"以前完成的班次在哪里看",
+			"历史里为什么看不到扣钱",
+		],
 		en: {
 			title: "What does “History” show?",
 			lines: [
@@ -2318,6 +3427,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-roles",
 		role: "outlet",
+		asks: [
+			"what can each outlet role do",
+			"director only can view",
+			"difference owner guarantor financial head ops head",
+			"ops head can post job or not ah",
+			"why director cannot edit anything lah",
+			"peranan outlet boleh buat apa",
+			"director boleh edit ke",
+			"门店各角色有什么权限",
+			"财务主管能做什么",
+			"董事只能看吗",
+		],
 		en: {
 			title: "What can each outlet role do?",
 			lines: [
@@ -2338,6 +3459,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-add-staff",
 		role: "outlet",
+		asks: [
+			"invite a team member",
+			"how to add my manager into outlet ah",
+			"cannot invite as owner leh",
+			"jemput ahli pasukan outlet",
+			"pautan jemputan tamat tempoh",
+			"怎么邀请同事加入门店",
+			"怎么添加门店员工",
+			"邀请链接多久过期",
+		],
 		en: {
 			title: "How do I add someone to my outlet's team?",
 			lines: [
@@ -2358,6 +3489,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-join-approvals",
 		role: "outlet",
+		asks: [
+			"approve someone who asked to join",
+			"staff ask to join outlet how approve ah",
+			"who can approve join request one",
+			"macam mana luluskan staf yang mohon join",
+			"怎么审批申请加入门店的人",
+			"有人申请加入在哪里批准",
+			"拒绝加入申请",
+		],
 		en: {
 			title: "How do I approve someone who asked to join?",
 			lines: [
@@ -2378,6 +3518,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-remove-member",
 		role: "outlet",
+		asks: [
+			"remove a team member",
+			"change a member role at my outlet",
+			"reactivate removed staff",
+			"staff resign how to remove ah",
+			"accidentally removed staff can bring back or not",
+			"tukar peranan ahli outlet",
+			"怎么移除门店成员",
+			"怎么恢复被移除的成员",
+			"更改成员角色",
+		],
 		en: {
 			title: "How do I change a role, remove someone or bring them back?",
 			lines: [
@@ -2398,6 +3549,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-change-plan",
 		role: "outlet",
+		asks: [
+			"how to change subscription plan",
+			"upgrade my plan",
+			"switch plan stuck awaiting admin ah",
+			"why cannot switch plan lah, got unpaid bill",
+			"macam mana tukar pakej langganan",
+			"nak upgrade pakej outlet",
+			"怎么更换订阅套餐",
+			"升级套餐差价怎么收",
+			"为什么换不了套餐",
+		],
 		en: {
 			title: "How do I change my subscription plan?",
 			lines: [
@@ -2418,6 +3580,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-bills",
 		role: "outlet",
+		asks: [
+			"how to pay innocenz bill",
+			"subscription overdue banner",
+			"can pay by credit card",
+			"how to pay subscription ah, card cannot use",
+			"outlet subscription bill due when lah",
+			"macam mana bayar bil langganan",
+			"怎么支付InnocenZ账单",
+			"订阅费逾期了怎么办",
+			"可以用信用卡付吗",
+		],
 		en: {
 			title: "How do I see and pay my InnocenZ bills?",
 			lines: [
@@ -2440,6 +3613,18 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-pos",
 		role: "outlet",
+		asks: [
+			"pos integration",
+			"connect my pos system",
+			"how much is pos integration",
+			"can link with our pos or not ah",
+			"how to request pos quote lah",
+			"boleh sambung sistem POS tak",
+			"harga integrasi POS",
+			"可以对接POS系统吗",
+			"POS对接怎么收费",
+			"收银系统可以连接吗",
+		],
 		en: {
 			title: "Can I ask about a POS integration?",
 			lines: [
@@ -2460,6 +3645,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-pay-agency",
 		role: "outlet",
+		asks: [
+			"do i pay the agency through innocenz",
+			"pay agency in the app",
+			"agency payment i settle through innocenz or direct ah",
+			"innocenz collect payment for agency or not",
+			"bayar agensi melalui innocenz ke",
+			"macam mana bayar agensi",
+			"我要通过InnocenZ付钱给经纪公司吗",
+			"怎么付钱给经纪公司",
+		],
 		en: {
 			title: "Do I pay the agency through InnocenZ?",
 			lines: [
@@ -2478,6 +3673,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-no-penalties",
 		role: "outlet",
+		asks: [
+			"can i fine late pr",
+			"penalty for absent pr",
+			"pr late can fine or not ah",
+			"where to set penalty for no show lah",
+			"potong gaji PR tak datang",
+			"PR迟到可以罚款吗",
+			"PR缺勤可以扣钱吗",
+		],
 		en: {
 			title: "Can I fine PRs who are late or absent?",
 			lines: [
@@ -2496,6 +3700,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-swaps",
 		role: "outlet",
+		asks: [
+			"move pr to another venue",
+			"transfer pr to my other outlet",
+			"can send pr to my other branch ah",
+			"want change pr to other shop can or not",
+			"pindahkan PR ke cawangan lain",
+			"可以把PR调到别的场所吗",
+			"PR能换去另一间店吗",
+		],
 		en: {
 			title: "Can I move a PR to another venue?",
 			lines: [
@@ -2512,6 +3725,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-settings-account",
 		role: "outlet",
+		asks: [
+			"edit outlet name and logo",
+			"change login email for outlet",
+			"how to change my password ah outlet",
+			"update outlet address and logo lah",
+			"tukar kata laluan akaun outlet",
+			"怎么修改门店资料",
+			"怎么改登录邮箱",
+			"更换门店标志",
+		],
 		en: {
 			title: "How do I change the outlet's details or my login?",
 			lines: [
@@ -2532,6 +3755,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-multi-org",
 		role: "outlet",
+		asks: [
+			"switch between outlets",
+			"i manage two outlets how to switch",
+			"choose your organisation screen",
+			"after login how to switch to my other outlet ah",
+			"work at 2 outlet how to switch organisation lah",
+			"saya kerja di dua outlet macam mana tukar",
+			"我在多家门店工作怎么切换",
+			"怎么切换到另一家门店",
+		],
 		en: {
 			title: "I work at more than one outlet — how do I switch?",
 			lines: [
@@ -2550,6 +3783,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-outlet-plans",
 		role: "outlet",
+		asks: [
+			"how much does an outlet plan cost per month",
+			"outlet subscription price",
+			"essential plan rm 999",
+			"outlet package how much ah",
+			"berapa harga pakej outlet",
+			"yuran langganan outlet sebulan",
+			"门店套餐多少钱",
+			"门店月费多少",
+			"每天几个PR的套餐价格",
+		],
 		en: {
 			title: "How much does an outlet plan cost?",
 			lines: [
@@ -2570,6 +3814,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-do-i-pay-the-prs-myself",
 		role: "outlet",
+		asks: [
+			"do i pay prs myself",
+			"can i see pr payment voucher",
+			"i need pay the pr direct or not ah",
+			"PR的薪水是我直接付吗",
+			"谁给PR出粮",
+			"我可以看PR的薪资单吗",
+		],
 		en: {
 			title: "Do I pay the PRs myself?",
 			lines: [
@@ -2592,6 +3844,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-outlet-can-i-order-transport-makeup-or-other-se",
 		role: "outlet",
+		asks: [
+			"can i book transport for pr",
+			"order makeup service",
+			"innocenz got transport or makeup",
+			"can book driver for pr ah",
+			"makeup artist can order through app or not",
+			"boleh tempah pengangkutan",
+			"boleh order solekan untuk PR",
+			"可以预订交通吗",
+			"可以通过InnocenZ订化妆服务吗",
+		],
 		en: {
 			title:
 				"Can I order transport, makeup or other services through InnocenZ?",
@@ -2612,6 +3875,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-org-signup",
 		role: "any",
+		asks: [
+			"how to register my outlet or agency company",
+			"what documents to register an outlet or pr agency, ssm and business licence",
+			"want to register my club as outlet how ah, need ssm and licence?",
+			"sign up as outlet or pr agency where ah, the account type one",
+			"macam mana nak daftar syarikat outlet atau agensi PR",
+			"nak daftar syarikat outlet kena ada lesen perniagaan dan nombor SSM",
+			"门店怎么注册账户，要SSM号码和营业执照吗",
+			"经纪公司注册要准备什么资料，营业执照和负责人资料",
+			"公司注册账户类型选门店还是PR代理",
+		],
 		en: {
 			title: "How does an outlet or agency sign up?",
 			lines: [
@@ -2632,6 +3906,12 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-after-signup",
 		role: "any",
+		asks: [
+			"already sign up why portal only got settings page ah",
+			"注册成功后还要等审核吗，门户只有设置",
+			"注册后几时开通，要等审核多久",
+			"获批当天才开始计费吗",
+		],
 		en: {
 			title: "What happens after an outlet or agency signs up?",
 			lines: [
@@ -2654,6 +3934,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-team-signup",
 		role: "any",
+		asks: [
+			"im staff at a club, how do i join the outlet's existing account",
+			"sign up as a team member, which role can i ask for",
+			"staff want to join our agency portal, can ask for owner role or not ah",
+			"join as team member but pick i will be invited later, can ah",
+			"staf macam mana nak sertai outlet sebagai ahli pasukan",
+			"staf daftar sebagai ahli pasukan, boleh minta jawatan finance atau ops head tak",
+			"员工怎么加入已经注册的门店或经纪公司",
+			"注册为团队成员可以申请什么职位，运营主管可以吗",
+			"员工加入团队可以申请东主职位吗",
+		],
 		en: {
 			title: "How do staff join an existing outlet or agency?",
 			lines: [
@@ -2676,6 +3967,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-team-approve",
 		role: "any",
+		asks: [
+			"where do i approve a staff join request as owner",
+			"how to invite a team member from settings",
+			"my staff request to join already, where to approve ah, role to grant",
+			"invite staff who has no account yet can or not",
+			"东主在哪里批准新成员加入，授予职位",
+			"怎么邀请员工加入团队，对方要先有账号吗",
+			"东主怎么批准或拒绝员工的加入申请",
+		],
 		en: {
 			title: "How does an owner add or approve team members?",
 			lines: [
@@ -2696,6 +3996,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-roles",
 		role: "any",
+		asks: [
+			"what can a guarantor do compared to the owner",
+			"is the director role view only",
+			"financial head can do payroll and assign pr or not ah",
+			"ops head and financial head can post job or not ah",
+			"jawatan financial head dan ops head boleh buat apa",
+			"担保人和东主有什么区别",
+			"担保人可以做什么，总监只能查看吗",
+			"运营主管和财务主管的权限有什么不同",
+		],
 		en: {
 			title: "What can each team role do?",
 			lines: [
@@ -2716,6 +4026,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-choose-org",
 		role: "any",
+		asks: [
+			"i work at two outlets, how do i switch organisation",
+			"what is the choose your organisation screen after login",
+			"i got two agency account, how to change organisation ah",
+			"owner at one venue but no owner rights at the other one, why ah",
+			"saya kerja di dua outlet, macam mana nak tukar organisasi",
+			"我在两家门店工作，怎么切换机构",
+			"登录后显示选择您的机构，怎么换到另一家公司",
+			"我在两家经纪公司都有职位，怎么切换机构",
+		],
 		en: {
 			title: "What if I work for more than one organisation?",
 			lines: [
@@ -2736,6 +4056,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-sign-in",
 		role: "any",
+		asks: [
+			"where do i log in, with email or phone number",
+			"do prs sign in with phone number or email",
+			"how to log out or sign out of innocenz",
+			"outlet login use email ah, pr login use phone number?",
+			"怎么登录门户，用邮箱还是手机号登录",
+			"输错密码5次登录会被锁多久，怎么退出登录",
+		],
 		en: {
 			title: "How do I sign in?",
 			lines: [
@@ -2758,6 +4086,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-cant-sign-in",
 		role: "any",
+		asks: [
+			"why does it say this account is inactive",
+			"login says you cannot access this web portal",
+			"cannot login leh, keep say wrong password",
+			"why my login show organisation inactive ah",
+			"为什么登录不了，显示该账户已停用",
+			"登不进去，说您无法访问此网页门户",
+		],
 		en: {
 			title: "Why can't I sign in?",
 			lines: [
@@ -2780,6 +4116,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-forgot",
 		role: "any",
+		asks: [
+			"forgot my password how do i reset it",
+			"where is the forgot password button",
+			"i forgot password already, how to reset ah",
+			"reset kata laluan, kod dihantar ke whatsapp ke emel",
+			"忘记密码怎么办",
+			"密码忘了怎么重设",
+		],
 		en: {
 			title: "I forgot my password — what do I do?",
 			lines: [
@@ -2800,6 +4144,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-codes",
 		role: "any",
+		asks: [
+			"where will the verification code be sent, whatsapp or email",
+			"otp go to whatsapp or email ah",
+			"kod pengesahan dihantar ke mana, emel atau whatsapp",
+			"kod OTP sah berapa minit, bila boleh hantar semula kod",
+			"验证码会发到哪里，邮箱还是WhatsApp",
+			"验证码多久过期，多久可以重新发送",
+		],
 		en: {
 			title: "Where do verification codes arrive?",
 			lines: [
@@ -2822,6 +4174,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-security",
 		role: "any",
+		asks: [
+			"how to change my login email",
+			"where is security settings to change password",
+			"can my agency change my sign in phone number for me",
+			"want to change phone number how ah, need code?",
+			"change password need current password or not",
+			"macam mana nak tukar emel atau nombor telefon akaun",
+			"怎么修改登录邮箱或手机号",
+			"在哪里改密码，安全设置在哪",
+		],
 		en: {
 			title: "How do I change my password, email or phone?",
 			lines: [
@@ -2844,6 +4206,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-language",
 		role: "any",
+		asks: [
+			"how to change the language to chinese",
+			"is there a chinese version of the portal",
+			"can the app show traditional chinese",
+			"can switch to chinese language or not ah",
+			"where to change english to 中文 ah",
+			"怎么切换成中文",
+			"App可以换成繁体中文吗",
+			"语言怎么改成英文",
+		],
 		en: {
 			title: "How do I switch between English and 中文?",
 			lines: [
@@ -2864,6 +4236,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-bell",
 		role: "any",
+		asks: [
+			"where is the bell notification list",
+			"how to mark all notifications as read",
+			"how i know got new notification ah, the bell icon?",
+			"铃铛通知在哪里看，未读数字",
+			"怎么把通知全部标为已读",
+		],
 		en: {
 			title: "How am I told when something happens?",
 			lines: [
@@ -2884,6 +4263,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-notify-what",
 		role: "any",
+		asks: [
+			"what notifications do pr, agency and outlet each get",
+			"which notices go to the pr vs the agency vs the outlet",
+			"does the agency get notified when a pr drops out and needs cover",
+			"outlet and agency each get notification for what ah",
+			"apa notifikasi yang PR, agensi dan outlet masing-masing dapat",
+			"outlet dapat notifikasi pasal apa, agensi pula pasal apa",
+			"PR、经纪公司和门店各会收到哪些通知",
+			"门店会收到什么通知，经纪公司呢",
+			"PR被排上或移出班次会收到通知吗",
+		],
 		en: {
 			title: "What does each side get notified about?",
 			lines: [
@@ -2904,6 +4294,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-privacy-outlet",
 		role: "any",
+		asks: [
+			"can the outlet see my ic number",
+			"does the venue see a pr's home address or bank details",
+			"can an outlet open the pr's payment voucher",
+			"outlet side can see where exactly i check in or not",
+			"门店能看到PR的身份证号码吗",
+			"门店看得到我的住址、银行资料和罚款吗",
+		],
 		en: {
 			title: "What can an outlet see about PRs?",
 			lines: [
@@ -2924,6 +4322,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-privacy-agency",
 		role: "any",
+		asks: [
+			"can my agency see where i checked in, inside the fence or not",
+			"can my agency see my shifts and pay from another agency",
+			"my other agency pay, this agency can see or not",
+			"经纪公司看得到我打卡的位置吗",
+			"经纪公司看得到我在别家公司的班和薪水吗",
+		],
 		en: {
 			title: "What can an agency see about PRs?",
 			lines: [
@@ -2942,6 +4347,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-billing",
 		role: "any",
+		asks: [
+			"how does innocenz bill outlets and agencies",
+			"is the subscription billed weekly or monthly",
+			"where is payment history for subscription bills, the receipt",
+			"agency kena charge weekly ah, outlet monthly?",
+			"bil langganan dikira mingguan atau bulanan",
+			"bil langganan agensi mingguan, outlet bulanan ke",
+			"PR kena bayar langganan InnocenZ tak",
+			"订阅费是按周还是按月收",
+			"订阅账单的付款记录和收据在哪里看",
+		],
 		en: {
 			title: "How are outlets and agencies billed?",
 			lines: [
@@ -2964,6 +4380,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-bill-status",
 		role: "any",
+		asks: [
+			"what does void mean on my bill",
+			"paid already but the bill still says unpaid",
+			"already transfer why still show unpaid ah",
+			"the amber subscription due banner how to remove ah",
+			"账单显示已作废是什么意思",
+			"已经转账了为什么还显示未付款",
+			"订阅费已逾期的红色横幅是什么意思",
+		],
 		en: {
 			title: "What do bill statuses and the billing banner mean?",
 			lines: [
@@ -2984,6 +4409,17 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-plan-change",
 		role: "any",
+		asks: [
+			"how to upgrade or downgrade my plan",
+			"why can't i switch plan",
+			"subscription page is read only, cannot change plan",
+			"upgrade plan halfway kena extra charge ah",
+			"cannot switch plan because got unpaid bill ah",
+			"macam mana nak tukar pakej langganan",
+			"turun pakej langganan dapat potongan bil seterusnya ke",
+			"怎么换套餐，期中升级要补差价吗",
+			"为什么不能切换套餐，降级会在下期账单扣吗",
+		],
 		en: {
 			title: "How do I change my plan?",
 			lines: [
@@ -3006,6 +4442,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-money-flow",
 		role: "any",
+		asks: [
+			"who pays the pr salary, the outlet or the agency",
+			"outlet pay agency through the app ah",
+			"pr salary who pay one, agency or the outlet",
+			"outlet bayar agensi melalui InnocenZ ke, siapa bayar gaji PR",
+			"谁出粮给PR，门店还是经纪公司",
+			"门店给经纪公司的钱经过InnocenZ吗",
+		],
 		en: {
 			title: "How does money move between outlet, agency and PR?",
 			lines: [
@@ -3028,6 +4472,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-pv",
 		role: "any",
+		asks: [
+			"what is a pv, payment voucher",
+			"pr with two agencies gets two pv each week?",
+			"pv means what ah",
+			"apa itu PV, baucar bayaran",
+			"PV是什么意思",
+			"薪资单PV是什么意思，要签两次吗",
+		],
 		en: {
 			title: "What are a payroll week and a PV?",
 			lines: [
@@ -3048,6 +4500,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-disputes",
 		role: "any",
+		asks: [
+			"how is a pay dispute settled",
+			"who accepts or rejects a pay dispute",
+			"dispute already but agency no reply, how ah",
+			"wage or ot can dispute or not",
+			"macam mana pertikaian gaji diselesaikan",
+			"pertikaian gaji tak dijawab agensi, siapa putuskan",
+			"薪资争议怎么解决",
+			"经纪公司一直不回复争议怎么办，日薪可以争议吗",
+		],
 		en: {
 			title: "How are pay disputes settled?",
 			lines: [
@@ -3070,6 +4532,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-partnership",
 		role: "any",
+		asks: [
+			"end partnership already, the posted shifts still got or not",
+			"outlet boleh kerjasama dengan beberapa agensi tak",
+			"门店怎么和经纪公司合作",
+			"结束合作后已发布的班次还在吗",
+			"门店可以和几家经纪公司合作吗",
+		],
 		en: {
 			title: "How does an outlet start working with an agency?",
 			lines: [
@@ -3092,6 +4561,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-devices",
 		role: "any",
+		asks: [
+			"can i use the agency portal on my phone or tablet",
+			"is there an app for outlets or only the web portal in a browser",
+			"agency portal can open on handphone or not",
+			"pr app where to download ah, from agency?",
+			"门店后台可以用手机或平板打开吗",
+			"经纪公司后台可以用手机或平板吗",
+		],
 		en: {
 			title: "Which device does each person use?",
 			lines: [
@@ -3112,6 +4589,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-support",
 		role: "any",
+		asks: [
+			"how do i contact innocenz, whatsapp?",
+			"where is the privacy policy",
+			"want to contact innocenz how ah, got whatsapp number?",
+			"macam mana nak hubungi InnocenZ",
+			"nak tempah demo kena whatsapp ke",
+			"怎么联系InnocenZ客服",
+			"怎么预约演示，隐私政策在哪里",
+		],
 		en: {
 			title: "How do I contact InnocenZ?",
 			lines: [
@@ -3132,6 +4618,13 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-chat",
 		role: "any",
+		asks: [
+			"is this chat a bot, who answers it",
+			"what i type in this chat send to google ah",
+			"chat ni bot ke, apa saya taip dihantar ke google ke",
+			"你是机器人还是真人",
+			"这个聊天是机器人回答的吗，资料会发给谷歌吗",
+		],
 		en: {
 			title: "Who answers this chat, and what happens to what I type?",
 			lines: [
@@ -3152,6 +4645,15 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-colours",
 		role: "any",
+		asks: [
+			"what does the number beside the menu mean",
+			"why is the payroll badge always red",
+			"what do green, amber, white and red mean on pay amounts",
+			"why some amount show red colour ah",
+			"menu got amber number badge means what ah",
+			"颜色和角标是什么意思",
+			"金额显示红色是什么意思，绿色和琥珀色呢",
+		],
 		en: {
 			title: "What do the colours and badges mean?",
 			lines: [
@@ -3170,6 +4672,14 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-countries",
 		role: "any",
+		asks: [
+			"can a foreign pr sign up with an indonesian number",
+			"which countries does innocenz support, only malaysia?",
+			"got support outside malaysia or not",
+			"my number is thailand one, can register as pr or not",
+			"InnocenZ只在马来西亚可以用吗，外国号码行吗",
+			"外国号码可以注册吗，越南号码行不行",
+		],
 		en: {
 			title: "Where does InnocenZ work?",
 			lines: [
@@ -3190,6 +4700,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-shared-innocenz-team",
 		role: "any",
+		asks: [
+			"what does the innocenz team actually do",
+			"who approves new outlets and agencies on innocenz",
+			"what is the innocenz team in charge of, approvals and plan changes",
+			"who approve new agency account, innocenz team ah",
+			"apa kerja pasukan InnocenZ",
+			"tugas pasukan InnocenZ apa, siapa luluskan pendaftaran",
+			"InnocenZ团队负责什么",
+			"谁审核批准新注册的门店和经纪公司，InnocenZ团队吗",
+		],
 		en: {
 			title: "What does the InnocenZ team do?",
 			lines: [
@@ -3212,6 +4732,16 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 	{
 		id: "ref-general-is-innocenz-a-job-app",
 		role: "any",
+		asks: [
+			"is this a job app",
+			"can i find and apply for nightlife jobs on innocenz",
+			"this one is job app ah, can find work?",
+			"where to apply job as pr ah",
+			"boleh mohon kerja PR dalam app ni tak",
+			"InnocenZ是找工作的App吗",
+			"可以在这里找夜场工作吗",
+			"这是找夜场工作的App吗",
+		],
 		en: {
 			title: "Is InnocenZ a job app?",
 			lines: [

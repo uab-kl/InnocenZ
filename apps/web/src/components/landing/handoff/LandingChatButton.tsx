@@ -42,6 +42,7 @@ import {
 	groupSteps,
 	LEAD_INS,
 	nextChips,
+	offTopicAnswer,
 	placeHeading,
 	ROLE_CHIPS,
 	referenceAnswer,
@@ -219,7 +220,9 @@ function answerFor(
 		case "topic":
 			return topicById(reply.id)?.[locale].answer ?? CHAT_FALLBACK[locale];
 		case "small":
-			return SMALL_TALK[locale][reply.id];
+			return reply.id === "offtopic"
+				? offTopicAnswer(locale, reply.said)
+				: SMALL_TALK[locale][reply.id];
 		case "fallback":
 			return CHAT_FALLBACK[locale];
 		case "reference":
@@ -535,6 +538,12 @@ export function LandingChatButton() {
 				text: [
 					answer.text,
 					...(answer.steps ?? []).map((s) => `${s.where}: ${s.what}`),
+					/* The follow-up Gemini offered, so it never offers the same one
+					 * again (owner, 3 Oct 2026: every answer ended "Shall I show you
+					 * 'How do I sign up?' too?"). */
+					...(reply.kind === "ai" && reply.more
+						? [`Offered next: ${reply.more}`]
+						: []),
 				].join("\n"),
 			});
 			const parts: { part: BubblePart; chars: number; nextId?: string }[] = [
@@ -623,12 +632,18 @@ export function LandingChatButton() {
 		backup: WrittenReply,
 		next: ChatChip[],
 		typed: boolean,
+		sidePick = false,
 	) => {
 		const request = { ctl: new AbortController(), backup, next };
 		aiRequest.current = request;
 		setTyping(true);
 		setChips([]);
-		const history = turns.current.slice(-MAX_HISTORY_TURNS);
+		/* A suggestion button is a whole question on its own ("How do I check in?",
+		 * and the side travels as `forRole`), so it goes without history: the server
+		 * then answers it from memory for every visitor after the first — instant,
+		 * and no call on the free key's daily cap. A typed question keeps the
+		 * history, so "and how do I sign it?" is still understood. */
+		const history = typed ? turns.current.slice(-MAX_HISTORY_TURNS) : [];
 		turns.current.push({ from: "visitor", text: question });
 		void askLandingAi(
 			question,
@@ -636,6 +651,7 @@ export function LandingChatButton() {
 			forRole,
 			history,
 			request.ctl.signal,
+			sidePick,
 		).then((ai) => {
 			if (request.ctl.signal.aborted || aiRequest.current !== request) return;
 			aiRequest.current = null;
@@ -689,12 +705,18 @@ export function LandingChatButton() {
 		const question = chipLabel(chip, locale, c);
 		if (chip.kind === "role") {
 			setRole(chip.role);
+			/* Gemini answers a side button too, as a SIDE PICK: the server tells it
+			 * how many pages that side's Overview walks through and refuses a reply
+			 * that leaves them out, so the answer keeps the page-path look of the
+			 * written intro (owner, 3 Oct 2026: "can make all reply is come from the
+			 * gemini * keep the UI"). The written intro stays the backup. */
 			replyWithAi(
 				question,
 				chip.role,
 				{ kind: "intro", role: chip.role },
 				nextChips(chip.role, asked.current),
 				false,
+				true,
 			);
 			return;
 		}

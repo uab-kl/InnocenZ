@@ -37,6 +37,8 @@ export async function askLandingAi(
 	role: ChatRole | null,
 	history: ChatTurn[],
 	signal?: AbortSignal,
+	/** A side button ("I run an agency"): the server then insists on that side's whole page path. */
+	sidePick = false,
 ): Promise<AiAnswer | null> {
 	/* AbortSignal.any / .timeout are missing on Safari before 17.4, so one local
 	 * controller carries both the caller's cancel and the time limit. */
@@ -53,6 +55,7 @@ export async function askLandingAi(
 				question: question.slice(0, MAX_QUESTION_CHARS),
 				locale,
 				role,
+				...(sidePick ? { sidePick: true } : {}),
 				history: history.slice(-MAX_HISTORY_TURNS).map((t) => ({
 					from: t.from,
 					text: t.text.slice(0, MAX_TURN_CHARS),
