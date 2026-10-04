@@ -23,6 +23,8 @@ import {
   overviewStepLabels,
   keepsPagePath,
   isBroadQuestion,
+  isOtherSidesPage,
+  withoutOtherSidesPages,
 } from './landing-chat.service';
 import { logger } from '@/util/logger';
 import { env } from '@/env';
@@ -657,6 +659,46 @@ describe('a side button — answered by Gemini, keeping the page path (owner, 3 
     const plain = { text: '欢迎！', steps: ['登录', '设置', 'PR 管理', '排班', '审批', '薪资', '薪资 → 结算周'].map((w) => ({ where: w, what: '…' })) };
     expect(keepsPagePath(plain, labels)).toBe(true);
     expect(overviewStepLabels('en', 'general')).toEqual(['PR · phone app', 'Agency · web portal', 'Outlet · web portal', 'Start here']);
+  });
+
+  it("drops a step on another side's page when the visitor's side is known (4 Oct re-grade: q66, q70)", async () => {
+    expect(isOtherSidesPage('Roster → Live → Check-in locations page', 'outlet')).toBe(true);
+    expect(isOtherSidesPage('PR 管理页面', 'outlet')).toBe(true);
+    expect(isOtherSidesPage('Workspace page', 'outlet')).toBe(false);
+    expect(isOtherSidesPage('Payment tab', 'pr')).toBe(false);
+    expect(isOtherSidesPage('Somewhere the guide never names', 'outlet')).toBe(false);
+    // end to end: the outlet keeps its own step, loses the agency's check-in map
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        geminiReply({
+          text: 'Every check-in records how far the PR was from your venue pin.',
+          steps: [
+            { where: 'Today page', what: 'See each PR booked, on duty or checked out.' },
+            { where: 'Roster → Live → Check-in locations page', what: 'View the map.' },
+          ],
+          more: 'How do I set the check-in fence?',
+        }),
+      ),
+    );
+    const out = await answerLandingChat({ question: 'how do i know the PR really came', locale: 'en', role: 'outlet' });
+    expect(out.ok && out.reply.steps?.map((s) => s.where)).toEqual(['Today page']);
+    // side unknown: nothing is dropped
+    const reply = { text: 'x', steps: [{ where: 'Roster → Live → Check-in locations page', what: 'y' }] };
+    expect(withoutOtherSidesPages(reply, null)).toBe(reply);
+  });
+
+  it('accepts the same page in the other language and loose spacing, but not one label repeated (4 Oct re-grade, q84)', () => {
+    const zh = overviewStepLabels('zh', 'general');
+    const en = overviewStepLabels('en', 'general');
+    // the real reply that was wrongly refused: 中文 answer, three labels left in English
+    const q84 = { text: '…', steps: ['PR · 手机 App', 'Agency · web portal', 'Outlet · web portal', 'Start here'].map((w) => ({ where: w, what: '…' })) };
+    expect(keepsPagePath(q84, zh, en)).toBe(true);
+    expect(keepsPagePath(q84, zh)).toBe(false);
+    const spacing = { text: '…', steps: ['PR·手机App', '经纪公司（网页后台）', '场所 · 网页后台', '从这里开始'].map((w) => ({ where: w, what: '…' })) };
+    expect(keepsPagePath(spacing, zh, en)).toBe(true);
+    const repeated = { text: '…', steps: Array.from({ length: 4 }, () => ({ where: 'PR · 手机 App', what: '…' })) };
+    expect(keepsPagePath(repeated, zh, en)).toBe(false);
   });
 
   it('knows how many pages each side walks through, in both languages — a renamed heading fails here', () => {

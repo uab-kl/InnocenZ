@@ -25,31 +25,42 @@ database. Neither `tsc` nor `drizzle-kit generate` ever opens a connection — s
 [[green-signals-that-lie]]. `pnpm check:drift` did **not** catch it either: it compares against
 `0070_snapshot.json`, an old snapshot, and reported its usual 5 pre-existing problems
 (`pr` table, `agency_pr.pr_id`, the two `sub_role` columns, `outlet_penalty_rule`) while saying
-nothing about `user`.
+nothing about `user`. (That was the 17 Aug instrument. `check-schema-drift.ts` now reads every
+`*.model.ts` and compares it with the LIVE database, so this exact mistake would now fail it —
+see [[ci-instruments-that-passed-unconditionally]]. Still not a reason to skip the migrate.)
 
 **How to apply:** the model edit and `pnpm migrate:deploy` (from the repo ROOT — never
 `pnpm migrate`) are ONE step, not two. Never leave a session with a model column whose migration
 has not been applied, and never judge it done on a green `tsc`.
 
 **The 15-second check that settles it** — a wrong-password login probe. It needs no real
-credentials, writes nothing, and distinguishes the two failures cleanly:
+credentials and distinguishes the two failures cleanly. It is **not** write-free (see the warning
+below), so aim it at an address that has NO account — never at `uab.innocenz@gmail.com`, which is
+the real admin (`DEFAULT_ADMIN_EMAIL`):
 
 ```
 curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:7777/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"uab.innocenz@gmail.com","password":"<password>"}'
+  -d '{"email":"<an address with no account>","password":"deliberately-wrong-password"}'
 ```
 
 `{"success":false,"message":"Wrong email or password"}` + **401** = the user SELECT ran, schema is
-fine. A **500** = the SELECT itself blew up, so a declared column is missing. (Since 30 Sep 2026 an
-address with NO account gets the same 401 after the same SELECT — see
-[[no-account-existence-leaks]] — so use an address nobody holds.)
+fine (a phone sign-in answers `Wrong phone number or password`). A **500** = the SELECT itself
+blew up, so a declared column is missing — the lookup is called with `rethrow: true`, so a failed
+read is a 500 and never reads as "no account". Getting past the SELECT at all is the evidence.
+(Since 30 Sep 2026 an address with NO account gets the same 401 after the same SELECT — see
+[[no-account-existence-leaks]] — which is what makes the no-account address usable. Before that a
+real account answered `Wrong password` and an unknown one `This account is not registered yet.`,
+so an old transcript quoting `Wrong password` is not a different failure.)
 
 ⚠️ **It is NOT write-free.** Every `POST /auth/login` writes an `audit_logs` row
-(`platformAuditMiddleware`), and a wrong password on a REAL account also bumps its
-`failed_login_attempts` and can lock it. Prefer reading `information_schema.columns` (below); fire
-the login only when the owner is fine with an audit row, and never at a real account. See
-[[confirm-before-asserting]] and [[prove-guards-live-without-writing]].
+(`platformAuditMiddleware`, mounted on the v1 router above `/auth`; a refusal is logged as
+`CREATE_FAILED`), and a wrong password on a REAL account also bumps its
+`failed_login_attempts` and can lock it (5 strikes, 15 minutes). An address with no account only
+touches an in-memory per-process counter, which is why it is the one to use. Prefer reading
+`information_schema.columns` (below); fire the login only when the owner is fine with an audit
+row, and never at a real account. See [[confirm-before-asserting]] and
+[[prove-guards-live-without-writing]].
 
 To prove a specific column really landed, query `information_schema.columns` directly rather
 than trusting `drizzle-kit`'s "migrations applied successfully!" — it prints that even when it
