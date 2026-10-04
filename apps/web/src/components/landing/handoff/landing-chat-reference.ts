@@ -4305,7 +4305,7 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 		en: {
 			title: "What can an outlet see about PRs?",
 			lines: [
-				"An outlet sees, by name, which PRs are booked and working at its venue and their attendance status.",
+				"An outlet sees the PRs booked and working at its venue — name and nickname, tier, comcard and portfolio photos, age, height and languages — with their attendance status, and can rate them after a shift.",
 				"It never receives a PR's IC or passport number, date of birth, home address, bank details, ID or MC photos, fines or cancellation fees, or the exact spot where they checked in.",
 				"It cannot open PRs' payment vouchers — pay between an agency and its PRs stays between them.",
 			],
@@ -4313,7 +4313,7 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 		zh: {
 			title: "门店能看到 PR 的哪些资料？",
 			lines: [
-				"门店可以按名字看到哪些 PR 在本场所被预订、正在上班以及他们的出勤状态。",
+				"门店可以看到在本场所被预订和上班的 PR — 名字和昵称、等级、comcard 和作品集照片、年龄、身高和语言 — 以及他们的出勤状态，班后还可以给 PR 评分。",
 				"门店不会收到 PR 的身份证或护照号码、出生日期、住址、银行资料、证件或病假单照片、罚款或取消费用，也看不到签到时的确切位置。",
 				"门店无法打开 PR 的薪资单 — 经纪公司与 PR 之间的薪资只属于他们双方。",
 			],

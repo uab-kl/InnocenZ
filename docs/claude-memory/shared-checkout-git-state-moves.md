@@ -41,23 +41,31 @@ normalized at some point after 6 Aug. The worktree copy is still CRLF and `core.
 - **`git -c core.autocrlf=false` is now the one that lies** — it compares the CRLF worktree against
   an LF blob, so every line differs: the same 17-line edit read `7,380 insertions, 7,363 deletions`.
 
+Still true on 4 Oct 2026: `git ls-files --eol -- TEST_SCRIPT.md` prints `i/lf  w/crlf  attr/` —
+LF in the index, CRLF in the worktree, and **no `.gitattributes` rule** for the file (that file pins
+only `*.sh` and `tools/deploy/*` to LF). `core.autocrlf=true` comes from the **system** gitconfig
+(`C:/Program Files/Git/etc/gitconfig`), not the repo's own config — so another device, or a
+re-commit, can change the answer. `git ls-files --eol` is the one-command way to read which side
+is which before choosing a flag.
+
 The lasting rule is not either flag, it is: **measure both before believing either.** Which
 direction the mismatch runs is a property of the blob on the day, and the blob changed underneath a
 memory that named one specific flag as the answer.
 
 The original 6 Aug finding, kept because the mechanism is the useful part:
 
-Editing it at all produced a **~9,400-line whole-file diff**: the blob had `\r\n`, autocrlf cleaned
-the worktree copy to `\n`, so every line differed. It looked like catastrophic churn around a
-50-line edit.
+On 6 Aug the file was committed with **CRLF** and `core.autocrlf=true`. Editing it at all produced a
+**~9,400-line whole-file diff**: the blob had `\r\n`, autocrlf cleaned the worktree copy to `\n`, so
+every line differed. It looked like catastrophic churn around a 50-line edit.
 
 - At that time you read the real change with `git -c core.autocrlf=false diff -- TEST_SCRIPT.md`
-  and staged it the same way to keep the blob CRLF. **That is now backwards — see above.**
+  and staged it the same way (`git -c core.autocrlf=false add`) to keep the blob CRLF. **That is
+  now backwards — see above.**
 - The file showed clean before my first edit only because of git's **stat cache** — git had not
   re-read it, so the conversion never ran. A clean `git status` on a file nobody has touched is not
   proof its endings agree with the index.
 - I burned several rounds converting the file back and forth trying to make the diff small. Don't:
-  check with `-c core.autocrlf=false` **first**, then decide whether anything is actually wrong.
-  Rewriting line endings to chase a diff is churn, and it can collide with whatever the other
-  session is doing to the same file. The owner's call on 6 Aug was blunt and worth keeping:
-  *"just ignore the testscript for now"*.
+  measure **both** diffs **first** (on 6 Aug that meant checking with `-c core.autocrlf=false`), then
+  decide whether anything is actually wrong. Rewriting line endings to chase a diff is churn, and it
+  can collide with whatever the other session is doing to the same file. The owner's call on 6 Aug
+  was blunt and worth keeping: *"just ignore the testscript for now"*.

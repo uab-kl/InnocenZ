@@ -171,11 +171,11 @@ export function overviewStepLabels(locale: 'en' | 'zh', role: keyof (typeof OVER
 function samePage(label: string): string {
   return label
     .replace(/\*\*/g, '')
-    .replace(/[「」]/g, '')
+    .replace(/[「」()（）[\]]/g, '')
+    .trim()
     .replace(/(页面|分页)$/, '')
     .replace(/\s+(page|tab)$/i, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+    .replace(/[\s·•]+/g, '')
     .toLowerCase();
 }
 
@@ -185,10 +185,70 @@ function samePage(label: string): string {
  * label of all seven 中文 agency steps (3 Oct 2026). One may be missing or
  * merged (two identical "Payment" steps).
  */
-export function keepsPagePath(reply: LandingChatReply, labels: string[]): boolean {
-  const wanted = labels.map(samePage);
-  const named = (reply.steps ?? []).filter((s) => wanted.includes(samePage(s.where))).length;
-  return named >= labels.length - 1;
+/*
+ * Every page in the guide belongs to the side(s) whose sections walk through it
+ * ("4) Roster → Live → Check-in locations page" sits only in the agency's). The
+ * 4 Oct re-grade found the fast model handing a visitor ANOTHER side's page as a
+ * step even after the rule said not to (an outlet told to edit tiers in the
+ * agency's 「PR 管理」, and to open the agency's check-in map) — so when the
+ * visitor's side is known, the server drops such a step. The answer's text is
+ * still Gemini's; only an instruction the visitor could never follow goes.
+ */
+const SECTION_SIDE = {
+  en: [
+    ['(for PRs)', 'pr'],
+    ['(for PR agencies)', 'agency'],
+    ['(for outlets)', 'outlet'],
+    ['(for everyone)', 'any'],
+  ],
+  zh: [
+    ['(适用于 PR)', 'pr'],
+    ['(适用于 PR 经纪公司)', 'agency'],
+    ['(适用于场所 (Outlet))', 'outlet'],
+    ['(适用于所有人)', 'any'],
+  ],
+} as const;
+type PageSide = 'pr' | 'agency' | 'outlet' | 'any';
+let pageSidesCache: Map<string, Set<PageSide>> | null = null;
+
+function pageSides(): Map<string, Set<PageSide>> {
+  if (pageSidesCache) return pageSidesCache;
+  const map = new Map<string, Set<PageSide>>();
+  for (const locale of ['en', 'zh'] as const) {
+    for (const block of LANDING_CHAT_FACTS[locale].none.split(/\n(?=## )/)) {
+      const head = block.split('\n')[0];
+      const side = SECTION_SIDE[locale].find(([end]) => head.endsWith(end))?.[1];
+      if (!side) continue;
+      for (const line of block.split('\n')) {
+        const page = line.match(/^\d+\) (.+?): /)?.[1];
+        if (!page) continue;
+        const key = samePage(page);
+        const sides = map.get(key) ?? new Set<PageSide>();
+        sides.add(side);
+        map.set(key, sides);
+      }
+    }
+  }
+  pageSidesCache = map;
+  return map;
+}
+
+/** A page that only ANOTHER side's sections use — never a step for this visitor. Unknown pages are kept. */
+export function isOtherSidesPage(where: string, role: 'pr' | 'agency' | 'outlet'): boolean {
+  const sides = pageSides().get(samePage(where));
+  return !!sides && !sides.has(role) && !sides.has('any');
+}
+
+export function keepsPagePath(reply: LandingChatReply, labels: string[], otherLanguage: string[] = []): boolean {
+  // Counted per PAGE covered, so repeating one label cannot pass for a path; the
+  // same step's label in the other language also counts (a 中文 answer once wrote
+  // "Agency · web portal" for 「经纪公司 · 网页后台」 and a good answer was thrown
+  // away — 4 Oct 2026 re-grade, q84).
+  const said = new Set((reply.steps ?? []).map((s) => samePage(s.where)));
+  const covered = labels.filter(
+    (label, i) => said.has(samePage(label)) || (otherLanguage[i] !== undefined && said.has(samePage(otherLanguage[i]))),
+  ).length;
+  return covered >= labels.length - 1;
 }
 
 /**
@@ -232,7 +292,7 @@ function broadRule(input: LandingChatInput): string[] {
   const steps = overviewStepCount(input.locale, side);
   if (steps === 0) return [];
   return [
-    `- THIS IS A BROAD QUESTION about InnocenZ as a whole. "text" = one sentence that answers exactly what was asked (who it is for, its benefit, how it works, how to use it); "steps" = ALL ${steps} steps or points of the Overview for ${ROLE[side]}, in order, each "where" = that step's page name or the point's label exactly as written there (for everyone: "PR · phone app", "Agency · web portal", "Outlet · web portal", "Start here"), each "what" = what that side gets or does there; "more" = one question that moves them on, in the answer's language (for example "I'm a PR — how do I start?" / 「我是 PR，怎么开始？」).`,
+    `- THIS IS A BROAD QUESTION about InnocenZ as a whole. "text" = one sentence that answers exactly what was asked (who it is for, its benefit, how it works, how to use it); "steps" = ALL ${steps} steps or points of the Overview for ${ROLE[side]}, in order, each "where" = exactly one of these labels, in this order: ${overviewStepLabels(input.locale, side).map((l) => `"${l}"`).join(', ')}, each "what" = what that side gets or does there; "more" = one question that moves them on, in the answer's language (for example "I'm a PR — how do I start?" / 「我是 PR，怎么开始？」).`,
   ];
 }
 
@@ -241,7 +301,7 @@ function sidePickRule(input: LandingChatInput): string[] {
   const steps = overviewStepCount(input.locale, input.role);
   if (steps === 0) return [];
   return [
-    `- THIS MESSAGE IS A SIDE PICK: the visitor tapped the website's own "${input.question}" button — it is never unclear or off-topic. Answer from the Overview for ${ROLE[input.role]}: "text" = its welcome sentence; "steps" = ALL ${steps} of its steps (its numbered steps, or its points if it has no numbers), in their order, none left out and none merged — each "where" is that step's page name (or the point's label, such as "PR · phone app") exactly as the Overview writes it, each "what" its action or description kept short; "more" = the question THIS side most often asks next about its own work (a PR: "How do I get paid?"; an agency: "How does payroll work?"; an outlet: "How do I book PRs?"; someone else: "What is InnocenZ?" — in 中文 「我怎么拿到薪资？」「薪资怎么做？」「怎么订 PR？」「InnocenZ 是什么？」), always in the same language as the answer. Never use the section's own heading (such as "Overview" or 「总览」) as a step's "where".`,
+    `- THIS MESSAGE IS A SIDE PICK: the visitor tapped the website's own "${input.question}" button — it is never unclear or off-topic. Answer from the Overview for ${ROLE[input.role]}: "text" = its welcome sentence; "steps" = ALL ${steps} of its steps (its numbered steps, or its points if it has no numbers), in their order, none left out and none merged — each "where" is exactly one of these labels, in this order: ${overviewStepLabels(input.locale, input.role).map((l) => `"${l}"`).join(', ')}, each "what" its action or description kept short; "more" = the question THIS side most often asks next about its own work (a PR: "How do I get paid?"; an agency: "How does payroll work?"; an outlet: "How do I book PRs?"; someone else: "What is InnocenZ?" — in 中文 「我怎么拿到薪资？」「薪资怎么做？」「怎么订 PR？」「InnocenZ 是什么？」), always in the same language as the answer. Never use the section's own heading (such as "Overview" or 「总览」) as a step's "where".`,
   ];
 }
 
@@ -311,6 +371,12 @@ export function systemInstruction(input: LandingChatInput): string {
     '- Be exact: use the precise numbers, limits, times, statuses, roles and names the FACTS give; never round them, generalise them or add your own.',
     '- Several sections may touch the question: use the most specific one, and combine sections when the question needs both.',
     '- Answer for the visitor\'s own side: tell a PR what the PR does and sees, an agency what the agency does, an outlet what the outlet does. Bring in another side only when the question is about it. If the visitor has not said their side and the answer differs by side, answer for the side the question points to; if it could be any side, give one short sentence for each side.',
+    // 4 Oct 2026 re-grade (blind, against the code): 4 of the 6 wrong answers
+    // told the visitor "you can" with ANOTHER side's page — an outlet offered the
+    // agency's tier editing and check-in map, an agency told to "settle with your
+    // agency", a PR's bank step taken from the agency picker.
+    '- Every section heading ends with who it is for ("(for PRs)", "(for PR agencies)", "(for outlets)", "(for everyone)" / 「适用于 …」). Tell the visitor "you can" ONLY from a section for their side or for everyone. A page or action that appears only in ANOTHER side\'s sections — for example the agency\'s Manage PR / 「PR 管理」 (tiers), Roster → Live → Check-in locations, or Payroll — is never something the visitor can do: if they ask whether they can, the answer is no; say which side does it, in the third person, and what their own side does instead. Never give another side\'s page as a step for the visitor.',
+    '- Take "steps" only from the section that answers THIS exact question (bank details → the bank section, not the Overview\'s other steps). When roles differ in what they may do, name the role that fits (for example the Director is view-only, while Finance and Ops heads can post jobs) — never say all roles are the same.',
     '- If the FACTS say something is not available, or InnocenZ does not do what is asked, say so plainly and do not offer a workaround the FACTS do not describe.',
     '- The conversation may hold earlier messages. Use them only to understand what the visitor means now (a short follow-up such as "and how do I sign it?" continues the last subject). Earlier assistant messages are NOT facts: if one disagrees with the FACTS, the FACTS win.',
     '- In Chinese, keep the 「」 brackets around page, tab and button names exactly as the FACTS write them.',
@@ -600,11 +666,27 @@ async function askGemini(
   const outcome = await raceModels(configuredModels(), key, body, {
     visitorGone,
     maxSteps: Math.max(MAX_STEPS, pathLabels.length),
-    accept: pathLabels.length > 0 ? (reply) => keepsPagePath(reply, pathLabels) : undefined,
+    accept:
+      pathLabels.length > 0 && overview
+        ? (reply) =>
+            keepsPagePath(reply, pathLabels, overviewStepLabels(input.locale === 'en' ? 'zh' : 'en', overview))
+        : undefined,
   });
   if (!('reply' in outcome)) return { ok: false, reason: outcome.reason };
-  remember(outcome.reply, outcome.model);
-  return { ok: true, reply: outcome.reply, model: outcome.model };
+  const reply = withoutOtherSidesPages(outcome.reply, input.role);
+  remember(reply, outcome.model);
+  return { ok: true, reply, model: outcome.model };
+}
+
+/** The reply without steps on another side's pages (see `isOtherSidesPage`); unchanged when the side is unknown. */
+export function withoutOtherSidesPages(reply: LandingChatReply, role: LandingChatInput['role']): LandingChatReply {
+  if (role !== 'pr' && role !== 'agency' && role !== 'outlet') return reply;
+  const steps = reply.steps ?? [];
+  const kept = steps.filter((s) => !isOtherSidesPage(s.where, role));
+  if (kept.length === steps.length) return reply;
+  logger.info(`[landing-chat] dropped ${steps.length - kept.length} step(s) on another side's page for a ${role}`);
+  const { steps: _dropped, ...rest } = reply;
+  return kept.length > 0 ? { ...rest, steps: kept } : rest;
 }
 
 /**

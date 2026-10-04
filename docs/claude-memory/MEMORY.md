@@ -196,3 +196,9 @@ Dated history lives in `TEST_SCRIPT.md` §8/§10; rules live in `CLAUDE.md`.
 - [Owner lane fell to Director](owner-lane-fell-through-to-director.md) — fell back to view-only, fixed
 - [Post Job read demo menu](post-job-read-demo-menu-not-backend.md) — read demo menu, not the backend
 - [Store roster empty live](store-roster-empty-on-real-session.md) — use the server roster, not the store
+
+### Newly added - file these into a section above
+
+- [Chat side buttons are written](chat-side-buttons-are-written.md) — "Landing chat side buttons (\"I run an agency\"…) are answered by GEMINI as a \"side pick\" whose page path the server guarantees (owner's final call, 3 Oct 2026) — not the written intro"
+- [Condensed biome says clean](condensed-biome-says-clean.md) — "The RTK-condensed `npx biome check` output printed \"Lint: No issues found\" while 3 biome errors (formatter + a11y) stood — run it raw with `rtk proxy` before reporting biome clean"
+- [Record every enhancement in the book](record-every-enhancement-in-the-book.md) — "Owner wants EVERY enhancement recorded in the InnocenZ_latest Excel book in the same slice — page 1 \"What changed\" line + the area page's rows"
