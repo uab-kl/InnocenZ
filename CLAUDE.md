@@ -185,6 +185,36 @@ pnpm rbac:check    # exit 1 while that snapshot disagrees with the live table
   refused. ⚠️ This line used to say it was held by nobody and to "grant it and re-sync"; that
   was true only before 11 Sep, and acting on it now re-grants a row that already exists.
 
+## The website chat follows the system (owner, 5 Oct 2026)
+
+**"the chatbot need read from my system flow, database structure, data, and md files."** The
+landing chat's facts are GENERATED: `pnpm chat:facts` builds the written guide plus sections read
+from the code — every backend table, the `role_permission` snapshot, the portal menus and app tabs,
+and `TEST_SCRIPT.md` **§11 What's new** — into
+`apps/backend/src/features/landing-chat/landing-chat-facts.generated.ts`. CI runs
+`pnpm chat:facts:check`.
+
+- **A change a PR, agency or outlet can SEE → one §11 row** (`| YYYY-MM-DD | pr/agency/outlet/any |
+  English | 中文 |`), plain words, no names of people/venues/tables/files, no open bugs. Then
+  `pnpm chat:facts`.
+- **A new table, a newly CHECKED permission (`module:verb` in the web feature map or a server
+  `requirePermission`) or a team lane → public wording** in
+  `apps/web/src/components/landing/handoff/landing-chat-system.ts` (`TABLE_SENTENCES`,
+  `GRANT_PHRASES`, or a `hidden` entry WITH its reason). The generator refuses to run until it has
+  one — that refusal is the point. Word a grant by what its gate OPENS, never by the module's name:
+  `workforce:read` is the Roster, `workforce:update` is Manage PR (a per-module phrase once told
+  visitors Finance could use Manage PR).
+- **A permission or menu change → `pnpm rbac:sync` first, then `pnpm chat:facts`**; the chat reads
+  the snapshot, not the database.
+- ⚠️ Live ROWS never go in. The facts are sent to Google on a free key and shown to anonymous
+  visitors; `public-safety.ts` refuses any personal value, internal name or engineering note in
+  them, and refuses a Gemini REPLY carrying a phone, IC, email or outside link before it is cached.
+- Lane-only abilities are READ from the portals' `MATRIX_ONLY`. The one rule no matrix carries —
+  subscription pay is the owner's alone — is hand-worded in `TEAM_NOTES`, and the generator stops
+  if `resolveOrgOwnerPayer` no longer checks `['owner'], false`.
+- ⚠️ After `pnpm chat:facts`, confirm the backend reloaded. A stuck `tsx watch` process makes every
+  chat answer the 15-second written backup; touching `apps/backend/src/main.ts` restarts it.
+
 ## Working rules
 
 - **Doc roles:** `CLAUDE.md` = rules only — update ONLY when a rule changes.

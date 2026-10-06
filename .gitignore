@@ -1,5 +1,10 @@
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
+# A Windows program run with %SystemDrive% unexpanded and the repo as its working
+# directory writes Windows' own icon/app cache here (cversions.2.db, {GUID}.ver…db
+# — found 6 Oct 2026, nearly committed). Never project files.
+/%SystemDrive%/
+
 # compiled output
 dist
 tmp

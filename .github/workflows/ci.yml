@@ -36,6 +36,10 @@ jobs:
 
       # Prepend any command with "nx record --" to record its logs to Nx Cloud
       - run: npx nx record -- npx nx format:check --base="remotes/origin/main"
+      # The website chat's facts are generated from the code (tables, permissions,
+      # menus, TEST_SCRIPT §11). Fails while they are stale or would publish a
+      # personal value / internal name — `pnpm chat:facts` fixes the first.
+      - run: pnpm chat:facts:check
       # mobile is excluded from `build`: it requires `eas` CLI + cloud credentials
       # this runner doesn't have — mobile app builds happen via EAS separately.
       - run: npx nx run-many -t lint test typecheck e2e
