@@ -15,6 +15,10 @@
 
 # Generated; never hand-formatted.
 pnpm-lock.yaml
+# Written by `pnpm chat:facts` as JSON.stringify output and compared byte-for-byte
+# by `pnpm chat:facts:check`; CI's format:check runs FIRST and could never pass
+# on it, so the chat check behind it could never run (review, 5 Oct 2026).
+/apps/backend/src/features/landing-chat/landing-chat-facts.generated.ts
 
 # The living session log — enormous single-line table rows that prettier
 # reflows into an unreadable diff. See CLAUDE.md for its role.

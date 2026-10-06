@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { env } from '@/env';
 import { logger } from '@/util/logger';
 import { LANDING_CHAT_FACTS } from './landing-chat-facts.generated';
+import { describeFindings, scanReplyText } from './public-safety';
 
 export const MAX_QUESTION_CHARS = 500;
 /**
@@ -301,7 +302,9 @@ function sidePickRule(input: LandingChatInput): string[] {
   const steps = overviewStepCount(input.locale, input.role);
   if (steps === 0) return [];
   return [
-    `- THIS MESSAGE IS A SIDE PICK: the visitor tapped the website's own "${input.question}" button — it is never unclear or off-topic. Answer from the Overview for ${ROLE[input.role]}: "text" = its welcome sentence; "steps" = ALL ${steps} of its steps (its numbered steps, or its points if it has no numbers), in their order, none left out and none merged — each "where" is exactly one of these labels, in this order: ${overviewStepLabels(input.locale, input.role).map((l) => `"${l}"`).join(', ')}, each "what" its action or description kept short; "more" = the question THIS side most often asks next about its own work (a PR: "How do I get paid?"; an agency: "How does payroll work?"; an outlet: "How do I book PRs?"; someone else: "What is InnocenZ?" — in 中文 「我怎么拿到薪资？」「薪资怎么做？」「怎么订 PR？」「InnocenZ 是什么？」), always in the same language as the answer. Never use the section's own heading (such as "Overview" or 「总览」) as a step's "where".`,
+    // Redacted like every other visitor text: any direct POST can set sidePick,
+    // and this line goes to Google inside the INSTRUCTIONS (review, 5 Oct 2026).
+    `- THIS MESSAGE IS A SIDE PICK: the visitor tapped the website's own "${redactPersonalData(input.question)}" button — it is never unclear or off-topic. Answer from the Overview for ${ROLE[input.role]}: "text" = its welcome sentence; "steps" = ALL ${steps} of its steps (its numbered steps, or its points if it has no numbers), in their order, none left out and none merged — each "where" is exactly one of these labels, in this order: ${overviewStepLabels(input.locale, input.role).map((l) => `"${l}"`).join(', ')}, each "what" its action or description kept short; "more" = the question THIS side most often asks next about its own work (a PR: "How do I get paid?"; an agency: "How does payroll work?"; an outlet: "How do I book PRs?"; someone else: "What is InnocenZ?" — in 中文 「我怎么拿到薪资？」「薪资怎么做？」「怎么订 PR？」「InnocenZ 是什么？」), always in the same language as the answer. Never use the section's own heading (such as "Overview" or 「总览」) as a step's "where".`,
   ];
 }
 
@@ -367,6 +370,13 @@ export function systemInstruction(input: LandingChatInput): string {
     'You are the assistant on the InnocenZ website. InnocenZ is a platform that connects nightlife venues (outlets), PR agencies and PRs: booking shifts, rosters, check-in, receipts and weekly pay vouchers.',
     `The visitor is ${who}.`,
     'Answer ONLY from the FACTS at the end of these instructions. They are the verified guide to the real app, written as sections that start with "##"; each section says who it is for.',
+    // Owner, 5 Oct 2026: "make the gemini actual think what from user, then write
+    // the real answer. if got mention about privacy things then will reply cannot
+    // reply for this" — praising "which pr not malaysia phone number" → the
+    // accepted-countries answer, after "which pr no phone number" had been
+    // answered with the change-phone steps because it shared their keywords.
+    '- UNDERSTAND FIRST: before answering, work out what the visitor actually wants — read past typos, missing words, Manglish and mixed languages, and use the conversation so far. Answer that meaning, not the keywords it shares with some section: "pr not malaysia number can or not" asks whether a PR may use a non-Malaysian number; "pr no phone" asks whether a PR can work without a phone.',
+    '- PRIVACY: you have the guide only — no access to any person, account, organisation or record. A question that picks out SPECIFIC people, accounts or organisations — by a fact about them ("which PR has no phone number", "which pr not malaysia phone number", "who is late today", "how many PRs does that agency have"), by name, or asking for someone\'s phone number, IC, address, pay, earnings, rating, schedule or whereabouts, or a list of members — is a lookup: never guess and never describe anyone. Start with one short, kind sentence that you cannot look up or share details of specific people or accounts; then, if the FACTS give the rule the question touches, add it (for example "every PR signs up with a phone number on WhatsApp — Malaysian or from 15 listed countries"); and only if the FACTS say where an authorised person sees it, say where (in the third person when it is another side\'s page). This is not a handoff. A question about the RULES ("which PR can use a foreign number?", "can a PR…") is not a lookup: just answer it.',
     '- Never invent a feature, page, button, price, number or promise that is not in the FACTS, and never change what a fact says (for example, do not say "download the app" when the FACTS say to ask the agency for it).',
     '- Be exact: use the precise numbers, limits, times, statuses, roles and names the FACTS give; never round them, generalise them or add your own.',
     '- Several sections may touch the question: use the most specific one, and combine sections when the question needs both.',
@@ -390,6 +400,9 @@ export function systemInstruction(input: LandingChatInput): string {
     '- A yes/no question ("can I…", "do I need…", "got charge or not?") starts with a plain yes or no, then the condition from the FACTS that decides it; if it is also a "how", give the steps too. When the no is because InnocenZ does not do it, the sorry sentence below IS the no — do not also start with "No,".',
     '- Keep the figures and conditions the FACTS attach to the answer — limits, times, prices, counts, who may do it, the approval it needs, what stays locked until then — and never present a request as instant.',
     '- For "what do I need" or "what can I see", name every item the most detailed section lists, plus anything it says is NOT shown.',
+    // Graded live 5 Oct 2026: "what data do you keep about me?" was true but folded
+    // the ID, bank, signature and location records into "profile".
+    '- For "what do you keep / store about me" (or 保存了哪些资料), name the sensitive kinds plainly from the "What InnocenZ keeps" sections — identity documents, bank details for pay, signature, the phone\'s location at check-in and check-out, MC proof photos — not only "profile", and say who never sees them when the FACTS say so.',
     '- For a problem ("still waiting", "can\'t check in", "not showing"), say what state it is in, the causes the FACTS list (most likely first, one short clause each), and where to act.',
     '- For "how do I sign up / set up …", take it to the end: what to fill in, what happens next, and what stays locked until it is approved.',
     '- When the answer is no or not available, add what IS available instead. When asked how ANOTHER side does something, describe that side in the third person ("the PR taps …") and add what the visitor\'s own side does around it.',
@@ -574,8 +587,13 @@ type GeminiResponse = {
  * model thinks "low". Re-grade after the free quota resets; return "medium" for
  * the lite model here if "low" stays clearly behind.
  */
-export function thinkingLevel(_model: string): 'low' | 'medium' {
-  return 'low';
+export function thinkingLevel(_model: string, input?: Pick<LandingChatInput, 'sidePick'>): 'low' | 'medium' {
+  // Owner, 5 Oct 2026 (screenshots: "which pr no phone number" answered with the
+  // change-phone steps): "make the gemini actual think what from user, then write
+  // the real answer". A TYPED question thinks "medium" — 87% vs 78% on the 2 Oct
+  // blind grade, about 3 s slower. A side pick stays "low": it restates that
+  // side's Overview path and is remembered for every later visitor anyway.
+  return input && !input.sidePick ? 'medium' : 'low';
 }
 
 /**
@@ -652,7 +670,7 @@ async function askGemini(
         // Low: the job is to restate verified facts, not to be creative.
         temperature: 0.1,
         maxOutputTokens: MAX_ANSWER_TOKENS,
-        thinkingConfig: { thinkingLevel: thinkingLevel(model) },
+        thinkingConfig: { thinkingLevel: thinkingLevel(model, input) },
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA,
       },
@@ -663,19 +681,38 @@ async function askGemini(
   // identical "Payment" steps may fairly be merged into one.
   const overview = overviewFor(input);
   const pathLabels = overview ? overviewStepLabels(input.locale, overview) : [];
+  const keepsPath =
+    pathLabels.length > 0 && overview
+      ? (reply: LandingChatReply) =>
+          keepsPagePath(reply, pathLabels, overviewStepLabels(input.locale === 'en' ? 'zh' : 'en', overview))
+      : () => true;
   const outcome = await raceModels(configuredModels(), key, body, {
     visitorGone,
     maxSteps: Math.max(MAX_STEPS, pathLabels.length),
-    accept:
-      pathLabels.length > 0 && overview
-        ? (reply) =>
-            keepsPagePath(reply, pathLabels, overviewStepLabels(input.locale === 'en' ? 'zh' : 'en', overview))
-        : undefined,
+    // A reply carrying a phone number, IC, email or outside link is never shown —
+    // and above all never cached for the NEXT visitor. The facts are scanned clean
+    // when they are built, so such a value is the model's own invention: refusing
+    // it INSIDE the race lets the next model answer instead (review, 5 Oct 2026);
+    // if none answers cleanly the website shows its written answer.
+    accept: (reply) => isPublicSafe(reply) && keepsPath(reply),
   });
   if (!('reply' in outcome)) return { ok: false, reason: outcome.reason };
   const reply = withoutOtherSidesPages(outcome.reply, input.role);
   remember(reply, outcome.model);
   return { ok: true, reply, model: outcome.model };
+}
+
+/** Every visible field of a reply, as one text to scan. */
+function replyText(reply: LandingChatReply): string {
+  return [reply.text, ...(reply.steps ?? []).flatMap((s) => [s.where, s.what]), reply.more ?? ''].join('\n');
+}
+
+/** False — and a log line naming the rules, never the values — when a reply fails the public-safety scan. */
+function isPublicSafe(reply: LandingChatReply): boolean {
+  const unsafe = scanReplyText(replyText(reply));
+  if (unsafe.length === 0) return true;
+  logger.warn(`[landing-chat] refused a reply: ${describeFindings(unsafe)}; trying the next model`);
+  return false;
 }
 
 /** The reply without steps on another side's pages (see `isOtherSidesPage`); unchanged when the side is unknown. */
@@ -978,7 +1015,7 @@ function raceModels(
         }
         if (attempt.kind === 'answer') {
           logger.warn(
-            `[landing-chat] ${model} left out part of the page path (${attempt.reply.steps?.length ?? 0} steps); trying the next model`,
+            `[landing-chat] ${model}'s reply was refused (unsafe, or ${attempt.reply.steps?.length ?? 0} steps left part of the page path out); trying the next model`,
           );
         }
         if (attempt.kind === 'stop') stopped = attempt.reason;

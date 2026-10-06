@@ -213,9 +213,9 @@ describe('answerLandingChat', () => {
     expect(retryAfterMs('no hint')).toBe(60_000);
   });
 
-  it('thinks "low" on every model, for speed', async () => {
-    expect(thinkingLevel('gemini-flash-lite-latest')).toBe('low');
-    expect(thinkingLevel('gemini-3.5-flash')).toBe('low');
+  it('thinks "medium" on a typed question and "low" on a side pick, on every model (5 Oct 2026)', async () => {
+    expect(thinkingLevel('gemini-flash-lite-latest', {})).toBe('medium');
+    expect(thinkingLevel('gemini-3.5-flash', { sidePick: true })).toBe('low');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response('busy', { status: 503 }))
@@ -225,7 +225,21 @@ describe('answerLandingChat', () => {
     const levels = fetchMock.mock.calls.map(
       (c) => JSON.parse(String((c[1] as RequestInit).body)).generationConfig.thinkingConfig.thinkingLevel,
     );
-    expect(levels).toEqual(['low', 'low']);
+    expect(levels).toEqual(['medium', 'medium']);
+  });
+
+  it('redacts a side pick\'s text too — it goes to Google inside the instructions (review, 5 Oct 2026)', () => {
+    const rules = systemInstruction({ ...input, role: 'agency', sidePick: true, question: 'I run an agency 012-345 6789' });
+    expect(rules).not.toContain('345 6789');
+    expect(rules).toContain('[phone]');
+  });
+
+  it('tells the model to work out the meaning first and to refuse lookups of people (5 Oct 2026)', () => {
+    const rules = systemInstruction(input);
+    expect(rules).toContain('UNDERSTAND FIRST');
+    expect(rules).toContain('you cannot look up or share details of specific people or accounts');
+    expect(rules).toContain('A question about the RULES');
+    expect(rules).toContain('which PR has no phone number');
   });
 
   it('answers a repeated first question from memory — no Gemini call, instant', async () => {
@@ -285,6 +299,37 @@ describe('answerLandingChat', () => {
     const out = await answerLandingChat(input);
     expect(out).toMatchObject({ ok: true, model: 'gemini-3.1-flash-lite' });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses — and never remembers — a reply carrying a phone number, email or outside link (5 Oct 2026)', async () => {
+    vi.mocked(logger.warn).mockClear();
+    const unsafe = () =>
+      geminiReply({
+        text: 'Call our team.',
+        steps: [{ where: 'Profile', what: 'WhatsApp 012-345 6789 or see https://example.com/help' }],
+      });
+    // the first model invents a number: the next model is asked, and its clean answer wins
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(unsafe())
+      .mockImplementation(async () => geminiReply({ text: 'Ask your agency on **Profile**.' }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await answerLandingChat(input)).toMatchObject({ ok: true, reply: { text: 'Ask your agency on **Profile**.' } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // every model unsafe → refused, and not remembered: the same question asks again
+    clearAnswerCache();
+    fetchMock.mockReset().mockImplementation(async () => unsafe());
+    expect(await answerLandingChat(input)).toMatchObject({ ok: false });
+    const calls = fetchMock.mock.calls.length;
+    await answerLandingChat(input);
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(calls);
+    const warned = vi.mocked(logger.warn).mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warned).toContain('phone-number×1');
+    expect(warned).toContain('url×1');
+    expect(warned).not.toContain('345');
+    // the site's own address is fine, also before Chinese punctuation
+    fetchMock.mockReset().mockImplementation(async () => geminiReply({ text: '访问 https://innocenz.net。' }));
+    expect(await answerLandingChat({ ...input, question: 'where do I sign up?' })).toMatchObject({ ok: true });
   });
 
   describe('a slow model gets company (3 Oct 2026: "the reply is slow")', () => {

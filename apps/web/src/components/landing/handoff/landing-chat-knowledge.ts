@@ -5,7 +5,10 @@ import {
 	mannersOf,
 	OFF_TOPIC,
 } from "./landing-chat-manners";
-import { CHAT_REFERENCE } from "./landing-chat-reference";
+import {
+	CHAT_REFERENCE,
+	type ReferenceSection,
+} from "./landing-chat-reference";
 
 /*
  * What the landing-page chat knows, and how it understands a typed question.
@@ -2427,7 +2430,10 @@ export const SMALL_TALK: Record<
 
 /** The visitor's own words to quote back: about eight words (or 20 中文 characters) at most, as written. */
 export function quoteOf(text: string): string {
-	const t = text.trim().replace(/\s+/g, " ").replace(/[?？!！.。~]+$/, "");
+	const t = text
+		.trim()
+		.replace(/\s+/g, " ")
+		.replace(/[?？!！.。~]+$/, "");
 	if (/[㐀-鿿]/.test(t)) return t.length > 20 ? `${t.slice(0, 20)}…` : t;
 	const words = t.split(" ");
 	return words.length > 8 ? `${words.slice(0, 8).join(" ")}…` : t;
@@ -3827,12 +3833,18 @@ function answerLines(
 /**
  * Every verified answer, as plain text, for the AI model to answer from when the
  * keywords cannot match a question. It is built from the same topics the keyword
- * bot shows, so the two can never disagree, and nothing outside this file reaches
- * the model. The visitor's own side comes first, so the closest facts lead.
+ * bot shows, so the two can never disagree. The visitor's own side comes first,
+ * so the closest facts lead.
+ *
+ * `system` is the part built from the code itself — menus, team permissions, what
+ * the database keeps, and TEST_SCRIPT's What's new — by `pnpm chat:facts`
+ * (tools/scripts/landing-chat-system-facts.mts). It goes LAST and only to the
+ * model: the written backup never matches against it.
  */
 export function factSheet(
 	locale: LandingLocale,
 	role: ChatRole | null,
+	system: readonly ReferenceSection[] = [],
 ): string {
 	const order = (r: ChatRole | "any") =>
 		r === role ? 0 : r === "any" || r === "general" ? 1 : 2;
@@ -3853,7 +3865,10 @@ export function factSheet(
 	const reference = [...CHAT_REFERENCE].sort(
 		(a, b) => order(a.role) - order(b.role),
 	);
-	for (const r of reference) {
+	for (const r of [
+		...reference,
+		...[...system].sort((a, b) => order(a.role) - order(b.role)),
+	]) {
 		const local = r[locale];
 		sections.push(
 			`## ${local.title} (${FOR_WHOM[locale][r.role]})\n${local.lines.join("\n")}`,
@@ -3876,18 +3891,17 @@ export const FACT_SHEET_ROLES = [
  * builds its prompt from a generated copy of this (`pnpm chat:facts` →
  * apps/backend/src/features/landing-chat/landing-chat-facts.generated.ts), so a
  * caller can no longer send the model its own "facts". ⚠️ After editing any
- * answer in this file, run `pnpm chat:facts` — `pnpm chat:facts:check` and
- * landing-chat-facts.test.ts fail while the copy is stale.
+ * answer in this file, run `pnpm chat:facts` — `pnpm chat:facts:check` (run in
+ * CI) fails while the copy is stale.
  */
-export function allFactSheets(): Record<
-	LandingLocale,
-	Record<(typeof FACT_SHEET_ROLES)[number], string>
-> {
+export function allFactSheets(
+	system: readonly ReferenceSection[] = [],
+): Record<LandingLocale, Record<(typeof FACT_SHEET_ROLES)[number], string>> {
 	const sheets = (locale: LandingLocale) =>
 		Object.fromEntries(
 			FACT_SHEET_ROLES.map((r) => [
 				r,
-				factSheet(locale, r === "none" ? null : r),
+				factSheet(locale, r === "none" ? null : r, system),
 			]),
 		) as Record<(typeof FACT_SHEET_ROLES)[number], string>;
 	return { en: sheets("en"), zh: sheets("zh") };
