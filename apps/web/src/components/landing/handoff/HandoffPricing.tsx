@@ -7,6 +7,7 @@ import {
 	OUTLET_TIER_PRICES,
 	useLandingLocale,
 } from "@/lib/landing-i18n";
+import { localizeHref } from "@/paraglide/runtime";
 import { LogoMark, SplitTitle } from "./primitives";
 
 const OUTLET_POPULAR_INDEX = 2;
@@ -21,10 +22,40 @@ const AGENCY_POPULAR_INDEX = 2;
  */
 type PricingTier = LandingTranslations["pricing"]["agencyTiers"][number];
 
+/** Footer labels (EN + ZH) that have a section on this page to land on. */
+const FOOTER_SECTION_HREF: Record<string, string> = {
+	Overview: "#solution",
+	概览: "#solution",
+	"AI Layer": "#ai",
+	"AI 层": "#ai",
+	Dashboards: "#dashboards",
+	仪表盘: "#dashboards",
+	Modules: "#modules",
+	模块: "#modules",
+	"Outlet & KTV": "#for-outlet",
+	"门店与 KTV": "#for-outlet",
+	"PR Agency": "#for-agency",
+	"PR 代理": "#for-agency",
+	PR: "#for-pr",
+};
+
+/** Footer labels (EN + ZH) that open a page of their own. Terms lives on /legal. */
+const FOOTER_PAGE_PATH: Record<string, string> = {
+	About: "/about",
+	关于: "/about",
+	Legal: "/legal",
+	法律: "/legal",
+	Terms: "/legal",
+	条款: "/legal",
+};
+
 /** Map footer link labels (EN + ZH) to real routes when available. */
 function footerHref(label: string): string {
 	if (label === "Privacy" || label === "隐私") return "/policy";
-	return "#top";
+	const page = FOOTER_PAGE_PATH[label];
+	// A full page load leaves the router, so the locale prefix is added here.
+	if (page) return localizeHref(page);
+	return FOOTER_SECTION_HREF[label] ?? "#top";
 }
 
 export function HandoffPricing() {

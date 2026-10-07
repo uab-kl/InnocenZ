@@ -349,19 +349,23 @@ function AgencyLogoWall() {
 export function HandoffBenefits() {
 	const { t } = useLandingLocale();
 
+	// `anchor` is what the footer's "For" links land on — one card each.
 	const benefitsCols = [
 		{
+			anchor: "for-outlet",
 			role: t.benefits.outletOwners,
 			img: LANDING_IMAGES.outletVenue,
 			imgPosition: "center",
 			wins: t.benefits.outletWins,
 		},
 		{
+			anchor: "for-agency",
 			role: t.benefits.prAgencies,
 			logos: true as const,
 			wins: t.benefits.agencyWins,
 		},
 		{
+			anchor: "for-pr",
 			role: t.benefits.prProfessionals,
 			img: LANDING_IMAGES.prGroup,
 			imgPosition: "center 15%",
@@ -386,7 +390,9 @@ export function HandoffBenefits() {
 					{benefitsCols.map((c) => (
 						<div
 							key={c.role}
-							className="hz-glass flex h-full flex-col overflow-hidden p-0"
+							id={c.anchor}
+							data-hash-flash="off"
+							className="hz-glass flex h-full scroll-mt-28 flex-col overflow-hidden p-0"
 						>
 							{"logos" in c && c.logos ? (
 								<AgencyLogoWall />

@@ -6803,6 +6803,20 @@ const en = {
 		supportContact: "Support:",
 		/** Footer of /policy. {year} is computed in code; InnocenZ is the brand and stays. 版权所有 matches the landing dictionary's wording. */
 		rightsReserved: "© {year} InnocenZ. All rights reserved.",
+		/** Eyebrow above the /about title — the landing footer's "Company" column, which links here. */
+		companyEyebrow: "Company",
+		aboutTitle: "About InnocenZ",
+		/** The /legal heading AND the footer's Terms/Legal destination. */
+		legalTitle: "Terms & legal",
+		legalIntro:
+			"These are the terms and declarations you accept when you create an InnocenZ account, shown exactly as they appear at sign-up. How we handle personal data is set out separately in the Privacy Policy.",
+		/** /legal group heading — what the web sign-up for an outlet or agency asks you to accept. */
+		legalOutletAgencyHeading: "Outlet and PR Agency accounts",
+		/** /legal group heading — what the PR app's sign-up asks you to accept. */
+		legalPrHeading: "PR accounts",
+		relatedDocuments: "Related documents",
+		/** Colon baked in; the WhatsApp link follows in code. */
+		contactUs: "Contact us:",
 	},
 	adminOrg: {
 		/** Admin → User management → PR Agency: the table card's own title. */
@@ -12613,6 +12627,15 @@ const zh: PortalTranslations = {
 		privacyContact: "隐私事务联系方式：",
 		supportContact: "客服支持：",
 		rightsReserved: "© {year} InnocenZ。版权所有。",
+		companyEyebrow: "公司",
+		aboutTitle: "关于 InnocenZ",
+		legalTitle: "条款与法律信息",
+		legalIntro:
+			"以下是您创建 InnocenZ 账户时所接受的条款与声明，与注册时显示的内容完全一致。我们如何处理个人数据，请另见隐私政策。",
+		legalOutletAgencyHeading: "门店与 PR 经纪公司账户",
+		legalPrHeading: "PR 账户",
+		relatedDocuments: "相关文件",
+		contactUs: "联系我们：",
 	},
 	adminOrg: {
 		agencyOrganizations: "PR 经纪公司机构",

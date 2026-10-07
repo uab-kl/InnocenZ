@@ -879,6 +879,27 @@
 	image-rendering: crisp-edges;
 }
 
+/* A footer link landed on this card — a brief gold ring says which one. */
+.landing-page [data-hash-flash="on"] {
+	animation: hz-target-flash 2.4s ease-out;
+}
+
+@keyframes hz-target-flash {
+	0%,
+	40% {
+		border-color: var(--hz-gold);
+		box-shadow:
+			0 0 0 1px var(--hz-gold),
+			0 0 36px rgba(242, 198, 107, 0.35);
+	}
+	100% {
+		border-color: var(--hz-line);
+		box-shadow:
+			0 0 0 0 transparent,
+			0 0 0 transparent;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.landing-page .hz-aurora::before,
 	.landing-page .hz-aurora::after,

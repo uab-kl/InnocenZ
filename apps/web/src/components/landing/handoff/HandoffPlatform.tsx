@@ -83,7 +83,7 @@ export function HandoffPlatformModules() {
 				  icon and tint it has always had. Panels align to the top so a card
 				  opening in one column does not stretch its neighbours.
 				*/}
-				<div className="hz-phases">
+				<div id="modules" className="hz-phases scroll-mt-28">
 					{PHASES.map((idx, p) => {
 						const phase = t.platform.phases[p];
 						return (
