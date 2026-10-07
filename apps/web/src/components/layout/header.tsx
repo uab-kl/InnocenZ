@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -239,13 +238,12 @@ export function Header() {
 
 			<div className="flex shrink-0 items-center gap-1">
 				{/*
-				  Left of the theme toggle, inside the existing control cluster.
-				  It adds no overlay and no portal, so the breadcrumb on the left
-				  and the avatar dropdown on the right are both untouched.
+				  Inside the existing control cluster. It adds no overlay and no
+				  portal, so the breadcrumb on the left and the avatar dropdown on
+				  the right are both untouched. (The light/dark toggle that sat
+				  beside it is gone — the app is dark only, theme-provider.tsx.)
 				*/}
 				<PortalLanguageSwitcher variant="header" className="mr-1" />
-
-				<ThemeToggle />
 
 				<NotificationBell />
 

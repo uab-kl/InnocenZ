@@ -17,9 +17,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 const TILE_SIZE = 256;
-const TILE_URL =
-	"https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-const TILE_URL_DARK = "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
+/**
+ * Dark tiles only — the app is dark only (theme-provider.tsx). The light
+ * "voyager" tiles and the white Google-style controls were the default, which
+ * put a bright map in the middle of the dark GPS panels.
+ */
+const TILE_URL = "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png";
 const DRAG_THRESHOLD_PX = 5;
 
 function OutletMarker({ label }: { label: string }) {
@@ -82,7 +85,6 @@ export function GpsRoadMap({
 	selectedId,
 	onSelect,
 	height = 220,
-	dark = false,
 }: {
 	rows: GpsTrackingRow[];
 	bounds: GpsMapBounds;
@@ -97,7 +99,6 @@ export function GpsRoadMap({
 	selectedId: string | null;
 	onSelect: (id: string | null) => void;
 	height?: number;
-	dark?: boolean;
 }) {
 	const { t } = usePortalLocale();
 	const frameRef = useRef<HTMLDivElement>(null);
@@ -260,7 +261,7 @@ export function GpsRoadMap({
 	return (
 		<div
 			ref={frameRef}
-			className={`iz-gmaps-frame${dark ? " iz-gmaps-frame--dark" : ""}`}
+			className="iz-gmaps-frame iz-gmaps-frame--dark"
 			style={{ height }}
 		>
 			<div
@@ -275,8 +276,7 @@ export function GpsRoadMap({
 				{tiles.map((t) => (
 					<img
 						key={`${t.z}-${t.x}-${t.y}`}
-						src={(dark ? TILE_URL_DARK : TILE_URL)
-							.replace("{z}", String(t.z))
+						src={TILE_URL.replace("{z}", String(t.z))
 							.replace("{x}", String(t.x))
 							.replace("{y}", String(t.y))}
 						alt=""
@@ -399,10 +399,10 @@ export function GpsRoadMap({
 
 			{selected ? (
 				<div className="iz-gmaps-infowindow">
-					<p className="iz-heading text-xs font-bold text-[#202124]">
+					<p className="iz-heading text-xs font-bold text-[var(--iz-txt)]">
 						{selected.prName}
 					</p>
-					<p className="text-[10px] text-[#5f6368]">
+					<p className="text-[10px] text-[var(--iz-muted)]">
 						{selected.outlet} · {selected.meters} m ·{" "}
 						{selected.inRange
 							? t.rosterGrid.withinFence
@@ -414,7 +414,7 @@ export function GpsRoadMap({
 					className="iz-gmaps-infowindow iz-gmaps-infowindow-hint"
 					aria-hidden
 				>
-					<p className="text-[10px] text-[#5f6368]">
+					<p className="text-[10px] text-[var(--iz-muted)]">
 						{t.agencyGps.dragMapHint}
 					</p>
 				</div>
