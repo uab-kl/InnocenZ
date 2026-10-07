@@ -48,9 +48,9 @@ export function PublicPageLocaleProvider({
  * pages read as one set. Render it inside a PublicPageLocaleProvider: these
  * are public routes with no portal shell above them.
  *
- * Always dark: the app theme follows the device (`defaultTheme="system"`), so
- * on a light-mode phone the tokens went light. `public-doc-page` pins the dark
- * values in styles.css — the same pin the sign-in pages use.
+ * Always dark: the whole app is forced dark (theme-provider.tsx), and
+ * `public-doc-page` also pins the dark values in styles.css — the same second
+ * guarantee the sign-in pages carry.
  */
 export function PublicDocumentShell({
 	eyebrow,

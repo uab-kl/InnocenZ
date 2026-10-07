@@ -480,9 +480,14 @@ html {
 }
 
 /*
+ * ⚠️ Since 7 Oct 2026 the WHOLE app is forced dark (theme-provider.tsx
+ * `forcedTheme="dark"`, `<html class="dark">` in __root.tsx), so this pin is
+ * now a second guarantee for these surfaces, not the fix. The history below
+ * is why it exists.
+ *
  * The signed-out pages are DESIGNED dark and paint a hardcoded dark ambience,
- * but the theme is `system` (theme-provider.tsx:5, attribute="class") and
- * NOTHING on these routes forces `.dark`.
+ * but the theme was `system` (theme-provider.tsx, attribute="class") and
+ * NOTHING on these routes forced `.dark`.
  *
  * So on a light-mode OS the tokens stayed light while the backdrop stayed
  * dark: `--foreground: #3d3450` over a near-black field. On /login the white
@@ -524,18 +529,6 @@ html {
   --royal-gold-soft: rgba(232, 200, 116, 0.16);
   --royal-gold-line: rgba(232, 200, 116, 0.5);
   --gradient-royal: linear-gradient(120deg, #f7e6b0 0%, #e8c874 45%, #c69f43 100%);
-}
-
-/*
- * The page scrollbar and the overscroll bounce belong to <html>, OUTSIDE the
- * pinned div, so on a light-mode device they stayed light around a dark page.
- * `!important` is required, not a shortcut: next-themes writes
- * `style="color-scheme: light"` INLINE on <html>, and only an important
- * declaration outranks an inline one.
- */
-html:has(.public-doc-page) {
-  color-scheme: dark !important;
-  background-color: #1a1726;
 }
 
 .brand-wordmark {
