@@ -25,10 +25,23 @@ const LandingLocaleContext = createContext<LandingLocaleContextValue | null>(
 	null,
 );
 
+/**
+ * The language the visitor picked on the landing switcher, or null when they
+ * never picked one. Pages opened FROM the landing (/about, /legal) read this so
+ * a 中文 visitor is not dropped back into English one click later.
+ */
+export function readLandingLocalePick(): LandingLocale | null {
+	if (typeof window === "undefined") return null;
+	try {
+		const stored = localStorage.getItem(STORAGE_KEY);
+		return stored === "zh" || stored === "en" ? stored : null;
+	} catch {
+		return null; // storage blocked — no pick to follow
+	}
+}
+
 function readStoredLocale(): LandingLocale {
-	if (typeof window === "undefined") return "en";
-	const stored = localStorage.getItem(STORAGE_KEY);
-	return stored === "zh" ? "zh" : "en";
+	return readLandingLocalePick() ?? "en";
 }
 
 export function LandingLocaleProvider({

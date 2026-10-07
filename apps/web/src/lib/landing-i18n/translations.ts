@@ -754,18 +754,18 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			columns: [
 				{
 					title: "Platform",
-					links: ["Overview", "AI Layer", "Dashboards", "Modules", "Security"],
+					links: ["Overview", "AI Layer", "Dashboards", "Modules"],
 				},
 				{
 					title: "For",
-					links: ["Outlet & KTV", "PR Agency", "PR", "Investors", "Partners"],
+					links: ["Outlet & KTV", "PR Agency", "PR"],
 				},
 				{
 					title: "Company",
-					links: ["About", "Careers", "Press", "Legal", "Privacy"],
+					links: ["About", "Legal", "Privacy"],
 				},
 			],
-			legal: ["Terms", "Privacy", "Security"],
+			legal: ["Terms", "Privacy"],
 		},
 		meta: {
 			title: "InnocenZ — The Operating Platform for Nightlife",
@@ -1117,14 +1117,14 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			tagline: "面向门店、PR 代理与 PR 的 AI 驱动运营平台。",
 			copyright: "Crowned nightlife · 保留所有权利",
 			columns: [
-				{ title: "平台", links: ["概览", "AI 层", "仪表盘", "模块", "安全"] },
+				{ title: "平台", links: ["概览", "AI 层", "仪表盘", "模块"] },
 				{
 					title: "面向",
-					links: ["门店与 KTV", "PR 代理", "PR", "投资者", "合作伙伴"],
+					links: ["门店与 KTV", "PR 代理", "PR"],
 				},
-				{ title: "公司", links: ["关于", "招聘", "媒体", "法律", "隐私"] },
+				{ title: "公司", links: ["关于", "法律", "隐私"] },
 			],
-			legal: ["条款", "隐私", "安全"],
+			legal: ["条款", "隐私"],
 		},
 		meta: {
 			title: "InnocenZ — 夜生活运营平台",

@@ -125,6 +125,35 @@ export function PortalLocaleProvider({
 	);
 }
 
+/**
+ * Serves a locale the caller has already decided, and saves nothing — no
+ * browser copy, no account write. For public pages that follow ANOTHER
+ * surface's language (the landing's) rather than the portal's own preference.
+ */
+export function FixedPortalLocaleProvider({
+	locale,
+	children,
+}: {
+	locale: PortalLocale;
+	children: ReactNode;
+}) {
+	useEffect(() => {
+		if (typeof document === "undefined") return;
+		document.documentElement.lang = htmlLangFor(locale);
+	}, [locale]);
+
+	const value = useMemo(
+		() => ({ locale, t: translations[locale], setLocale: () => {} }),
+		[locale],
+	);
+
+	return (
+		<PortalLocaleContext.Provider value={value}>
+			{children}
+		</PortalLocaleContext.Provider>
+	);
+}
+
 export function usePortalLocale(): PortalLocaleContextValue {
 	return useContext(PortalLocaleContext);
 }

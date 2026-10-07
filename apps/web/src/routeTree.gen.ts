@@ -10,11 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AgencyRouteRouteImport } from './routes/agency/route'
 import { Route as ChooseOrganisationRouteImport } from './routes/choose-organisation'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LegalRouteImport } from './routes/legal'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoAccessRouteImport } from './routes/no-access'
 import { Route as NotFoundRouteImport } from './routes/not-found'
@@ -87,6 +89,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRouteRoute = AdminRouteRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -110,6 +117,11 @@ const DeleteAccountRoute = DeleteAccountRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalRoute = LegalRouteImport.update({
+  id: '/legal',
+  path: '/legal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -459,9 +471,11 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
+  '/about': typeof AboutRoute
   '/choose-organisation': typeof ChooseOrganisationRoute
   '/delete-account': typeof DeleteAccountRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/legal': typeof LegalRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -530,9 +544,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/choose-organisation': typeof ChooseOrganisationRoute
   '/delete-account': typeof DeleteAccountRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/legal': typeof LegalRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -604,9 +620,11 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
+  '/about': typeof AboutRoute
   '/choose-organisation': typeof ChooseOrganisationRoute
   '/delete-account': typeof DeleteAccountRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/legal': typeof LegalRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -680,9 +698,11 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agency'
     | '/outlet'
+    | '/about'
     | '/choose-organisation'
     | '/delete-account'
     | '/forgot-password'
+    | '/legal'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -751,9 +771,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/choose-organisation'
     | '/delete-account'
     | '/forgot-password'
+    | '/legal'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -824,9 +846,11 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agency'
     | '/outlet'
+    | '/about'
     | '/choose-organisation'
     | '/delete-account'
     | '/forgot-password'
+    | '/legal'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -899,9 +923,11 @@ export interface RootRouteChildren {
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
   OutletRouteRoute: typeof OutletRouteRouteWithChildren
+  AboutRoute: typeof AboutRoute
   ChooseOrganisationRoute: typeof ChooseOrganisationRoute
   DeleteAccountRoute: typeof DeleteAccountRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  LegalRoute: typeof LegalRoute
   LoginRoute: typeof LoginRoute
   NoAccessRoute: typeof NoAccessRoute
   NotFoundRoute: typeof NotFoundRoute
@@ -920,6 +946,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -955,6 +988,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal': {
+      id: '/legal'
+      path: '/legal'
+      fullPath: '/legal'
+      preLoaderRoute: typeof LegalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -1611,9 +1651,11 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRouteRoute: AdminRouteRouteWithChildren,
   AgencyRouteRoute: AgencyRouteRouteWithChildren,
   OutletRouteRoute: OutletRouteRouteWithChildren,
+  AboutRoute: AboutRoute,
   ChooseOrganisationRoute: ChooseOrganisationRoute,
   DeleteAccountRoute: DeleteAccountRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  LegalRoute: LegalRoute,
   LoginRoute: LoginRoute,
   NoAccessRoute: NoAccessRoute,
   NotFoundRoute: NotFoundRoute,
