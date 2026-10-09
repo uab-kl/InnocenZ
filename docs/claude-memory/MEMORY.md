@@ -202,3 +202,15 @@ Dated history lives in `TEST_SCRIPT.md` §8/§10; rules live in `CLAUDE.md`.
 - [Chat side buttons are written](chat-side-buttons-are-written.md) — "Landing chat side buttons (\"I run an agency\"…) are answered by GEMINI as a \"side pick\" whose page path the server guarantees (owner's final call, 3 Oct 2026) — not the written intro"
 - [Condensed biome says clean](condensed-biome-says-clean.md) — "The RTK-condensed `npx biome check` output printed \"Lint: No issues found\" while 3 biome errors (formatter + a11y) stood — run it raw with `rtk proxy` before reporting biome clean"
 - [Record every enhancement in the book](record-every-enhancement-in-the-book.md) — "Owner wants EVERY enhancement recorded in the InnocenZ_latest Excel book in the same slice — page 1 \"What changed\" line + the area page's rows"
+
+### Newly added - file these into a section above
+
+- [Chat follows the system](chat-follows-the-system.md) — "Landing chat facts are generated from the code (58 tables, RBAC snapshot, menus, TEST_SCRIPT §11) since 5 Oct 2026 — the generator REFUSES until a new table/module/lane has public wording; live rows never go in"
+- [Marketing xlsm patch and upload](marketing-xlsm-patch-and-upload.md) — "How to edit marketing-v17-v1-v2.xlsm safely and put it back on Drive as a new version (6 Oct 2026) — style ids renumber on every Sheets save, `$'` in replace() corrupts XML, upload via Chrome Manage versions with an intercepted file input"
+- [Marketing xlsm upload every change](marketing-xlsm-upload-every-change.md) — "Owner's standing OK (8 Oct 2026): after EVERY change, upload marketing-v17-v1-v2.xlsm as a new version of the same Drive file in folder 1Ry8q893qlov_ePsY7JjMQX42PUVIs4V1 — no need to ask again"
+- [V2 shorts part2 is generated promo](v2-shorts-part2-is-generated-promo.md) — "The V2 Shorts Part 2 'InnocenZ intro animation' is a Genspark-generated promo, NOT a recording of the real app or website; it exists to make people aware of benefits and services InnocenZ really has (owner, 7 Oct 2026)"
+
+### Newly added - file these into a section above
+
+- [Read remote claude session history](read-remote-claude-session-history.md) — "How to read another device's claude.ai/code session (e.g. 'continue memory from session_…'): the local session tools can't see it, but the logged-in Chrome can fetch /v1/code/sessions/<id>/events"
+- [V2 shorts prompt style 08oct](v2-shorts-prompt-style-08oct.md) — "Owner's V2 Genspark prompt style as of Thu 8 Oct 2026 — round crown-Z badge in the very top-left, big title top-centre with NO 'POV' label, different Malaysian Chinese girl per PR short, sad English talk-to-camera monologue (selfie vlog + first-person cutaway), Part 2 sad→happy SWITCH, English-only speech and subtitles"
