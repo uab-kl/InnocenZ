@@ -19,17 +19,19 @@ def rep(old, new):
     p = p.replace(old, new)
 
 
-BAND = (f"• Layout as in PR #1's finished short: the top 20% of the frame holds only the badge, the title and the small logo; "
+BAND = (f"• Layout: the top 20% of the frame holds only the badge, the title and the small logo; "
         f"{she} is always framed below it with headroom, the top of {her} head and raised hands under 21% down, so the title "
-        f"never covers any part of {obj}. Problem title centred in the upper 11–19%, just above {her} head")
-SOLVED = ("gold letters on a full-width deep-purple band across the very top (top edge to 12% down), small gold crown above "
-          "the words, thin gold underline")
+        f"never covers any part of {obj}. Problem title: two centred lines in the upper 11–19%, just above {her} head, no box behind them")
+SOLVED = ("gold letters on a full-width deep plum-purple band across the very top (top edge to 12% down in the middle, 14% at "
+          "the sides, its lower edge gently curved), a small gold crown icon centred above the words, a short thin gold "
+          "underline centred under them")
 # any earlier title line, up to the words "big white bold rounded letters"
-m = re.search(r"• (?:Layout as in PR #1|The top \d\d% of the frame|Title (?:centred in the upper 15–25%|in the top quarter))"
+m = re.search(r"• (?:Layout(?: as in PR #1's finished short)?:|The top \d\d% of the frame|Title (?:centred in the upper 15–25%|in the top quarter))"
               r"[^\n]*?(?=,? big white bold)", p)
 assert m, "no title line found"
 rep(m.group(0), BAND)
-p = p.replace("gold letters on a deep-purple band, small gold crown above, thin gold underline", SOLVED)
+p = re.sub(r"gold letters on a (?:full-width )?deep-purple band(?: across the very top \(top edge to 12% down\))?, small gold "
+           r"crown above(?: the words)?, thin gold underline", SOLVED, p)
 p = p.replace("@Image 2 = the square gold crown-Z logo", "@Image 2 = the square gold crown-above-Z logo")
 p = re.sub(r"head and shoulders (?:large )?in the middle of the frame(?:, head below the title| with headroom, the top of "
            r"(?:her|his) head under \d\d% down)", f"head and shoulders in the middle of the frame with headroom, the top of "

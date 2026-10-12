@@ -3,12 +3,42 @@ name: 30secvideoprompt
 description: Turn one InnocenZ V2 marketing short (the F · G · H prompts of one problem-statement row in marketing-v17-v1-v2.xlsm) into ONE Seedance 2.5 prompt for a vertical short of at most 30 seconds, ready to paste into Higgsfield or Genspark. Use when the owner types /30secvideoprompt, asks for a "Seedance version" of a short (e.g. "agency 1", "outlet 1 Paying for PRs who weren't there", "PR 3"), or pastes a row's three prompts and wants one prompt for a whole 30-second video.
 ---
 
-# /30secvideoprompt — one Seedance 2.5 prompt per short (≤ 30 s)
+# /30secvideoprompt — one Seedance 2.5 prompt per short (≤ 30 s), in three pasteable parts
 
-The workbook's F · G · H prompts are long director's briefs (~40–60k characters). A video model follows a short,
-structured prompt far better, so this skill rewrites ONE row into ONE Seedance 2.5 prompt that keeps every detail that
-shows on screen or in the sound. Every generation costs the owner credits that cannot be claimed back — nothing is handed
-over until the checker passes and three independent reviewers have tried to break it.
+**THE FORMAT (owner, 9 Oct 2026, final):** "make that i paste the prompt 1,2 and 3 together , or 1 each 2 and 3 each , to
+genspark or higgsfields also make the shorts looks naturally and seamlessly , no exceed 30 second , no remove all the
+important details". So every short is ONE checked prompt cut into **three parts** — the workbook's F · G · H:
+- **Part 1** (0 → the switch) carries REFERENCES · STYLE · PERSON · PLACE · TEXT · its shots · `SOUND 0–A s:`.
+- **Part 2** (the switch → the [✨ Link in bio] moment) and **Part 3** (the last line + end card) each open with a header
+  (window, clip length, "starts exactly on a screenshot of Part n's last frame") and a `SAME AS PART 1:` recap (images,
+  "Name, age", look, outfit, voice, place and its light, the device floating untouched, layout, the title it shows,
+  subtitles), then their own shots and their own `SOUND a–b s:` line.
+- Together about 12,500 characters (≤ 13,000): Seedance followed a pasted prompt to ~15,000 characters in the 9 Oct
+  renders and dropped the rest. The long director's briefs stay word for word in the workbook's K · L · M (not for pasting).
+- Model: `examples/AG-01-Grace-3part.txt` (hand-made). Check with `python -I check_parts.py <3part.txt> <brief>` — it runs
+  check_prompt.py on the whole and then checks every part on its own. Never tag "PR #1" in a prompt: the model has never
+  seen it — the design measured on pr1.MOV is written out (`Downloads\InnocenZ-marketing-08Oct\PR-01-pr1MOV-frame-by-frame-design.md`).
+
+**THE STORY SPINE (owner, 9 Oct: "make the user feel like the InnocenZ is really helpful and useful … think smartly and
+carefully").** Belief comes from SEEING InnocenZ fix the exact problem of Part 1 in the same place — never from labels alone.
+| s | beat | the viewer feels |
+|---|---|---|
+| 0–2 | hook: face mid-emotion + the problem prop in frame + line 1 + one strong motion | "that's me" |
+| 2–4 | the pain as ONE countable picture (5 stools used, 3 untouched; a tower of 40 pay slips) | gets it with sound off |
+| 4–9 | two big human reactions → line 3 → gives up, device laid face-down | tension |
+| 9–10 | THE SWITCH: the same device lights up by itself | the fix comes from their own world |
+| 10–12 | the problem props change in front of us (chits sweep away, slips stack themselves) | relief |
+| 12–22 | the "Yess" line, then three proofs STRONGEST FIRST: each card jumps out of the screen AND its benefit happens in the scene at that moment, on the problem's own props (card "Check-in at your door" → a PR silhouette taps her phone at the door, a gold tick pops over the host stand) | "it actually works" |
+| 22–23 | payoff: the person enjoys the result (Grace gets her Sunday back; Kenneth greets guests at a full door) | wants that life |
+| 23–end | confident line, end card, call to action | click |
+Rules: one clear action per shot (overloaded shots made the extra hands and odd moves); the same place first frame to last;
+proofs only from the row's code-confirmed facts (icons, ticks, glow — never fake numbers or invented features); every
+spoken line and card word stays the owner's, only order and visuals change.
+
+The workbook's long briefs are ~40–60k characters. A video model follows a short, structured prompt far better, so this
+skill rewrites ONE row into ONE Seedance 2.5 prompt that keeps every detail that shows on screen or in the sound. Every
+generation costs the owner credits that cannot be claimed back — nothing is handed over until the checker passes and
+independent reviewers have tried to break it.
 
 ## 1. Get the row
 - The owner names a row ("agency 1", "outlet 1 …") and/or pastes its three prompts. If only named, read F/G/H from the
@@ -66,12 +96,14 @@ label on the card can no longer hide behind its correct subtitle).
     frame." (Never "not their colours" — it reads as "recolour the logo".)
 12. Lip-sync ONLY on the to-camera lines (name their seconds in SOUND); the 2–4 s voice-over is a pure point-of-view shot or
     an eyes close-up with the mouth out of shot; the end-card voice is off-screen with "from X s … finished by Y s", and
-    the final chord lands before the last frame.
+    the final chime lands before the last frame.
 13. Fix the layout so nothing collides: the floating device at one shoulder (say which), the cards at the other, gestures
     with the hand on the card side; big arm moves at waist height below the device and cards.
 14. Artefact traps: no hands over rimless glasses (palms to the forehead instead); an open hand is "one thumb, four
     fingers"; card icons say "no numerals", "no symbol", "just the pin, no map"; background guests are "small soft
-    backlit silhouettes in the distance"; the small logo under the last title clears with the title.
+    backlit silhouettes in the distance"; the small @Image 2 logo sits "inside the purple band at the very top, at its
+    right end beside the [✨ Link in bio] words, never on her/his body" (pr1.MOV's design — "under the title … above his
+    head" put it on Kenneth's chest) and clears with the title.
 15. Subtitles: either an explicit list (`0–2 s [line]` …) or, when the prompt runs long, the rule "each to-camera or
     voice-over line in quotes below, word for word, only while he/she says it … none on the end card".
 16. Length: aim for ~9,000 characters, never past 10,000 (no Seedance cap is documented; the owner checks that the last
@@ -107,6 +139,13 @@ label on the card can no longer hide behind its correct subtitle).
     "PR's" → "PRs = P, R, lowercase s" in the TEXT header; the 😤 drawn as a sad face → "😤 = steam from nose"; numbers on
     the "blank" tape → "nothing readable on any paper" next to every paper prop; a palm against his mouth on a to-camera
     line → hands "at shoulder height, clear of his face"; give the device-side hand a job ("right hand in his pocket").
+25. (Final walkthrough of all 24, 9 Oct) A voice-over shot that looks "over his shoulder" at something behind him drew
+    his half-face into the shot → write it as its own place with "no one in frame" (the staff door, the corridor's end).
+    A Part n+1 header must name Part n's real last frame, eyes included (OU-07 talked with his eyes closed). A silent
+    push-in needs its own head anchor too ("same static shot, her head and hands under 21% down"). Gloss every title
+    emoji ("😭 = loudly crying face") and spell any hard card word in the TEXT header ("voucher = v-o-u-c-h-e-r"). Keep
+    one wording for shared furniture across a series — the band "(top edge to 12% down)", the end card, "soft final
+    chime" — so 24 shorts look like one campaign.
 
 **Owner rules (all still in force — see `docs/claude-memory/v2-shorts-prompt-style-08oct.md`):**
 - PR = phone; agency/outlet = an iPad-style tablet with a plain back and no logo; ONE device. Part 1: the selfie camera
