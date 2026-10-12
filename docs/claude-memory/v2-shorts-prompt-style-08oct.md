@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: e03eb10b-304b-437d-b23f-ca2a81413a4e
-  modified: 2026-10-09T14:58:50.709Z
+  modified: 2026-10-12T14:23:55.095Z
 ---
 
 The owner gave these rules on Thu 8 Oct 2026, in the V2 ProblemStatementsSellingPoin tab, F · G · H, rows 8–35 of `marketing-v17-v1-v2.xlsm`. They come from reviewing the club-girl reference, five Instagram reels and the first Genspark test of PR #1.
@@ -110,6 +110,42 @@ The owner gave these rules on Thu 8 Oct 2026, in the V2 ProblemStatementsSelling
   - subtitle timing against the spoken shot
   - the words "only while … says it"
 - **Tools:** `check_parts.py` (each part alone + together) and `split_fgh.py`, both in the skill. Grace's hand-made model is `examples/AG-01-Grace-3part.txt`.
+
+**12 Oct — a session on another device rebuilt all 24 as ONE-PASTE prompts; Drive is the master.** Read the Drive file's
+"V2 Change log" (rows 29–33) before touching any prompt. On 12 Oct the owner decided:
+- **Prompt layout:** F = header + REFERENCES … TEXT + Part 1; G = Part 2 shots; H = Part 3 + one SOUND block.
+- **Wording:** curly “ ” speech quotes (Sheets doubles straight quotes); "Yes", not "Yess"; [✨ Link In Descriptions] and "Find out more — link in descriptions."; "Title stays." / "Band stays." on every shot.
+- **Brand and devices:** InnocenZ as plain letters ("nothing on or between the n and the Z"), the hyphen spelling is gone; the tablet is "11-inch … as big as an A4 sheet, always landscape".
+- **Length:** rows ~13,000–13,700 characters (owner: keep details rather than trim).
+
+A second, independent check the same day (checker `scratchpad/chk1012/check_v12.py`, 13/13 planted faults caught) fixed 4 gaps the other session left:
+- the tagline "whole at once" fix reached only 14 rows
+- PR-01/04/05 still said "PR #1"
+- the third card in OU-01/08 and PR-06 did not jump out
+- the downward point-of-view shots drew the face (Outlet 3 render) → "the frame filled edge to edge by the table top and his hands"
+
+Instrument lessons:
+- A Google Sheets save pads a tab with empty rows to 1000 and renumbers the styles. Append log rows after the last row WITH cells, copy the styles from that row, and drop the 15.75 pt fixed height.
+- A title emoji may be described in the TEXT heading, not beside the title. Search the whole prompt.
+- Subtitles now sit inside the shot lines, so card labels must be read with the "Subtitle:" tail removed.
+- Renders the owner downloads are 480p. Drive refuses downloads over 10 MB (outlet2 and agency1 were not viewable).
+
+**Evening of 12 Oct — the OWNER now adds the title and the band; the video model draws neither.**
+The decision came after the Agency 3 render, made with "Seedance 2.5 Draft" at 480p. It drew "{ your three pay spreadshoets }" (the [ ] marks drawn as braces, 🤯 drawn as "?") and "Solved with InnoceinZ", "InocentZ", "Built from ships".
+
+Owner: "remove the center title 0s-10s title and the 10s-26s , i will add it". So all 24 prompts have:
+- no problem title, no red strike-through
+- no [Solved with InnocenZ] band, no [✨ Link In Descriptions], no small band logo
+- "the top 20% of the frame stays clean background with only the round badge — no words there, a title is added later in editing"
+- every "under 21% down" head anchor kept
+
+Asked how to fix the words, the owner chose "keep words, use full 720p". So subtitles, cards, the tablet screen and the end card are still drawn by the model. Generate with full Seedance 2.5, NOT Draft. The A2 notes say so.
+
+Checker: `scratchpad/chk1012/check_v13.py`. It fails all 24 old rows, catches 11/11 planted faults, and passes the 24 new rows. Rows are 11,594–12,443 characters.
+
+Root cause, for future questions: video models paint letters and "correct" InnocenZ towards "Innocent". Attached pictures (the badge) are copied perfectly every time; typed words are not.
+
+Before handing over a workbook, re-check the Drive modifiedTime. It moved twice in one evening: an owner upload at 11:19, then a Google re-save at 14:20 that changed only the styles. Rebuild on the newest copy.
 
 **Night of 9 Oct — v11 built (the owner must upload it):**
 - **Priority order.** Each role's 8 rows are re-ordered most-helpful first, using a 9-judge ranking. Every row moved whole with its V-number.
