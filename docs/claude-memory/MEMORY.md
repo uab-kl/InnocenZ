@@ -214,3 +214,7 @@ Dated history lives in `TEST_SCRIPT.md` §8/§10; rules live in `CLAUDE.md`.
 
 - [Read remote claude session history](read-remote-claude-session-history.md) — "How to read another device's claude.ai/code session (e.g. 'continue memory from session_…'): the local session tools can't see it, but the logged-in Chrome can fetch /v1/code/sessions/<id>/events"
 - [V2 shorts prompt style 08oct](v2-shorts-prompt-style-08oct.md) — "Owner's V2 Genspark prompt style as of Thu 8 Oct 2026 — round crown-Z badge in the very top-left, big title top-centre with NO 'POV' label, different Malaysian Chinese girl per PR short, sad English talk-to-camera monologue (selfie vlog + first-person cutaway), Part 2 sad→happy SWITCH, English-only speech and subtitles"
+
+### Newly added - file these into a section above
+
+- [Shorts fix never drop details](shorts-fix-never-drop-details.md) — "Owner, 12 Oct 2026: when fixing the Seedance/Higgsfield short prompts, never remove important details — only repetition may go; prove it with a before/after detail check"
