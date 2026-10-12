@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: e03eb10b-304b-437d-b23f-ca2a81413a4e
-  modified: 2026-10-09T09:52:26.059Z
+  modified: 2026-10-09T14:58:50.709Z
 ---
 
 The owner gave these rules on Thu 8 Oct 2026, in the V2 ProblemStatementsSellingPoin tab, F · G · H, rows 8–35 of `marketing-v17-v1-v2.xlsm`. They come from reviewing the club-girl reference, five Instagram reels and the first Genspark test of PR #1.
@@ -93,6 +93,39 @@ The owner gave these rules on Thu 8 Oct 2026, in the V2 ProblemStatementsSelling
 
   The skill's lessons 23–24 hold the wording that prevents each one.
 - **v10 workbook** (`Downloads\InnocenZ-marketing-08Oct\marketing-v17-v1-v2.xlsm`, v9 kept as `.v9-backup.xlsm`). It carries the casting, title and small-logo changes above, plus the end-card voice spread over the last two beats. The read-back found 0 failures; the same new checks give 152 failures on v9. The mutation test catches 36/36. The owner has to upload it to Drive.
+
+**Late 9 Oct — F · G · H become one short prompt in three parts (v11):**
+- **The owner's ask:** "make that i paste the prompt 1,2 and 3 together , or 1 each 2 and 3 each , to genspark or higgsfields … no exceed 30 second , no remove all the important details". "Mostly" they paste all three together.
+- **Format:** every row's F · G · H is ONE checked Seedance prompt in three parts, about 12,500 characters together.
+  - Part 1 holds REFERENCES · STYLE · PERSON · PLACE · TEXT, its shots and a `SOUND 0–A s:` line.
+  - Parts 2 and 3 each carry a header (window, clip length, "starts exactly on a screenshot of Part n's last frame"), a `SAME AS PART 1:` recap, their own shots and their own SOUND line.
+- **Long briefs** moved word for word to K · L · M ("not for pasting"). The top notes went to a new "V2 Change log" tab.
+- **Seedance reads about 15,000 characters.** Kenneth's 58,000-character paste filmed Part 1 only; Grace's 8,000 came out whole.
+- **Never tag "PR #1" in a prompt.** The model has never seen it. The measured design is in `Downloads\InnocenZ-marketing-08Oct\PR-01-pr1MOV-frame-by-frame-design.md`:
+  - problem title at 12.5–18.5%
+  - "Solved" a full-width #391F3F band to 12–14%
+  - subtitle box at 64–77%
+  - end-card positions
+- **Checker gaps found and fixed.** In some briefs the source-matching never saw the Yess line or the card labels: quote marks inside the heading, "CARD ONE/FIRST CARD/HAPPY — CARD ONE" spellings. It now fails loudly when it cannot see three labels or five lines. It also checks:
+  - subtitle timing against the spoken shot
+  - the words "only while … says it"
+- **Tools:** `check_parts.py` (each part alone + together) and `split_fgh.py`, both in the skill. Grace's hand-made model is `examples/AG-01-Grace-3part.txt`.
+
+**Night of 9 Oct — v11 built (the owner must upload it):**
+- **Priority order.** Each role's 8 rows are re-ordered most-helpful first, using a 9-judge ranking. Every row moved whole with its V-number.
+  - PR: 01 02 04 03 06 07 08 05
+  - Agency: 01 02 05 03 06 08 07 04
+  - Outlet: 01 04 03 02 08 05 06 07
+- **Story spine** (in SKILL.md): hook → countable pain → switch on the same device → 3 proofs, strongest first, acted out on the problem's own props → payoff.
+- **Devices.** PR = phone; agency and outlet = a "magazine-sized tablet", never the word "iPad".
+- **Quality passes.** A 72-agent design pass, then one fresh reviewer per role walked every short second by second. The fixes also made the shared wording the same across all 24.
+- **Result.** All 24 are 13,470–13,494 characters, and `check_parts` reports OK. `build_v11.py` read back 24 rows with 0 failures; 248 formulas; only the 4 V2 tabs changed, plus the new Change log tab.
+- **Files.** `Downloads\…\marketing-v17-v1-v2.xlsm`; the old v10 is kept as `.v10-backup.xlsm`.
+- **Left for a render to settle.**
+  - Text can still come out garbled → fix it in CapCut.
+  - OU-03/04 2–4 s hands-POV: if a face appears, switch to "a top-down shot straight onto the table".
+  - Emoji in AG titles and OU-03/04/08 have no description.
+  - Every file is within ~30 characters of the 13,500 limit, so any addition needs an equal trim.
 
 **Why:** these are the owner's own corrections after seeing the reels and the first Genspark result. Ask before reverting any of them.
 

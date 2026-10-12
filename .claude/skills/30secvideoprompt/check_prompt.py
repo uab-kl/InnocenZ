@@ -10,7 +10,10 @@ import re
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
-MAX_SECONDS, MAX_WPS, MAX_CHARS = 30, 4.0, 10000  # no documented Seedance 2.5 cap; aim for ~9,000, warn past 10,000
+# 9 Oct render evidence: Seedance followed a pasted prompt to ~15,000 characters and dropped the rest (Kenneth: Part 1
+# only); an 8,000-character prompt came out whole (Grace). A three-part prompt (each part pasteable alone, Parts 2 and 3
+# carrying a SAME AS PART 1 recap) aims for ~12,500; warn past 13,000.
+MAX_SECONDS, MAX_WPS, MAX_CHARS = 30, 4.0, 13500
 CTA = "Find out more — link in bio."
 
 p = open(sys.argv[1], encoding="utf-8").read()
@@ -24,7 +27,7 @@ def words(s):
 
 
 # 1. blocks and references
-for block in ("REFERENCES:", "STYLE:", "TEXT", "SHOTS", "SOUND:"):
+for block in ("REFERENCES:", "STYLE:", "TEXT", "SHOTS", "SOUND"):
     if block not in p:
         F(f"missing block {block}")
 for ref in ("@Image 1", "@Image 2"):
@@ -69,8 +72,9 @@ if CTA not in spoken:
 brackets = re.findall(r"\[([^\]]+)\]", p)
 # card labels and end-card lines must be on screen IN the shots — the subtitle list repeats the spoken card words, so a
 # wrong label on the card itself would otherwise hide behind its subtitle
-shots_sec = re.search(r"^SHOTS\b(.*?)^SOUND:", p, re.M | re.S)
-shot_brackets = [x.rstrip(".") for x in re.findall(r"\[([^\]]+)\]", shots_sec.group(1))] if shots_sec else []
+# (a three-part prompt has a SOUND line per part, so read the brackets straight from the timed shot lines)
+shot_text = "\n".join(line for _, _, line in shots)
+shot_brackets = [x.rstrip(".") for x in re.findall(r"\[([^\]]+)\]", shot_text)]
 sub_block = re.search(r"Subtitles[^\n]*", p)
 sub_line = sub_block.group(0) if sub_block else ""
 sub_text = " ".join(re.findall(r"\[([^\]]+)\]", sub_line))
@@ -79,12 +83,28 @@ sub_text = " ".join(re.findall(r"\[([^\]]+)\]", sub_line))
 rule_form = re.search(r"each [^\n]*line[^\n]*in quotes[^\n]*word for word", sub_line) and "none on the end card" in sub_line.lower()
 if not sub_line:
     F("no Subtitles line under TEXT")
-elif not rule_form:
+else:
+    # owner, 9 Oct (Kenneth render): "missed the prompt 1 subtitle" — the rule form let the model skip lines, so every
+    # spoken line (all but the off-screen call to action) now needs its own timed subtitle in the list
+    if rule_form:
+        F("subtitles must be a timed list of every spoken line (the 'each line in quotes' rule let the model skip Part 1's)")
     for s in spoken:
         if s != CTA and s not in sub_text:
             F(f"spoken line missing from the subtitle list: {s[:60]!r}")
+    if "never at the top" not in sub_line:
+        F("the Subtitles line must say subtitles are never at the top (a subtitle replaced the title in Kenneth's render)")
 if sub_line and "end card" not in sub_line.lower():
     F("the Subtitles line must say there is no subtitle on the end card")
+if sub_line and "only while" not in sub_line:
+    F("the Subtitles line must say subtitles show ONLY WHILE the person says the line (owner: follow the talking only)")
+# owner, 9 Oct: "the subtitle follow the person talking only will show" — every timed subtitle must sit inside the shot where
+# that very line is spoken (never on a silent beat, never early or late)
+for a, b, t1, t2 in re.findall(r"(\d+(?:\.\d+)?)–(\d+(?:\.\d+)?) s \[([^\]]+)\](?: then \[([^\]]+)\])?", sub_line):
+    a, b, text = float(a), float(b), (t1 + (" " + t2 if t2 else "")).strip()
+    host = [line for sa, sb, line in shots if sa <= a + 0.01 and b <= sb + 0.01]
+    said = [q for line in host for q in re.findall(r'"([^"]+)"', line)]
+    if not any(re.sub(r"\W+", "", text) == re.sub(r"\W+", "", q) for q in said):
+        F(f"subtitle {a:g}–{b:g} s [{text[:45]}] is not on screen while that line is spoken")
 for need in ("Solved with InnocenZ", "✨ Link in bio", "InnocenZ", CTA):
     if need not in brackets:
         F(f"on-screen text missing (must be in [brackets]): [{need}]")
@@ -106,8 +126,20 @@ if "SELFIE" in p and "headroom" not in p:
 # shorts video, no hide and cover the pr" — PR #1's layout: problem title 11–19%, Solved = a full-width band at the very top
 if re.search(r"upper (?:15–25|8–17)%", p) or "upper 11–19%" not in p:
     F("owner rule: the problem title sits in the 'upper 11–19%' just above the head, as in PR #1 (15–25% covered Grace)")
-if "full-width deep-purple band across the very top" not in p:
-    F("owner rule: [Solved with InnocenZ] is a full-width deep-purple band across the very top, as in PR #1")
+# owner, 9 Oct: "the center title have the background, actually I don't want title have the subtitle background"
+if "no box, no band, no background" not in p:
+    F("owner rule: the problem title must say 'no box, no band, no background' — the boxed style is only for subtitles")
+if "held in every shot" not in p:
+    F("the [Solved with InnocenZ] band must be 'held in every shot' (it vanished at 12 s in Kenneth's render)")
+if len(re.findall(r"jumps out of", p)) < 3:
+    F("owner rule: each benefit card 'jumps out of' the phone/tablet screen (owner: 'jump out the animation')")
+if "inside the purple band at the very top" not in p:
+    F("the small @Image 2 logo must sit 'inside the purple band at the very top' (it landed on Kenneth's chest)")
+if "full-width deep plum-purple band across the very top" not in p:
+    F("owner rule: [Solved with InnocenZ] is a full-width deep plum-purple band across the very top (the design measured on pr1.MOV)")
+# owner, 9 Oct: "why need say pr#1 ? … not just tag pr 1 i wont put pr1 as reference" — describe the design, never tag it
+if re.search(r"PR ?#1|pr1\.MOV", p):
+    F("owner rule: never tag 'PR #1' in a prompt — the model has never seen it; describe the design instead")
 if re.search(r"under (?:2[2-9]|30)% down", p):
     F("owner rule: the head anchor is 'under 21% down' (PR #1's framing)")
 # owner, 9 Oct: "make the agency and outlet age no exceed 40 years old , pr no exceed 30 years old"
@@ -123,15 +155,19 @@ else:
                     r"reading glasses|\bmature\b|forties|fifties|silver(?:-grey)? hair", p, re.I)
     if old and not is_pr:
         F(f"owner rule: an older look is still described ({old.group(0)!r}) — agency/outlet people look 30–40")
-snd = re.search(r"SOUND:(.*)", p, re.S)
-if not snd or not re.search(r"no music", snd.group(1), re.I):
+snd = " ".join(re.findall(r"^SOUND[^\n]*", p, re.M))
+if not snd or not re.search(r"no music", snd, re.I):
     F("SOUND must say there is no music before the switch")
 if len(p) > MAX_CHARS:
     W(f"{len(p)} characters — long prompts lose detail; aim for under {MAX_CHARS}")
 
 # 6. against the source F · G · H
 if src:
-    src_spoken = re.findall(r'^\d+–\d+ s · [^"\n]*?:\s*"([^"]+)"', src, re.M)
+    # the spoken line is the quote that ENDS a beat heading — some headings carry their own quotes first
+    # ('3–7 s · "YESS — INNOCENZ!" — TO CAMERA (excited): "Yess — …"'), which the old pattern skipped silently
+    src_spoken = re.findall(r'^\d+–\d+ s · [^\n]*?:\s*"([^"]+)"\s*$', src, re.M)
+    if len(src_spoken) < 5:
+        F(f"only {len(src_spoken)} spoken lines found in the source — the instrument cannot see this brief's format")
     for q in src_spoken:
         q2 = re.sub(r"\bYeah lah\b", "Yess", q)
         if q not in spoken and q2 not in spoken:
@@ -143,7 +179,21 @@ if src:
         got = re.sub(r"\s+", " ", f"{title.group(1)} {title.group(2)}").strip() if title else ""
         if got != want:
             F(f"problem title not word for word: source {want!r}, prompt {got!r}")
-    for lab in re.findall(r'Card[^\n"]*?"([^"]+)"', src):
+    # card labels: the quoted text on a card in an ON SCREEN line ("Card ①: … + "Log drinks on shift"", "Glossy card: … +
+    # "Pin your venue"") — any case; a brief whose labels the pattern cannot see fails instead of passing blind
+    # read each label from the ON SCREEN line INSIDE the brief's "a–b s · CARD ①/②/③ …" beats (the line itself does not
+    # always say "card": "Row of blank avatar cards icon + "Tonight's line-up"")
+    labels = []
+    # headings seen across the 24 briefs: "CARD ① FLOATS IN", "CARD ONE — …", "HAPPY — CARD ONE FLOATS IN", "FIRST CARD …"
+    card_beat = r'^\d+–\d+ s · [^\n]*?\b(?:CARD (?:[①②③]|ONE|TWO|THREE)|(?:FIRST|SECOND|THIRD) CARD)\b[^\n]*\n((?:  [^\n]*\n)+)'
+    for beat in re.findall(card_beat, src, re.M):
+        on = re.search(r'^  ON SCREEN:([^\n]*)', beat, re.M)
+        q = re.findall(r'"([^"]+)"', on.group(1)) if on else []
+        if q:
+            labels.append(q[-1])
+    if len(labels) != 3:
+        F(f"{len(labels)} card labels found in the source (want 3) — the instrument cannot see this brief's cards")
+    for lab in labels:
         if lab.rstrip(".") not in shot_brackets:
             F(f"card label missing from the SHOTS: [{lab}]")
     for tag in re.findall(r'(?:END CARD|end card)[^\n]*\n(?:  [^\n]*\n)*?  ON SCREEN:[^\n]*?"([^"]+)"', src):
