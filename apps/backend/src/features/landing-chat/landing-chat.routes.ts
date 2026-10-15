@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { env } from '@/env';
 import { clientBudgetKey, rateLimit } from '@/middlewares/rate-limit';
+import { isSiteOrigin } from '@/util/site-origins';
 import { answerLandingChat, parseLandingChatInput, type LandingChatInput } from './landing-chat.service';
 
 /**
@@ -23,20 +24,6 @@ import { answerLandingChat, parseLandingChatInput, type LandingChatInput } from 
 
 const FAIL = { success: false, message: 'The assistant could not answer right now.', data: null };
 
-const allowedOrigins = new Set(
-  [env.FRONTEND_URL, ...(env.CORS_ALLOWED_ORIGINS ?? '').split(',')]
-    .map((o) => o?.trim())
-    .filter(Boolean)
-    .map((o) => {
-      try {
-        return new URL(o as string).origin;
-      } catch {
-        return '';
-      }
-    })
-    .filter(Boolean),
-);
-
 function jsonFromOurSite(req: Request, res: Response, next: NextFunction): void {
   if (!req.is('application/json')) {
     res.status(415).json({ ...FAIL, message: 'Send the question as JSON.' });
@@ -44,8 +31,11 @@ function jsonFromOurSite(req: Request, res: Response, next: NextFunction): void 
   }
   const origin = req.get('origin');
   // No Origin = a server-side caller (curl, tests); browsers always send one on
-  // a cross-site POST, and those must be ours.
-  if (origin && !allowedOrigins.has(origin)) {
+  // a cross-site POST, and those must be ours. ⚠️ The SAME list CORS uses
+  // (util/site-origins.ts): this route's own copy, built from FRONTEND_URL alone,
+  // refused https://innocenz.net on production, so every apex visitor got the
+  // written backup and Gemini was never asked (15 Oct 2026).
+  if (origin && !isSiteOrigin(origin)) {
     res.status(403).json(FAIL);
     return;
   }

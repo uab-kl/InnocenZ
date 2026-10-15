@@ -55,6 +55,26 @@ const followUp = {
   history: [{ from: 'visitor', text: 'how do I get paid?' }],
 };
 
+describe('POST /landing-chat — which sites may ask (15 Oct 2026)', () => {
+  const ask = (origin: string) =>
+    fetch(`http://127.0.0.1:${port}/landing-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: origin },
+      body: JSON.stringify({ question: 'what is innocenz', locale: 'en' }),
+    });
+
+  it('admits BOTH live addresses — the chat once refused https://innocenz.net while CORS admitted it', async () => {
+    answer.mockResolvedValue({ ok: true, reply: { text: 'InnocenZ is…' }, model: 'gemini-flash-lite-latest' });
+    for (const origin of ['https://innocenz.net', 'https://www.innocenz.net', 'http://localhost:3000']) {
+      expect((await ask(origin)).status, origin).toBe(200);
+    }
+  });
+
+  it('still refuses a stranger site', async () => {
+    expect((await ask('https://evil.example')).status).toBe(403);
+  });
+});
+
 describe('POST /landing-chat — the visitor leaving', () => {
   it('cancels the answer when the browser drops the request', async () => {
     let seen: AbortSignal | undefined;
