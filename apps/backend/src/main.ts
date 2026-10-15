@@ -26,6 +26,7 @@ import { initRoles } from './scripts/init-roles';
 import { primeUserFolders } from '@/util/user-folder';
 import { seedRbac } from './scripts/seed-rbac';
 import { ensureProfileImageDir } from './util/profile-image';
+import { siteOrigins } from './util/site-origins';
 import { registerAllAuditOldDataFetchers } from './features/audit-log/audit-log.wrapper';
 
 ensureProfileImageDir();
@@ -33,32 +34,10 @@ registerAllAuditOldDataFetchers();
 
 const app = express();
 
-const frontendOrigin = env.FRONTEND_URL.replace(/\/en\/?$/, '').replace(/\/$/, '');
-
-function buildAllowedOrigins(): Set<string> {
-  const origins = new Set<string>([
-    frontendOrigin,
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001',
-    'https://studio.apollographql.com',
-  ]);
-
-  // Staging (DuckDNS) + live (.net) — apex and www
-  for (const host of ['innocenz.duckdns.org', 'innocenz.net']) {
-    origins.add(`https://${host}`);
-    origins.add(`https://www.${host}`);
-  }
-
-  for (const raw of (env.CORS_ALLOWED_ORIGINS ?? '').split(',')) {
-    const o = raw.trim().replace(/\/$/, '');
-    if (o) origins.add(o);
-  }
-  return origins;
-}
-
-const allowedOrigins = buildAllowedOrigins();
+// Our own web origins come from ONE list (util/site-origins.ts), which the public
+// chat's origin check reads too — two copies drifted and the chat refused
+// https://innocenz.net (15 Oct 2026). Apollo Studio is a CORS-only extra.
+const allowedOrigins = new Set<string>([...siteOrigins, 'https://studio.apollographql.com']);
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
