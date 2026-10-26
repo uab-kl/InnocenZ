@@ -1,13 +1,12 @@
 import {
 	AlertCircle,
-	Ban,
 	Building2,
-	CheckCircle2,
-	Eye,
 	Loader2,
+	MoreHorizontal,
 	RefreshCw,
 	Search,
 } from "lucide-react";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +16,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -91,7 +96,7 @@ export function AgenciesTable({
 	const showLoading = isLoading && agencies.length === 0;
 
 	return (
-		<Card className="border-(--lavender-soft)/40 bg-card">
+		<Card className="iz-admin-management-card border-(--lavender-soft)/40 bg-card">
 			<CardHeader>
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
@@ -106,64 +111,61 @@ export function AgenciesTable({
 						</CardDescription>
 					</div>
 
-					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-						<div className="relative sm:w-56">
-							<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-							<Input
-								value={search}
-								onChange={(e) => onSearchChange(e.target.value)}
-								placeholder={t.adminOrg.searchAgenciesPlaceholder}
-								className="pl-8"
-								aria-label={t.adminOrg.searchAgenciesAria}
-							/>
-						</div>
-						<Select
-							value={statusFilter}
-							onValueChange={(value) =>
-								onStatusFilterChange(value as OrgStatusFilter)
-							}
-						>
-							<SelectTrigger
-								className="sm:w-48"
-								aria-label={t.admin.filterByStatus}
+					<AdminFilters>
+						<div className="iz-admin-management-filters flex flex-col gap-2 sm:flex-row sm:items-center">
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={search}
+									onChange={(e) => onSearchChange(e.target.value)}
+									placeholder={t.adminOrg.searchAgenciesPlaceholder}
+									className="pl-8"
+									aria-label={t.adminOrg.searchAgenciesAria}
+								/>
+							</div>
+							<Select
+								value={statusFilter}
+								onValueChange={(value) =>
+									onStatusFilterChange(value as OrgStatusFilter)
+								}
 							>
-								<SelectValue placeholder={t.admin.filterByStatus} />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-								{ORG_STATUSES.map((status) => (
-									<SelectItem key={status} value={status}>
-										{orgStatusLabel(status, t)}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
+								<SelectTrigger
+									className="sm:w-48"
+									aria-label={t.admin.filterByStatus}
+								>
+									<SelectValue placeholder={t.admin.filterByStatus} />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									{ORG_STATUSES.map((status) => (
+										<SelectItem key={status} value={status}>
+											{orgStatusLabel(status, t)}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+					</AdminFilters>
 				</div>
 			</CardHeader>
 
 			<CardContent>
-				<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-					<Table>
+				<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
+					<Table className="iz-admin-management-table">
 						<TableHeader>
 							<TableRow>
-								<TableHead className="w-10" />
 								<TableHead>{t.admin.colName}</TableHead>
-								<TableHead>{t.adminOrg.memberCodePrefix}</TableHead>
 								<TableHead>{t.adminUsers.colContact}</TableHead>
-								<TableHead className="w-[140px]">{t.admin.colStatus}</TableHead>
-								<TableHead className="w-[140px]">
-									{t.admin.colCreated}
+								<TableHead>
+									{t.admin.colStatus} / {t.admin.colCreated}
 								</TableHead>
-								<TableHead className="w-[200px]">
-									{t.admin.colActions}
-								</TableHead>
+								<TableHead>{t.admin.colActions}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={4} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>{t.agencyLinks.loading}</span>
@@ -172,7 +174,7 @@ export function AgenciesTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={4} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -190,7 +192,7 @@ export function AgenciesTable({
 								</TableRow>
 							) : agencies.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={4} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Building2 className="h-6 w-6" />
 											<span>{t.adminOrg.noAgenciesFound}</span>
@@ -207,32 +209,25 @@ export function AgenciesTable({
 											onClick={() => onSelect(agency)}
 										>
 											<TableCell>
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-8 w-8"
-													aria-label={t.adminOrg.viewAgencyDetails}
-													onClick={(e) => {
-														e.stopPropagation();
+												<button
+													type="button"
+													className="iz-admin-record-name"
+													onClick={(event) => {
+														event.stopPropagation();
 														onSelect(agency);
 													}}
 												>
-													<Eye className="h-4 w-4" />
-												</Button>
-											</TableCell>
-											<TableCell>
-												<div className="text-base font-medium">
 													{agency.name}
-												</div>
-												<div className="text-sm text-muted-foreground">
+												</button>
+												<div className="iz-admin-record-secondary">
 													{fill(t.adminOrg.ssmValue, { no: agency.ssmNo })}
 												</div>
+												<div className="iz-admin-record-secondary">
+													{orgMemberIdStem("agency", agency.memberCodePrefix) ??
+														"—"}
+												</div>
 											</TableCell>
-											<TableCell className="font-mono text-base">
-												{orgMemberIdStem("agency", agency.memberCodePrefix) ??
-													"—"}
-											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminUsers.colContact}>
 												<div className="text-base">
 													{agency.contactName || "—"}
 												</div>
@@ -242,64 +237,61 @@ export function AgenciesTable({
 														.join(" · ") || "—"}
 												</div>
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.admin.colStatus}>
 												<Badge
 													variant="outline"
 													className={`text-sm ${orgStatusBadgeColors[agency.status]}`}
 												>
 													{orgStatusLabel(agency.status, t)}
 												</Badge>
-											</TableCell>
-											<TableCell className="text-base text-muted-foreground">
-												{formatDate(agency.createdAt)}
-											</TableCell>
-											<TableCell onClick={(e) => e.stopPropagation()}>
-												<div className="flex flex-wrap gap-2">
-													{agency.status === "pending_review" && (
-														<Button
-															size="sm"
-															disabled={busy}
-															onClick={() => onApprove(agency.id)}
-														>
-															{busy ? (
-																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-															) : (
-																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-															)}
-															{t.common.approve}
-														</Button>
-													)}
-													{(agency.status === "active" ||
-														agency.status === "suspended") && (
-														<Button
-															size="sm"
-															variant="destructive"
-															disabled={busy}
-															onClick={() => onDeactivate(agency.id)}
-														>
-															{busy ? (
-																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-															) : (
-																<Ban className="mr-1 h-3.5 w-3.5" />
-															)}
-															{t.adminOrg.setInactive}
-														</Button>
-													)}
-													{agency.status === "suspended" && (
-														<Button
-															size="sm"
-															disabled={busy}
-															onClick={() => onApprove(agency.id)}
-														>
-															{busy ? (
-																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-															) : (
-																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-															)}
-															{t.adminUsers.reactivate}
-														</Button>
-													)}
+												<div className="iz-admin-record-secondary">
+													{formatDate(agency.createdAt)}
 												</div>
+											</TableCell>
+											<TableCell onClick={(event) => event.stopPropagation()}>
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button
+															variant="outline"
+															size="icon"
+															aria-label={`${t.admin.colActions} · ${agency.name}`}
+															disabled={busy}
+														>
+															<MoreHorizontal aria-hidden className="h-4 w-4" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end">
+														<DropdownMenuItem onSelect={() => onSelect(agency)}>
+															{t.adminOrg.viewAgencyDetails}
+														</DropdownMenuItem>
+														{agency.status === "pending_review" && (
+															<DropdownMenuItem
+																disabled={busy}
+																onSelect={() => onApprove(agency.id)}
+															>
+																{t.common.approve}
+															</DropdownMenuItem>
+														)}
+														{(agency.status === "active" ||
+															agency.status === "suspended") && (
+															<DropdownMenuItem
+																className="text-destructive"
+																disabled={busy}
+																onSelect={() => onDeactivate(agency.id)}
+															>
+																{t.adminOrg.setInactive}
+															</DropdownMenuItem>
+														)}
+														{agency.status === "suspended" && (
+															<DropdownMenuItem
+																disabled={busy}
+																onSelect={() => onApprove(agency.id)}
+															>
+																{t.adminUsers.reactivate}
+															</DropdownMenuItem>
+														)}
+													</DropdownMenuContent>
+												</DropdownMenu>
 											</TableCell>
 										</TableRow>
 									);
@@ -310,7 +302,7 @@ export function AgenciesTable({
 				</div>
 
 				{pagination && pagination.totalCount > 0 && (
-					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+					<div className="iz-admin-management-pagination text-muted-foreground">
 						<div>
 							{fill(t.adminOrg.showingAgencies, {
 								from: (pagination.page - 1) * pageSize + 1,

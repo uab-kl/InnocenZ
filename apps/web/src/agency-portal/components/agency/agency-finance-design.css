@@ -1,0 +1,595 @@
+/* Agency finance presentation only. Shared history defaults remain unchanged. */
+.iz-agency-finance {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.iz-agency-finance > * {
+	min-width: 0;
+	max-width: 100%;
+}
+.iz-agency-finance .iz-payroll-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	width: fit-content;
+	max-width: 100%;
+	padding: 6px;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+	background: var(--iz-panel2);
+}
+.iz-agency-finance .iz-payroll-tab {
+	min-height: 44px;
+	white-space: normal;
+	font-size: var(--iz-fs-body);
+	line-height: 1.4;
+}
+.iz-agency-finance .iz-payroll-tab.on {
+	background: var(--iz-panel);
+	color: var(--iz-txt);
+}
+.iz-agency-finance .iz-txn-filters {
+	gap: 16px;
+	margin-block: 16px 20px;
+	padding: 20px;
+	border: 1px solid var(--iz-line);
+	border-radius: 12px;
+	background: var(--iz-panel);
+}
+.iz-agency-finance .iz-outlet-hist-grid {
+	gap: 20px;
+}
+.iz-agency-finance .iz-outlet-hist-card {
+	padding: 22px;
+	border-color: var(--iz-line);
+	background: var(--iz-panel);
+}
+.iz-agency-finance .iz-outlet-hist-card__head {
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.iz-agency-finance .iz-outlet-hist-card__identity {
+	min-width: 0;
+	flex: 1 1 180px;
+}
+.iz-agency-finance .iz-outlet-hist-card__name,
+.iz-agency-finance .iz-venue-hist-card__name {
+	font-size: var(--iz-fs-title);
+	white-space: normal;
+}
+.iz-agency-finance .iz-outlet-hist-card__agency,
+.iz-agency-finance .iz-outlet-hist-card__latest {
+	white-space: normal;
+	overflow: visible;
+	font-size: var(--iz-fs-tiny);
+}
+.iz-agency-finance .iz-outlet-hist-metric {
+	padding: 16px;
+	background: var(--iz-panel2);
+	border-color: var(--iz-line);
+	text-align: left;
+}
+.iz-agency-finance .iz-outlet-hist-metric__label {
+	font-size: var(--iz-fs-body);
+}
+.iz-agency-finance .iz-outlet-hist-metric__value {
+	font-size: var(--iz-fs-title);
+	line-height: 1.4;
+}
+.iz-agency-finance .iz-outlet-hist-metrics--pair {
+	gap: 16px;
+}
+.iz-agency-finance .iz-agency-paid-total {
+	min-width: 0;
+	padding: 12px 16px;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+	background: var(--iz-panel);
+}
+.iz-agency-finance .iz-agency-paid-archive > div:first-child > div {
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.iz-agency-finance .iz-agency-paid-archive > div:first-child > div > .min-w-0 {
+	flex: 1 1 200px;
+}
+.iz-agency-finance .iz-agency-voucher-card {
+	align-items: flex-start;
+	gap: 20px;
+	min-width: 0;
+	margin: 0;
+	padding: 22px;
+}
+.iz-agency-finance .iz-agency-voucher-card > * {
+	min-width: 0;
+	max-width: 100%;
+}
+.iz-agency-finance .iz-agency-payroll-metrics {
+	gap: 16px;
+}
+.iz-agency-finance .iz-stat-tile {
+	min-width: 0;
+	padding: 20px;
+	border: 1px solid var(--iz-line);
+	border-radius: 12px;
+	background: var(--iz-panel);
+	text-align: left;
+}
+.iz-agency-finance .iz-stat-tile .n {
+	font-size: var(--iz-fs-head);
+	line-height: 1.4;
+}
+.iz-agency-finance .iz-filter-groups {
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.iz-agency-finance .iz-filter-group {
+	min-width: 0;
+	max-width: 100%;
+}
+.iz-agency-finance .iz-filter-chips {
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.iz-agency-finance .iz-filter-chip {
+	min-height: 44px;
+	white-space: normal;
+	font-size: var(--iz-fs-body);
+}
+.iz-agency-finance .iz-agency-payout-summary {
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.iz-agency-finance .iz-pv-detail-bar {
+	flex-wrap: wrap;
+	gap: 12px;
+}
+.iz-agency-finance .iz-pv-detail-id {
+	white-space: normal;
+	word-break: break-word;
+}
+.iz-agency-finance .iz-pv-doc-shell,
+.iz-agency-finance .iz-pv-doc {
+	min-width: 0;
+	max-width: 100%;
+}
+.iz-agency-finance .iz-pv-doc-table-wrap {
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+}
+body[data-agency-design]
+	.iz-hist-expandable-money--inline
+	> .iz-outlet-shift-log-summary__metrics {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px;
+}
+body[data-agency-design]
+	.iz-hist-expandable-money--inline
+	.iz-outlet-shift-log-summary__metric {
+	position: relative;
+	min-width: 0;
+	padding: 18px 40px 18px 18px;
+	background: var(--iz-panel2);
+	border-color: var(--iz-line);
+	text-align: left;
+}
+body[data-agency-design]
+	.iz-hist-expandable-money--inline
+	.iz-outlet-shift-log-summary__metric-label {
+	font-size: var(--iz-fs-body);
+	font-weight: 400;
+	letter-spacing: normal;
+	text-transform: none;
+	color: var(--iz-muted);
+}
+body[data-agency-design]
+	.iz-hist-expandable-money--inline
+	.iz-outlet-shift-log-summary__metric-value {
+	font-size: var(--iz-fs-head);
+	line-height: 1.4;
+	color: var(--iz-txt);
+}
+body[data-agency-design] .iz-hist-inline-breakdown {
+	grid-column: 1 / -1;
+	order: 1;
+	min-width: 0;
+}
+body[data-agency-design] .iz-hist-metric-chevron {
+	position: absolute;
+	right: 16px;
+	top: 22px;
+	width: 16px;
+	height: 16px;
+}
+body[data-agency-design] .is-open > .iz-hist-metric-chevron {
+	transform: rotate(180deg);
+}
+body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
+	margin: 0;
+}
+@media (max-width: 767px) {
+	.iz-agency-finance .iz-payroll-tabs {
+		width: 100%;
+	}
+	.iz-agency-finance .iz-payroll-tabs > .iz-payroll-tab {
+		flex: 1 1 120px;
+	}
+	.iz-agency-finance .iz-txn-filters,
+	.iz-agency-finance .iz-outlet-hist-grid,
+	.iz-agency-finance .iz-outlet-hist-metrics--pair,
+	.iz-agency-finance .iz-agency-payroll-metrics {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.iz-agency-finance .iz-txn-filters {
+		padding: 16px;
+		margin-top: 12px;
+	}
+	.iz-agency-finance .iz-outlet-hist-card,
+	.iz-agency-finance .iz-agency-voucher-card {
+		padding: 16px;
+	}
+	.iz-agency-finance .iz-agency-voucher-card {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.iz-agency-finance .iz-agency-voucher-card > .text-right {
+		padding-top: 16px;
+		border-top: 1px solid var(--iz-line);
+		text-align: left;
+	}
+	.iz-agency-finance .iz-filter-groups {
+		flex-direction: column;
+	}
+	.iz-agency-finance .iz-filter-group {
+		width: 100%;
+	}
+	.iz-agency-finance .iz-agency-payroll-filters {
+		margin-top: 12px;
+	}
+	.iz-agency-finance .iz-pv-doc-top,
+	.iz-agency-finance .iz-pv-doc-bottom,
+	.iz-agency-finance .iz-pv-doc-sig {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	body[data-agency-design]
+		.iz-hist-expandable-money--inline
+		> .iz-outlet-shift-log-summary__metrics,
+	body[data-agency-design]
+		.iz-hist-inline-breakdown
+		.iz-hist-money-breakdown__metrics {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	body[data-agency-design] .iz-hist-inline-breakdown {
+		order: 0;
+	}
+	body[data-agency-design]
+		.iz-hist-inline-breakdown
+		.iz-hist-money-breakdown__card-head {
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+}
+.iz-approved-voucher-table-scroll {
+	overflow-x: auto;
+	max-width: 100%;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+.iz-approved-voucher-table {
+	width: 100%;
+	min-width: 1000px;
+	border-collapse: collapse;
+	font-size: var(--iz-fs-body);
+}
+.iz-approved-voucher-table th {
+	padding: 16px;
+	text-align: left;
+	color: var(--iz-muted);
+	background: var(--iz-panel2);
+	font-weight: 400;
+}
+.iz-approved-voucher-table td {
+	padding: 20px 16px;
+	border-top: 1px solid var(--iz-line);
+	vertical-align: middle;
+}
+.iz-approved-voucher-table td:first-child {
+	min-width: 260px;
+}
+.iz-approved-voucher-table td:last-child {
+	min-width: 160px;
+}
+.iz-portal .iz-approved-voucher-table .iz-btn {
+	width: auto;
+	margin-top: 12px;
+	white-space: normal;
+}
+.iz-portal .iz-agency-payroll-metrics .iz-stat-tile {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.iz-portal .iz-agency-payroll-metrics .iz-kpi-label {
+	order: -1;
+}
+.iz-portal .iz-agency-payroll-filters .iz-filter-groups {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px;
+}
+.iz-portal .iz-agency-payroll-filters .iz-filter-group,
+.iz-portal .iz-agency-payroll-filters .iz-filter-group select {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+.iz-portal .iz-agency-payroll-filters .iz-filter-chips {
+	display: flex;
+	flex-wrap: wrap;
+}
+@media (max-width: 767px) {
+	.iz-portal .iz-agency-payroll-filters .iz-filter-groups {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+/* Search and status share a light toolbar instead of another nested card. */
+.iz-portal .iz-receipt-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px 20px;
+	margin-top: 20px;
+	padding: 0 0 14px;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-receipt-search {
+	flex: 1 1 300px;
+	min-width: 0;
+}
+.iz-receipt-filter-label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+.iz-portal .iz-receipt-search input {
+	height: 46px;
+	padding-left: 38px;
+	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	background: var(--iz-panel);
+	border-radius: 8px;
+}
+.iz-receipt-search svg {
+	left: 14px;
+}
+.iz-receipt-status-filter {
+	flex: 1.5 1 570px;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+.iz-receipt-status-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.iz-portal .iz-receipt-status-chip {
+	flex: 1 1 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	min-height: 46px;
+	padding: 10px 8px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--iz-muted);
+	font: inherit;
+	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	white-space: nowrap;
+	cursor: pointer;
+}
+.iz-portal .iz-receipt-status-chip[aria-pressed="true"] {
+	box-shadow: inset 0 -2px var(--iz-violet);
+	color: var(--iz-txt);
+}
+.iz-portal .iz-receipt-status-chip:hover {
+	color: var(--iz-txt);
+	background: var(--iz-panel2);
+}
+.iz-portal .iz-receipt-status-chip:focus-visible {
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 2px;
+}
+.iz-receipt-status-count {
+	color: var(--iz-muted2);
+	font-size: 12px; /* iz-dense-filter: approved compact filter control */
+	font-variant-numeric: tabular-nums;
+}
+@media (max-width: 600px) {
+	.iz-receipt-status-options {
+		gap: 0 8px;
+	}
+	.iz-portal .iz-receipt-status-chip {
+		flex: 1 1 90px;
+	}
+}
+
+/* Consistent flat filters throughout Payroll, including populated queues. */
+.iz-portal .iz-agency-payroll .iz-agency-payroll-filters {
+	display: grid;
+	grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr));
+	align-items: end;
+	gap: 12px 16px;
+	padding: 0 0 16px;
+	border: 0;
+	border-bottom: 1px solid var(--iz-line);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+.iz-payroll-filter-heading {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--iz-muted);
+	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+}
+.iz-portal .iz-agency-payroll .iz-agency-payroll-filters .iz-filter-groups {
+	display: contents;
+}
+.iz-portal
+	.iz-agency-payroll-filters
+	:is(.iz-payroll-filter-label, .iz-filter-group-label) {
+	display: block;
+	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	line-height: 20px;
+	font-weight: 400;
+	margin: 0 0 6px;
+	color: var(--iz-muted);
+}
+.iz-portal .iz-agency-payroll-filters :is(input, select),
+.iz-portal .iz-payroll-facets select,
+.iz-portal .iz-payroll-queue-search {
+	min-width: 0;
+	width: 100%;
+	height: 46px;
+	min-height: 46px;
+	padding: 0 12px;
+	border: 1px solid var(--iz-line);
+	border-radius: 8px;
+	background: var(--iz-panel);
+	color: var(--iz-txt);
+	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-weight: 400;
+	box-sizing: border-box;
+}
+.iz-portal .iz-payroll-filter-search input {
+	padding-left: 38px;
+}
+.iz-payroll-filter-search svg {
+	left: 14px;
+}
+.iz-payroll-facets {
+	display: grid;
+	gap: 14px;
+	margin: 14px 0 18px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-payroll-facets-money {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.iz-payroll-facet-label {
+	min-width: 42px;
+	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	color: var(--iz-muted);
+}
+.iz-payroll-facets-selects {
+	display: flex;
+	flex-wrap: wrap;
+	flex: 1 1 440px;
+	gap: 10px;
+	margin-left: auto;
+	min-width: 0;
+}
+.iz-portal .iz-payroll-facets-selects > * {
+	flex: 1 1 130px;
+	min-width: 0;
+	width: auto;
+}
+.iz-payroll-facets-days {
+	display: grid;
+	grid-template-columns: 42px repeat(8, minmax(0, 1fr));
+	align-items: center;
+	gap: 6px;
+}
+.iz-portal .iz-payroll-facet-chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-width: 0;
+	min-height: 44px;
+	padding: 8px 10px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--iz-muted);
+	font: inherit;
+	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	white-space: normal;
+	cursor: pointer;
+}
+.iz-portal .iz-payroll-facet-chip.on {
+	border-color: var(--iz-line);
+	background: #372d45;
+	color: var(--iz-txt);
+}
+.iz-portal .iz-payroll-facet-chip:not(:disabled):hover {
+	background: var(--iz-panel2);
+	color: var(--iz-txt);
+}
+.iz-portal .iz-payroll-facet-chip:focus-visible {
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 2px;
+}
+.iz-portal .iz-payroll-facet-chip:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+.iz-payroll-facet-chip .iz-filter-chip__count {
+	font-size: 12px; /* iz-dense-filter: approved compact filter control */
+	color: var(--iz-muted2);
+}
+.iz-payroll-queue-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px 20px;
+	padding-bottom: 14px;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-portal .iz-payroll-queue-search {
+	flex: 1 1 300px;
+	width: auto;
+}
+.iz-payroll-queue-status {
+	display: flex;
+	flex: 1 1 320px;
+	gap: 4px;
+}
+@media (max-width: 767px) {
+	.iz-portal .iz-agency-payroll .iz-agency-payroll-filters {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.iz-payroll-facets-days {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+	.iz-payroll-facets-days .iz-payroll-facet-label {
+		grid-column: 1 / -1;
+	}
+	.iz-portal .iz-payroll-facets-days .iz-payroll-facet-chip {
+		flex-direction: column;
+		gap: 2px;
+		padding: 6px;
+	}
+	.iz-payroll-facets-selects {
+		flex-basis: 100%;
+	}
+	.iz-portal .iz-payroll-facets-selects > * {
+		flex-basis: 100%;
+	}
+}

@@ -1,7 +1,14 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronLeft, LogOut, User, X } from "lucide-react";
+import {
+	sectionBadgeTotal,
+	useAdminNavSections,
+} from "@/components/admin/admin-design-chrome";
+import { adminConsoleRoleLabel } from "@/components/admin/admin-role-label";
+import { Button } from "@/components/ui/button";
 import {
 	SidebarContent,
+	SidebarFooter,
 	SidebarHeader,
 	Sidebar as SidebarUi,
 	useSidebar,
@@ -12,6 +19,7 @@ import {
 	sidebarSections,
 } from "@/constants/links";
 import { useSidebarBadges } from "@/hooks/use-sidebar-badges";
+import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
@@ -33,8 +41,9 @@ export function Sidebar() {
 	const { t } = usePortalLocale();
 	const location = useLocation();
 	const { user } = useCurrentUser();
-	const { state } = useSidebar();
-	const collapsed = state === "collapsed";
+	const { state, isMobile, setOpenMobile } = useSidebar();
+	const collapsed = !isMobile && state === "collapsed";
+	const { logout } = useAuthActions();
 	const badges = useSidebarBadges();
 	const admin = isAdminUser(user);
 
@@ -44,11 +53,29 @@ export function Sidebar() {
 		const pathnameWithoutQuery = cleanPathname.split("?")[0];
 		const hrefWithoutQuery = cleanHref.split("?")[0];
 
+		// The sidebar's one RBAC entry links to Role, but Module and Pending are
+		// pages of the same console: without this they lit no item and left the
+		// OPERATION group folded shut on arrival.
+		const RBAC = "/admin/rbac";
+		if (
+			hrefWithoutQuery.startsWith(`${RBAC}/`) &&
+			pathnameWithoutQuery.startsWith(`${RBAC}/`)
+		) {
+			return true;
+		}
+
 		return (
 			pathnameWithoutQuery === hrefWithoutQuery ||
 			pathnameWithoutQuery.startsWith(`${hrefWithoutQuery}/`)
 		);
 	};
+
+	// The group holding the current page opens itself, so the page's own entry
+	// (and its badge) is never folded away on arrival.
+	const activeSectionKey = sidebarSections.find((section) =>
+		section.items.some((item) => isActive(item.href)),
+	)?.key;
+	const { sections, toggleSection } = useAdminNavSections(activeSectionKey);
 
 	const hasPermission = (permission: string) => {
 		if (permission === "*") return true;
@@ -76,7 +103,7 @@ export function Sidebar() {
 			className="admin-sidebar relative border-r border-sidebar-border"
 			collapsible="icon"
 		>
-			<SidebarHeader className="border-b border-sidebar-border/60 py-4">
+			<SidebarHeader className="iz-admin-sidebar-header py-4">
 				<div
 					className={cn(
 						"flex items-center px-2",
@@ -96,7 +123,38 @@ export function Sidebar() {
 							InnocenZ
 						</span>
 					)}
+					{isMobile && (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="ml-auto"
+							aria-label={t.common.close}
+							onClick={() => setOpenMobile(false)}
+						>
+							<X aria-hidden />
+						</Button>
+					)}
 				</div>
+				{!collapsed && (
+					<Link
+						to="/admin/profile"
+						className="iz-admin-sidebar-profile"
+						onClick={() => setOpenMobile(false)}
+					>
+						<User aria-hidden className="size-5 shrink-0" />
+						<div className="min-w-0">
+							<p
+								className="iz-admin-profile-name"
+								title={user?.displayName ?? t.webShell.userFallback}
+							>
+								{user?.displayName ?? t.webShell.userFallback}
+							</p>
+							<p className="text-muted-foreground">
+								{adminConsoleRoleLabel(user?.roles, t)}
+							</p>
+						</div>
+					</Link>
+				)}
 			</SidebarHeader>
 
 			<SidebarContent className="px-2 py-3">
@@ -109,10 +167,24 @@ export function Sidebar() {
 							isActive={isActive}
 							canAccess={canAccess}
 							badges={badges}
+							open={sections[section.key] === true}
+							onToggle={() => toggleSection(section.key)}
+							onNavigate={() => setOpenMobile(false)}
 						/>
 					))}
 				</nav>
 			</SidebarContent>
+			<SidebarFooter className="iz-admin-sidebar-footer">
+				<Button
+					variant="outline"
+					className="iz-admin-signout"
+					onClick={logout}
+					title={t.admin.logOut}
+				>
+					<LogOut aria-hidden className="size-4" />
+					{!collapsed && t.admin.logOut}
+				</Button>
+			</SidebarFooter>
 
 			<SidebarCollapseToggle />
 		</SidebarUi>
@@ -125,33 +197,70 @@ function SidebarSectionGroup({
 	isActive,
 	canAccess,
 	badges,
+	open,
+	onToggle,
+	onNavigate,
 }: {
 	section: SidebarSection;
 	collapsed: boolean;
 	isActive: (href: string) => boolean;
 	canAccess: (item: SidebarNavItem) => boolean;
 	badges: Record<string, number>;
+	open: boolean;
+	onToggle: () => void;
+	onNavigate: () => void;
 }) {
 	const { t } = usePortalLocale();
 	const visibleItems = section.items.filter(canAccess);
 
 	if (visibleItems.length === 0) return null;
 
+	// A closed group still says something inside it is waiting.
+	const closedTotal = open
+		? 0
+		: sectionBadgeTotal(
+				visibleItems.map((item) => badges[item.key] ?? item.badge),
+			);
+
 	return (
 		<div className="admin-sidebar-section">
 			{!collapsed && (
-				<div className="admin-sidebar-section-header pointer-events-none">
+				<button
+					type="button"
+					className="admin-sidebar-section-header"
+					onClick={onToggle}
+					aria-expanded={open}
+					aria-controls={`admin-nav-${section.key}`}
+				>
 					<span>{adminNavLabel(section.key, section.label, t)}</span>
-				</div>
+					<span className="ml-auto inline-flex items-center gap-2">
+						{closedTotal > 0 && (
+							<span className="admin-sidebar-badge">{closedTotal}</span>
+						)}
+						<ChevronDown
+							aria-hidden
+							className={cn(
+								"size-4 transition-transform",
+								!open && "-rotate-90",
+							)}
+						/>
+					</span>
+				</button>
 			)}
 
-			<ul className={cn("space-y-1", collapsed && "space-y-1.5")}>
+			<ul
+				id={`admin-nav-${section.key}`}
+				hidden={!collapsed && !open}
+				className={cn("space-y-1", collapsed && "space-y-1.5")}
+			>
 				{visibleItems.map((item) => {
 					const badge = badges[item.key] ?? item.badge;
 					return (
 						<li key={item.key}>
 							<Link
 								to={item.href}
+								onClick={onNavigate}
+								aria-current={isActive(item.href) ? "page" : undefined}
 								title={
 									collapsed ? adminNavLabel(item.key, item.title, t) : undefined
 								}
@@ -164,7 +273,7 @@ function SidebarSectionGroup({
 								<item.icon className="h-[22px] w-[22px] shrink-0" />
 								{!collapsed && (
 									<>
-										<span className="flex-1 truncate">
+										<span className="min-w-0 flex-1 whitespace-normal leading-snug">
 											{adminNavLabel(item.key, item.title, t)}
 										</span>
 										{badge != null && badge > 0 && (

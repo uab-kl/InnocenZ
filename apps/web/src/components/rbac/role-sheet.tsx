@@ -332,7 +332,7 @@ export function RoleSheet({
 
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>
-			<SheetContent className="flex w-full flex-col sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+			<SheetContent className="admin-rbac-sheet admin-role-sheet flex w-full flex-col sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
 				<SheetHeader className="border-b border-border pb-4">
 					<div className="flex items-start gap-3 pr-8">
 						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-500">
@@ -357,7 +357,7 @@ export function RoleSheet({
 						form.handleSubmit();
 					}}
 				>
-					<ScrollArea className="flex-1 px-4 py-6">
+					<ScrollArea className="min-h-0 min-w-0 flex-1 px-4 py-6">
 						<FieldGroup className="gap-6">
 							<form.Field name="roleName">
 								{(field) => {
@@ -442,14 +442,14 @@ export function RoleSheet({
 								<>
 									<Separator />
 									<div className="space-y-3">
-										<div className="flex items-center justify-between gap-2">
-											<div className="flex items-center gap-2">
-												<Key className="h-4 w-4 text-emerald-500" />
-												<h3 className="text-sm font-semibold">
+										<div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+											<div className="flex min-w-0 items-center gap-2">
+												<Key className="h-4 w-4 shrink-0 text-emerald-500" />
+												<h3 className="min-w-0 text-sm font-semibold break-words">
 													{t.rbac.modulePermissions}
 												</h3>
 											</div>
-											<div className="flex gap-1.5 text-xs text-muted-foreground">
+											<div className="flex min-w-0 max-w-full flex-wrap gap-1.5 text-xs text-muted-foreground">
 												<Badge variant="outline">{t.rbac.cCreate}</Badge>
 												<Badge variant="outline">{t.rbac.rRead}</Badge>
 												<Badge variant="outline">{t.rbac.uUpdate}</Badge>
@@ -477,7 +477,7 @@ export function RoleSheet({
 												{t.rbac.noModulesForPortal}
 											</p>
 										) : (
-											<div className="overflow-x-auto rounded-lg border border-border">
+											<div className="admin-rbac-matrix rounded-lg border border-border">
 												<Table>
 													<TableHeader>
 														<TableRow>

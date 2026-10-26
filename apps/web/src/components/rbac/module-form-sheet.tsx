@@ -106,7 +106,7 @@ export function ModuleFormSheet({
 
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>
-			<SheetContent className="flex w-full flex-col sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+			<SheetContent className="admin-rbac-sheet admin-module-sheet flex w-full flex-col sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
 				<SheetHeader className="border-b border-border pb-4">
 					<div className="flex items-start gap-3 pr-8">
 						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--lavender-soft)/50 bg-(--lavender-soft)/20 text-lavender">
@@ -124,14 +124,14 @@ export function ModuleFormSheet({
 				</SheetHeader>
 
 				<form
-					className="flex flex-1 flex-col"
+					className="flex min-h-0 min-w-0 flex-1 flex-col"
 					onSubmit={(event) => {
 						event.preventDefault();
 						event.stopPropagation();
 						form.handleSubmit();
 					}}
 				>
-					<FieldGroup className="flex-1 gap-6 px-4 py-6">
+					<FieldGroup className="admin-module-fields min-h-0 flex-1 gap-6 overflow-y-auto px-4 py-6">
 						<form.Field name="moduleName">
 							{(field) => {
 								const isInvalid =

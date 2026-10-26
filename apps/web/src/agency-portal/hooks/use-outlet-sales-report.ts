@@ -1,8 +1,13 @@
+import {
+	fetchAllOutletAssignments,
+	outletAssignmentsKey,
+} from "@agency-portal/hooks/use-outlet-shared-queries";
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import type { ShiftAssignment } from "@/services/shift-assignment";
 import {
 	fetchShiftSaleReport,
 	type ShiftCostPrDayTotals,
@@ -94,6 +99,9 @@ export interface TopPrRow {
 	 * the same sum the "PR spend" headline shows, so the card and the total
 	 * agree. */
 	earned: number;
+	wages: number;
+	commission: number;
+	overtime: number;
 	agency: string;
 }
 
@@ -124,6 +132,16 @@ export interface UseOutletSalesReport {
 	 * three cannot drift.
 	 */
 	reportableDateIsos: string[];
+	/**
+	 * Supplying agency names by agency id, read off the venue's assignment list
+	 * (the joined agency FK — an outlet cannot read `/agency`). The
+	 * reconciliation banner names each agency's statement with it.
+	 */
+	agencyNames: ReadonlyMap<string, string>;
+	/** See `wagesByAgency`. Only the reconciliation banner reads it. */
+	buildWagesByAgency: (
+		range: SalesReportRange,
+	) => ReadonlyMap<string, number> | null;
 	buildReport: (range: SalesReportRange) => WeeklyReport | null;
 	buildFloorBreakdown: (range: SalesReportRange) => FloorBreakdown;
 	buildTopPrs: (range: SalesReportRange) => TopPrRow[];
@@ -224,6 +242,101 @@ function inRange(dateIso: string, range: SalesReportRange): boolean {
 }
 
 /**
+ * The cost rows leave these out server-side (`NON_STAFFING_STATUSES`), so the
+ * agency named beside a PR must come from the same nights the money did.
+ */
+const NON_STAFFING = new Set(["cancelled", "no_show", "leave_approved"]);
+
+/**
+ * WHO SUPPLIED EACH PR in the window — the agency names, per PR id.
+ *
+ * The report's `costByPrDay` carries no agency, so the "PR / agency" column
+ * hard-coded "" and read "—" on every row. The assignment LIST already joins
+ * the supplying agency's name onto each row (an outlet cannot read `/agency`,
+ * so this is its one source for the name), and `shift_assignment.pr_id` is the
+ * same id the cost rows are keyed on.
+ *
+ * Range-scoped like the money: a PR who came through two agencies in the
+ * window names both, and one who came through only one names only that one.
+ * Pinned to this venue, as the report is — a two-venue account's assignment
+ * list is the union of both.
+ */
+export function agencyLabelsByPr(
+	assignments: readonly Pick<
+		ShiftAssignment,
+		"prId" | "status" | "agencyName" | "shiftDate" | "outletId"
+	>[],
+	outletId: string | undefined,
+	range: SalesReportRange,
+): Map<string, string> {
+	const names = new Map<string, Set<string>>();
+	for (const a of assignments) {
+		if (!a.agencyName || !a.shiftDate) continue;
+		if (outletId && a.outletId && a.outletId !== outletId) continue;
+		if (NON_STAFFING.has(a.status)) continue;
+		if (!inRange(a.shiftDate, range)) continue;
+		const set = names.get(a.prId) ?? new Set<string>();
+		set.add(a.agencyName);
+		names.set(a.prId, set);
+	}
+	return new Map(
+		[...names].map(([prId, set]) => [
+			prId,
+			[...set].sort((x, y) => x.localeCompare(y)).join(" · "),
+		]),
+	);
+}
+
+/**
+ * A cost row as the backend now sends it: the (PR × agency × day) grain, with
+ * the SUPPLYING agency's id. Optional because a backend older than that split
+ * sends rows without it.
+ */
+type CostRowWithAgency = ShiftCostPrDayTotals & { agencyId?: string | null };
+
+/**
+ * WAGES per supplying agency over a window — `shift_assignment.pay_amount`
+ * alone, the column a `collection_invoice` bills from.
+ *
+ * The reconciliation banner's other half. A statement is ONE agency's bill
+ * (the server groups it by `sa.agency_id`), so checking it against the venue's
+ * wages from every agency made a two-agency venue read the second agency's
+ * wages as a billing difference. Same sum as `WeeklyReport.totalWages`, split.
+ *
+ * NULL when an in-range row carries no agency id (a backend older than the
+ * split): the wages cannot be attributed, and guessing would be the bug again.
+ */
+export function wagesByAgency(
+	rows: readonly CostRowWithAgency[],
+	range: SalesReportRange,
+): ReadonlyMap<string, number> | null {
+	const byAgency = new Map<string, number>();
+	for (const c of rows) {
+		if (!inRange(c.soldOn, range)) continue;
+		if (!c.agencyId) return null;
+		byAgency.set(c.agencyId, (byAgency.get(c.agencyId) ?? 0) + c.cost);
+	}
+	return byAgency;
+}
+
+/**
+ * Agency id → name from the venue's assignment list. The first non-empty name
+ * an id carries wins; ids with no joined name are left out so the caller
+ * prints its own fallback rather than a blank.
+ */
+export function agencyNamesById(
+	assignments: readonly Pick<ShiftAssignment, "agencyId" | "agencyName">[],
+): ReadonlyMap<string, string> {
+	const names = new Map<string, string>();
+	for (const a of assignments) {
+		if (a.agencyId && a.agencyName && !names.has(a.agencyId)) {
+			names.set(a.agencyId, a.agencyName);
+		}
+	}
+	return names;
+}
+
+/**
  * Reads the outlet's floor-sales report (revenue, from shift_sale) and its
  * shift assignments (cost, from shift_assignment.pay_amount) once, then exposes
  * pure builders that slice a date range into the shapes OutletSalesDashboard
@@ -266,6 +379,20 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 	const costByPrDay: ShiftCostPrDayTotals[] =
 		reportQuery.data?.costByPrDay ?? [];
 
+	// The supplying agency per assignment, for the "PR / agency" column. The
+	// SAME key and fetcher Today and Post Job use, so it shares their cache.
+	const assignmentsQuery = useQuery({
+		queryKey: outletAssignmentsKey,
+		queryFn: () => fetchAllOutletAssignments({}, logout),
+		enabled: backed,
+		staleTime: 30_000,
+	});
+	const assignments = assignmentsQuery.data?.data;
+	const agencyNames = useMemo(
+		() => agencyNamesById(assignments ?? []),
+		[assignments],
+	);
+
 	/**
 	 * Capped at today: a night that has not happened has nothing to report on,
 	 * and the demo path has always capped the same way.
@@ -290,14 +417,30 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 		() =>
 			(range: SalesReportRange): TopPrRow[] => {
 				// Cost per PR, restricted to the range via the cost row's sold-on day.
-				const perPr = new Map<string, { name: string; earned: number }>();
+				const perPr = new Map<
+					string,
+					{
+						name: string;
+						earned: number;
+						wages: number;
+						commission: number;
+						overtime: number;
+					}
+				>();
+				const agencyByPr = agencyLabelsByPr(assignments ?? [], outletId, range);
 				for (const c of costByPrDay) {
 					if (!inRange(c.soldOn, range)) continue;
 					const cur = perPr.get(c.prId) ?? {
 						name: c.prName ?? "PR",
 						earned: 0,
+						wages: 0,
+						commission: 0,
+						overtime: 0,
 					};
 					cur.earned += prSpend(c);
+					cur.wages += c.cost;
+					cur.commission += c.commission ?? 0;
+					cur.overtime += c.overtime ?? 0;
 					if (c.prName) cur.name = c.prName;
 					perPr.set(c.prId, cur);
 				}
@@ -306,11 +449,15 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 						prId,
 						name: v.name,
 						earned: v.earned,
-						agency: "",
+						wages: v.wages,
+						commission: v.commission,
+						overtime: v.overtime,
+						// "" when no assignment names one — the dashboard prints "—".
+						agency: agencyByPr.get(prId) ?? "",
 					}))
 					.sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name));
 			},
-		[costByPrDay],
+		[costByPrDay, assignments, outletId],
 	);
 
 	/**
@@ -415,6 +562,8 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 		isLoading: reportQuery.isLoading,
 		hasData: byDaySales.length > 0,
 		reportableDateIsos,
+		agencyNames,
+		buildWagesByAgency: (range) => wagesByAgency(costByPrDay, range),
 		buildReport,
 		buildFloorBreakdown,
 		buildTopPrs,

@@ -1,16 +1,21 @@
-import { InnocenZLogoHorizontal } from "@agency-portal/components/Brand";
+import { InnocenZWordmark, LogoMark } from "@agency-portal/components/Brand";
 import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
-import {
-	BottomNav,
-	type NavItem,
-	navIsActive,
-} from "@agency-portal/components/Nav";
+import { type NavItem, navIsActive } from "@agency-portal/components/Nav";
 import {
 	NavAlertBadge,
 	navAlertAriaSuffix,
 	useNavAlerts,
 } from "@agency-portal/components/portal/NavAlertBadge";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
+import {
+	PortalBackToTop,
+	PortalIconGuide,
+	type PortalNavSection,
+	type PortalNavSections,
+	portalNavSection,
+	portalPageLabel,
+	usePortalNavSections,
+} from "@agency-portal/components/portal/PortalDesignChrome";
 import { PortalNavAlerts } from "@agency-portal/components/portal/PortalNavAlerts";
 
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
@@ -27,19 +32,26 @@ import {
 } from "@agency-portal/lib/use-portal-can";
 import { Link, useLocation } from "@tanstack/react-router";
 import {
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	LogOut,
 	Menu as MenuIcon,
+	X,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useProfile } from "@/lib/auth/use-profile";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type PortalKind = "agency" | "outlet";
@@ -94,36 +106,6 @@ const OUTLET_EXTRAS: ExtraNavItem[] = [
 	},
 ];
 
-/** "Good morning" / "Good afternoon" / "Good evening", by the wall clock. */
-function greetingForHour(t: PortalTranslations) {
-	const h = new Date().getHours();
-	if (h < 12) return t.shell.goodMorning;
-	if (h < 17) return t.shell.goodAfternoon;
-	return t.shell.goodEvening;
-}
-
-/**
- * "Good morning, Vicky" — the greeting plus the signed-in person's OWN name
- * (owner, 9 Sep 2026).
- *
- * The name is whatever that account carries as its name; `PortalShell` resolves
- * it once (`me.username` → the org record's owner name) and hands the same
- * string to the avatar and the rail, so the three can never disagree.
- *
- * ⚠️ This is the PERSON, not the organisation. The org and role were moved out
- * of this header on 8 Sep because the sidebar already prints them two inches
- * away; putting the person's name here adds a fact the rail does NOT carry
- * rather than re-running that duplication.
- *
- * Falls back to the bare greeting while `/auth/me` is still in flight, and for
- * a session with no name at all — never "Good morning, " with a dangling comma.
- */
-function portalGreeting(t: PortalTranslations, personName: string) {
-	const greeting = greetingForHour(t);
-	const name = personName.trim();
-	return name ? fill(t.shell.greetingNamed, { greeting, name }) : greeting;
-}
-
 /**
  * English nav label -> dictionary key.
  *
@@ -158,8 +140,45 @@ const NAV_KEY_BY_LABEL: Record<string, keyof PortalTranslations["nav"]> = {
 };
 
 /**
- * Applied to BOTH the sidebar and the mobile bottom nav. Translating at one of
- * the two render sites would leave a portal whose sidebar and bottom bar are in
+ * A page's own name when the sidebar does not carry it.
+ *
+ * The breadcrumb names a page by finding its sidebar item, so a page with NO
+ * item of its own — Special service, the outlet Profile — fell back to the
+ * portal's name and read "Outlet portal / Outlet portal". So did a page whose
+ * item this lane cannot see (Workspace for an Ops Head who typed the URL). The
+ * sidebar still wins whenever it has the page; this is only the fallback, and
+ * routes that merely redirect (`/outlet/dashboard`, `/agency/live`) need none.
+ *
+ * Keys are `keyof t.nav`, so a typo fails the build.
+ */
+const PAGE_KEY_BY_PATH: Record<string, keyof PortalTranslations["nav"]> = {
+	"/outlet/special-service": "specialService",
+	"/outlet/profile": "profile",
+	"/outlet/ratings": "ratings",
+	"/outlet/workspace": "workspace",
+	"/outlet/subscription": "subscription",
+	"/outlet/settings": "settings",
+	"/agency/special-service": "specialService",
+	"/agency/prs": "managePr",
+	"/agency/outlets": "manageOutlet",
+	"/agency/subscription": "subscription",
+	"/agency/profile": "settings",
+};
+
+export function shellPageLabel(
+	items: NavItem[],
+	pathname: string,
+	t: PortalTranslations,
+): string | undefined {
+	const fromNav = portalPageLabel(items, pathname);
+	if (fromNav) return fromNav;
+	const key = PAGE_KEY_BY_PATH[pathname.replace(/\/$/, "")];
+	return key ? t.nav[key] : undefined;
+}
+
+/**
+ * Applied to both the sidebar and the mobile drawer. Translating at one of
+ * the two render sites would leave a portal whose sidebar and drawer are in
  * different languages on the same screen.
  */
 function localiseNav(items: NavItem[], t: PortalTranslations): NavItem[] {
@@ -276,22 +295,29 @@ function PortalSidebar({
 	items,
 	identity,
 	onNavigate,
+	sections,
+	onToggleSection,
 }: {
 	portal: PortalKind;
 	items: NavItem[];
 	/** Who this rail is acting for — the same parts the greeting prints. */
 	identity: { name: string; role: string };
 	onNavigate?: () => void;
+	sections?: PortalNavSections;
+	onToggleSection?: (section: PortalNavSection) => void;
 }) {
 	const { pathname } = useLocation();
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const portalKindLabel =
 		portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal;
 
 	return (
 		<aside className="iz-portal-sidebar">
 			<div className="iz-portal-sidebar-brand">
-				<InnocenZLogoHorizontal className="iz-portal-sidebar-logo" />
+				<div className="iz-portal-sidebar-logo iz-approved-brand">
+					<LogoMark />
+					<InnocenZWordmark />
+				</div>
 				{/*
 				  WHO this rail is acting for, where the portal KIND used to be.
 				
@@ -306,17 +332,21 @@ function PortalSidebar({
 				  aria-label there is licensed to be dropped entirely, and the portal
 				  kind would have been announced to nobody.
 				*/}
-				<p className="iz-portal-sidebar-org mt-2" title={portalKindLabel}>
+				<p
+					className="iz-portal-sidebar-org mt-2"
+					title={`${identity.name} · ${identity.role}`}
+				>
 					<span className="sr-only">{portalKindLabel} · </span>
 					<TitleWithIcon
 						icon={iconForNav(portal === "agency" ? "PR Agency" : "Outlet")}
 					>
 						<span className="iz-portal-sidebar-org__name">
-							{identity.name}
+							<span className="iz-portal-sidebar-org__label">
+								{identity.name}
+							</span>
 							{identity.role ? (
 								<span className="iz-portal-sidebar-org__role">
-									{" "}
-									({identity.role})
+									{identity.role}
 								</span>
 							) : null}
 						</span>
@@ -325,14 +355,61 @@ function PortalSidebar({
 			</div>
 
 			<nav className="iz-portal-sidebar-nav">
-				{items.map((item) => (
-					<PortalSidebarLink
-						key={item.to}
-						item={item}
-						pathname={pathname}
-						onNavigate={onNavigate}
-					/>
-				))}
+				{sections
+					? (["workspace", "management", "organization"] as const).map(
+							(section) => {
+								const links = items.filter(
+									(item) => portalNavSection(item.to) === section,
+								);
+								if (!links.length) return null;
+								const labels =
+									locale === "zh"
+										? {
+												workspace: "工作区",
+												management: "管理",
+												organization: "组织",
+											}
+										: {
+												workspace: "Workspace",
+												management: "Management",
+												organization: "Organization",
+											};
+								return (
+									<div className="iz-outlet-nav-group" key={section}>
+										<button
+											type="button"
+											className="iz-outlet-nav-heading"
+											aria-expanded={sections[section]}
+											onClick={() => onToggleSection?.(section)}
+										>
+											<span>{labels[section]}</span>
+											<ChevronDown aria-hidden className="h-4 w-4" />
+										</button>
+										<div
+											className="iz-outlet-nav-items"
+											hidden={!sections[section]}
+										>
+											{links.map((item) => (
+												<PortalSidebarLink
+													key={item.to}
+													item={item}
+													pathname={pathname}
+													onNavigate={onNavigate}
+												/>
+											))}
+										</div>
+									</div>
+								);
+							},
+						)
+					: items.map((item) => (
+							<PortalSidebarLink
+								key={item.to}
+								item={item}
+								pathname={pathname}
+								onNavigate={onNavigate}
+							/>
+						))}
 			</nav>
 
 			<div className="iz-portal-sidebar-foot">
@@ -342,10 +419,9 @@ function PortalSidebar({
 				  middle, and the header's bell + avatar are in a different
 				  element entirely — so nothing here overlaps existing chrome.
 				*/}
-				<PortalLanguageSwitcher variant="sidebar" />
 				<button
 					type="button"
-					className="iz-portal-nav-link w-full"
+					className="iz-portal-nav-link iz-portal-sign-out w-full"
 					onClick={signOutToWelcome}
 				>
 					<LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
@@ -395,6 +471,9 @@ function PortalHeader({
 	avatarPhoto,
 	subLabel,
 	demoData,
+	pageLabel,
+	onOpenMenu,
+	menuOpen,
 }: {
 	portal: PortalKind;
 	orgName: string;
@@ -402,39 +481,41 @@ function PortalHeader({
 	avatarPhoto?: string | null;
 	subLabel: string;
 	demoData: boolean;
+	pageLabel?: string;
+	onOpenMenu?: () => void;
+	menuOpen?: boolean;
 }) {
 	const { t } = usePortalLocale();
-	const greeting = portalGreeting(t, ownerName);
+	const portalLabel =
+		portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal;
 
 	return (
 		<header className="iz-portal-header">
-			{/*
-			  THE GREETING AND THE PERSON — NOTHING ELSE (owner, 8 Sep 2026;
-			  the name added 9 Sep 2026).
-
-			  It used to read "Good afternoon, <Org> (Role)". The ORG and ROLE moved
-			  to the sidebar, where they say WHICH company this session is acting for;
-			  keeping them here as well had the header repeating the rail two inches
-			  away. What is here now is the signed-in PERSON's own name — a fact the
-			  rail does not carry, so this is not that duplication coming back.
-
-			  It is deliberately QUIETER than the page title below it: a pleasantry
-			  outranking the name of the page is what made the old 28px greeting tie
-			  with "Payroll & PV" for the eye.
-
-			  `truncate` because the name is user-typed and this line is 34px: without
-			  it a long one wraps the header or pushes the bell and avatar off a narrow
-			  screen. The full string stays available as the element's `title`.
-
-			  The clock is NOT here — it lives in `IzPageDateTime`, under the page
-			  title, on every page rather than on the two this header knew about.
-			*/}
+			<button
+				type="button"
+				className="iz-outlet-menu-button iz-outlet-icon-button"
+				onClick={onOpenMenu}
+				aria-label={t.shell.menu}
+				aria-haspopup="dialog"
+				aria-expanded={menuOpen}
+			>
+				<MenuIcon aria-hidden className="h-5 w-5" />
+			</button>
 			<div className="min-w-0 flex-1">
-				<p className="iz-portal-greeting truncate" title={greeting}>
-					{greeting}
+				<p
+					className="iz-portal-greeting truncate"
+					title={pageLabel || portalLabel}
+				>
+					<span className="iz-outlet-header-kind">
+						{portalLabel}
+						<span aria-hidden> / </span>
+					</span>
+					{pageLabel || portalLabel}
 				</p>
 			</div>
-			<div className="flex shrink-0 items-center gap-2">
+			<div className="iz-portal-header-tools flex shrink-0 items-center gap-2">
+				<PortalIconGuide />
+				<PortalLanguageSwitcher variant="header" />
 				{demoData && (
 					<span
 						className="iz-tiny rounded-full border border-[var(--iz-danger,#dc2626)] px-2 py-0.5 font-bold uppercase tracking-widest text-[var(--iz-danger,#dc2626)]"
@@ -511,6 +592,15 @@ export function PortalShell({
 		owner.ownerName.trim() ||
 		"";
 	const identity = portalIdentityParts(orgName, ownerName, subLabel);
+	const { sections, toggleSection } = usePortalNavSections(portal);
+	const { pathname } = useLocation();
+	useEffect(() => {
+		const attribute = portal === "agency" ? "agencyDesign" : "outletDesign";
+		document.body.dataset[attribute] = "true";
+		return () => {
+			delete document.body.dataset[attribute];
+		};
+	}, [portal]);
 
 	const orgProfileOnly =
 		getPortalSessionKind() === "real" &&
@@ -560,11 +650,42 @@ export function PortalShell({
 	// way `collapsed` is: a drawer that reopened itself on the next page load
 	// would cover the screen someone had just navigated to.
 	const [menuOpen, setMenuOpen] = useState(false);
+	const drawerRef = useRef<HTMLDivElement>(null);
 	const closeMenu = useCallback(() => setMenuOpen(false), []);
 	useEffect(() => {
+		const desktop = window.matchMedia("(min-width: 768px)");
+		const closeOnDesktop = () => {
+			if (desktop.matches) setMenuOpen(false);
+		};
+		desktop.addEventListener("change", closeOnDesktop);
+		return () => desktop.removeEventListener("change", closeOnDesktop);
+	}, []);
+	useEffect(() => {
 		if (!menuOpen) return;
+		const previousFocus =
+			document.activeElement instanceof HTMLElement
+				? document.activeElement
+				: null;
+		const panel = drawerRef.current;
+		panel?.querySelector<HTMLElement>("button")?.focus();
 		const onKey = (event: KeyboardEvent) => {
 			if (event.key === "Escape") setMenuOpen(false);
+			if (event.key === "Tab" && panel) {
+				const focusable = Array.from(
+					panel.querySelectorAll<HTMLElement>(
+						'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]',
+					),
+				).filter((el) => el.getClientRects().length > 0);
+				const first = focusable[0];
+				const last = focusable[focusable.length - 1];
+				if (event.shiftKey && document.activeElement === first) {
+					event.preventDefault();
+					last?.focus();
+				} else if (!event.shiftKey && document.activeElement === last) {
+					event.preventDefault();
+					first?.focus();
+				}
+			}
 		};
 		window.addEventListener("keydown", onKey);
 		// The panel sits over a scrolling viewport, so without this a touch drag
@@ -575,6 +696,7 @@ export function PortalShell({
 		return () => {
 			window.removeEventListener("keydown", onKey);
 			document.body.style.overflow = previousOverflow;
+			previousFocus?.focus();
 		};
 	}, [menuOpen]);
 
@@ -589,6 +711,8 @@ export function PortalShell({
 					portal={portal}
 					items={localiseNav(sidebarItems, t)}
 					identity={identity}
+					sections={sections}
+					onToggleSection={toggleSection}
 				/>
 
 				<button
@@ -607,7 +731,7 @@ export function PortalShell({
 					)}
 				</button>
 
-				<div className="iz-portal-main">
+				<div className="iz-portal-main" inert={menuOpen ? true : undefined}>
 					<PortalHeader
 						portal={portal}
 						orgName={orgName}
@@ -615,39 +739,17 @@ export function PortalShell({
 						avatarPhoto={personalPhoto}
 						subLabel={subLabel}
 						demoData={demoData}
+						pageLabel={shellPageLabel(
+							localiseNav(sidebarItems, t),
+							pathname,
+							t,
+						)}
+						onOpenMenu={() => setMenuOpen(true)}
+						menuOpen={menuOpen}
 					/>
 
 					<div className="iz-portal-viewport">{children}</div>
 				</div>
-
-				{navItems.length > 0 && (
-					<div className="iz-portal-mobile-footer md:hidden">
-						<BottomNav
-							items={localiseNav(navItems, t)}
-							trailing={
-								/*
-							  The phone's way into everything the tab bar cannot hold.
-							  The bar is fed `navItems` (the base list) while the rail is
-							  fed `sidebarItems` (base + permitted extras), so without
-							  this the extras — Settings, Subscription, Workspace,
-							  Manage PR, Manage Outlet — plus the language switcher and
-							  Sign out were all unreachable below 768px.
-							*/
-								<button
-									type="button"
-									onClick={() => setMenuOpen(true)}
-									aria-haspopup="dialog"
-									aria-expanded={menuOpen}
-									data-active={menuOpen ? "true" : undefined}
-									className={menuOpen ? "on" : ""}
-								>
-									<MenuIcon className="h-5 w-5" strokeWidth={1.8} />
-									<span>{t.shell.menu}</span>
-								</button>
-							}
-						/>
-					</div>
-				)}
 
 				{menuOpen && (
 					<div className="iz-portal-drawer md:hidden">
@@ -663,11 +765,20 @@ export function PortalShell({
 							onClick={closeMenu}
 						/>
 						<div
+							ref={drawerRef}
 							className="iz-portal-drawer__panel"
 							role="dialog"
 							aria-modal="true"
 							aria-label={t.shell.menu}
 						>
+							<button
+								type="button"
+								className="iz-outlet-drawer-close iz-outlet-icon-button"
+								aria-label={t.shell.closeMenu}
+								onClick={closeMenu}
+							>
+								<X aria-hidden className="h-5 w-5" />
+							</button>
 							{/*
 						  The SAME component the desktop rail renders, with the SAME
 						  merged and permission-filtered list — so a phone can never
@@ -686,6 +797,8 @@ export function PortalShell({
 								portal={portal}
 								items={localiseNav(sidebarItems, t)}
 								identity={identity}
+								sections={sections}
+								onToggleSection={toggleSection}
 								onNavigate={closeMenu}
 							/>
 						</div>
@@ -693,6 +806,7 @@ export function PortalShell({
 				)}
 
 				{overlay}
+				{!menuOpen && <PortalBackToTop />}
 			</div>
 		</PortalNavAlerts>
 	);

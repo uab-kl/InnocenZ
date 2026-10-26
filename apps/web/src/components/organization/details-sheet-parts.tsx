@@ -1,3 +1,4 @@
+import "@/components/admin/admin-management-design.css";
 import {
 	Ban,
 	CalendarDays,
@@ -22,6 +23,7 @@ import {
 	useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useActorName } from "@/components/admin/actor-name";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
@@ -30,8 +32,9 @@ import { fill } from "@/lib/portal-i18n/fill";
 import { getR2PublicBase } from "@/lib/proof-photo";
 import { formatDate } from "@/lib/utils";
 import {
+	memberStatusBadgeClass,
+	memberStatusLabel,
 	type OrgStatus,
-	orgStatusBadgeColors,
 	orgStatusLabel,
 } from "./org-status";
 
@@ -287,10 +290,11 @@ export function DetailsHero({
 }) {
 	const { t } = usePortalLocale();
 	const initial = name.trim().charAt(0).toUpperCase() || "?";
-	const badgeClass =
-		orgStatusBadgeColors[status as OrgStatus] ??
-		"border-muted-foreground/30 bg-muted text-muted-foreground";
-	const badgeLabel = orgStatusLabel(status, t);
+	// The member resolvers are a superset of the org ones: an organisation's
+	// four states read exactly as before, and a membership's `pending` /
+	// `rejected` or an account's `blocked` get a word instead of the raw code.
+	const badgeClass = memberStatusBadgeClass(status);
+	const badgeLabel = memberStatusLabel(status, t);
 	const [broken, setBroken] = useState(false);
 	const showImage = Boolean(imageUrl) && !broken;
 
@@ -300,7 +304,7 @@ export function DetailsHero({
 	}, [imageUrl]);
 
 	return (
-		<div className="flex flex-col items-center gap-2 py-5 text-center">
+		<div className="iz-admin-detail-hero flex flex-col items-center gap-2 py-5 text-center">
 			{showImage ? (
 				<img
 					src={imageUrl}
@@ -337,7 +341,7 @@ export function DetailField({
 	href?: string;
 }) {
 	return (
-		<div className="flex items-start gap-3">
+		<div className="iz-admin-detail-field flex items-start gap-3">
 			<Icon className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
 			<div className="min-w-0">
 				<div className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
@@ -368,7 +372,7 @@ export function DetailSection({
 	children: ReactNode;
 }) {
 	return (
-		<div className="space-y-3">
+		<div className="iz-admin-detail-section space-y-3">
 			<div>
 				<p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
 					{title}
@@ -384,30 +388,30 @@ export function DetailSection({
 	);
 }
 
-/** Shorten uuid-like actor ids for display; keep names like "system" as-is. */
-function formatActor(actor: string | null | undefined): string {
-	if (!actor) return "—";
-	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-		actor,
-	)
-		? `${actor.slice(0, 8)}…`
-		: actor;
-}
-
+/**
+ * Created by / Updated by, by NAME. These printed a truncated account id
+ * ("96cb6034…"), which answers "who changed this?" no better than a blank.
+ * `updatedByName` is the server's own join where the list carries it; anything
+ * else is looked up by id (see `useActorName`).
+ */
 export function SystemInfoCard({
 	createdBy,
 	createdAt,
 	updatedBy,
+	updatedByName,
 	updatedAt,
 }: {
 	createdBy: string | null | undefined;
 	createdAt: string | null | undefined;
 	updatedBy: string | null | undefined;
+	updatedByName?: string | null;
 	updatedAt: string | null | undefined;
 }) {
 	const { t } = usePortalLocale();
+	const createdByLabel = useActorName(createdBy, t);
+	const updatedByLabel = useActorName(updatedBy, t, updatedByName);
 	return (
-		<div className="space-y-3 rounded-lg border border-(--lavender-soft)/30 bg-card p-5">
+		<div className="iz-admin-detail-section space-y-3 rounded-lg border border-(--lavender-soft)/30 bg-card p-5">
 			<div className="flex items-center gap-2 text-base font-bold">
 				<Info className="h-5 w-5 text-lavender" />
 				{t.adminOrg.systemInformation}
@@ -416,7 +420,7 @@ export function SystemInfoCard({
 				<DetailField
 					icon={UserRound}
 					label={t.adminOrg.createdBy}
-					value={formatActor(createdBy)}
+					value={createdByLabel}
 				/>
 				<DetailField
 					icon={CalendarDays}
@@ -426,7 +430,7 @@ export function SystemInfoCard({
 				<DetailField
 					icon={UserCog}
 					label={t.adminOrg.updatedBy}
-					value={formatActor(updatedBy)}
+					value={updatedByLabel}
 				/>
 				<DetailField
 					icon={Clock}
@@ -488,7 +492,7 @@ export function AccountStatusCard({
 			? "border-muted-foreground/30 bg-muted text-muted-foreground"
 			: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400";
 	return (
-		<div className="space-y-3 rounded-lg border-l-4 border-(--lavender-soft) bg-card p-4">
+		<div className="iz-admin-detail-section space-y-3 rounded-lg border-l-4 border-(--lavender-soft) bg-card p-4">
 			<div className="flex items-center gap-2 text-base font-bold">
 				<CircleCheckBig className="h-5 w-5 text-lavender" />
 				{t.adminOrg.approvalStatus}
@@ -563,7 +567,7 @@ export function ApprovalStatusCard({
 					: fill(t.adminOrg.approvalInactiveBody, { entity: entityLabel });
 
 	return (
-		<div className="space-y-3 rounded-lg border-l-4 border-(--lavender-soft) bg-card p-4">
+		<div className="iz-admin-detail-section space-y-3 rounded-lg border-l-4 border-(--lavender-soft) bg-card p-4">
 			<div className="flex items-center gap-2 text-base font-bold">
 				<CircleCheckBig className="h-5 w-5 text-lavender" />
 				{t.adminOrg.approvalStatus}

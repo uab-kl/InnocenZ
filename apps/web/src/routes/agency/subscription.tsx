@@ -1,3 +1,4 @@
+import "./portal-subscription-design.css";
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import { PaymentHistoryList } from "@agency-portal/components/iz/SubscriptionRecordList";
 import {
@@ -20,6 +21,7 @@ import {
 	resolveAgencySubscriptionPlanForWeeklyPv,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
+import { nextFutureWeeklyBilling } from "@agency-portal/lib/agency-next-billing";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
 import {
 	COLLECTION_AGING_PILL,
@@ -34,7 +36,10 @@ import {
 } from "@agency-portal/lib/pr-demo";
 import { collectionInvoiceStatusLabel } from "@agency-portal/lib/status-labels";
 import { useStore } from "@agency-portal/lib/store";
-import { countBillingWindows } from "@agency-portal/lib/subscription-due";
+import {
+	countBillingWindows,
+	overdueSummary,
+} from "@agency-portal/lib/subscription-due";
 import { periodLabel } from "@agency-portal/lib/subscription-record";
 import {
 	useAgencyCan,
@@ -49,7 +54,6 @@ import {
 	RotateCcw,
 	Sparkles,
 	TriangleAlert,
-	Users,
 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -64,6 +68,7 @@ import {
 	willAutoCharge,
 } from "@/services/payment-method";
 import { isInvoiceOwed } from "@/services/subscription-invoice";
+import "./agency-management-design.css";
 
 const CARD_LAST4 = "4242";
 
@@ -112,8 +117,13 @@ function AgencySubscription() {
 
 	const payrollWeekStartIso = getPreviousWeekSundayIso();
 	const payrollWeek = demoPayrollWeekBoundsForWeeksAgo(0);
+	// The DEMO session's date. `demoPvIssueIsoForWeeksAgo(0)` is the latest
+	// issue Sunday — the LAST billing day, already past on every day but that
+	// Sunday — so it is stepped to the next one that is today or later. A real
+	// session never reads this; see `realRenewalLabel`.
+	const demoIssueDay = parseISO(demoPvIssueIsoForWeeksAgo(0));
 	const nextChargeDate = format(
-		parseISO(demoPvIssueIsoForWeeksAgo(0)),
+		nextFutureWeeklyBilling(demoIssueDay, new Date()) ?? demoIssueDay,
 		"d MMM yyyy",
 	);
 	const issuedWeeklyPv = useMemo(
@@ -315,13 +325,34 @@ function AgencySubscription() {
 		sub.backed && sub.currentWindow
 			? periodLabel(sub.currentWindow.periodStart, sub.currentWindow.periodEnd)
 			: null;
-	const realRenewalLabel = sub.nextRenewalDate
-		? sub.nextRenewalDate.toLocaleDateString(dateLocaleTag(locale), {
+	// Never a day already gone: the ledger's "day after the latest opened
+	// period" is in the past until this week's bill is minted.
+	const realRenewalDay = nextFutureWeeklyBilling(
+		sub.nextRenewalDate,
+		new Date(),
+	);
+	const realRenewalLabel = realRenewalDay
+		? realRenewalDay.toLocaleDateString(dateLocaleTag(locale), {
 				day: "numeric",
 				month: "short",
 				year: "numeric",
 			})
 		: null;
+	/*
+	 * WHAT IS LATE, beside the next date — the same `overdueSummary` the
+	 * payment history's red banner reads, so the hero and the list cannot
+	 * disagree. Display only; it decides no amount and no state.
+	 */
+	const heroOverdue = sub.backed
+		? overdueSummary(sub.paymentHistory, "weekly", new Date())
+		: null;
+	/** The hero's date: the ledger's on a real session, the demo clock's otherwise. */
+	const heroBillingLabel = sub.backed
+		? (realRenewalLabel ??
+			(sub.isLoading || sub.isPaymentHistoryLoading
+				? t.common.loading
+				: t.subscription.nothingToCharge))
+		: renewalDate;
 
 	const billedPriceLabel = sub.backed
 		? sub.currentAmountRm
@@ -448,7 +479,7 @@ function AgencySubscription() {
 	};
 
 	return (
-		<div className="iz-screen">
+		<div className="iz-screen iz-agency-subscription">
 			<header>
 				<IzPageTitle>{t.agencyMisc.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{agencyOwner.orgName}</p>
@@ -463,55 +494,69 @@ function AgencySubscription() {
 			</header>
 
 			<IzSectionLabel>{t.agencyMisc.usageBasedWeekly}</IzSectionLabel>
-			<IzCard className="border-[rgba(57,217,138,.35)] bg-[rgba(57,217,138,.06)]">
-				<div className="flex flex-wrap items-start justify-between gap-3">
-					<div className="min-w-0">
-						<p className="iz-tiny iz-muted2">
-							{fill(t.subscription.lastPayrollWeek, {
-								cycle: payrollWeek.cycle,
-							})}
-						</p>
-						<p className="mt-1 iz-heading text-base font-bold">
-							{heroPvCount === null
-								? t.subscription.loadingCard
-								: fill(
-										heroPvCount === 1
-											? t.subscription.pvIssuedOne
-											: t.subscription.pvIssuedMany,
-										{ n: heroPvCount },
-									)}
-						</p>
-						<p className="iz-tiny iz-muted mt-1">
-							{sub.backed && sub.onCustom
-								? t.subscription.customPricedByAdmin
-								: t.subscription.tierAutoSelected}
-						</p>
-					</div>
-					<div className="text-right shrink-0">
-						<IzPill variant="green">{billedTierLabel}</IzPill>
-						<p className="mt-2 text-lg font-bold text-[var(--iz-gold-l)]">
-							{billedPriceLabel}
-						</p>
-						<p className="iz-tiny iz-muted2 mt-0.5">{billedCapacityLabel}</p>
-					</div>
+			<section className="iz-approved-subscription-summary">
+				<div>
+					<p>{t.approvedDesign.currentPlan}</p>
+					<h2>{billedTierLabel}</h2>
+					<strong>{billedPriceLabel}</strong>
+					<p>{billedCapacityLabel}</p>
+					<p>
+						{sub.backed && sub.onCustom
+							? t.subscription.customPricedByAdmin
+							: t.subscription.tierAutoSelected}
+					</p>
 				</div>
-				<p className="iz-tiny iz-muted2 mt-3 border-t border-[var(--iz-line)] pt-2">
-					{agencyWindowLabel ? `${agencyWindowLabel} · ` : ""}
-					{fill(t.subscription.nextWeeklyCharge, { date: renewalDate })}
-					{sub.backed && sub.onCustom
-						? t.subscription.atAgreedPrice
-						: billing.plan.renegotiate
-							? t.agencyMisc.contactAdminCustomPricing
-							: heroPvCount === null
-								? ""
-								: fill(
-										heroPvCount === 1
-											? t.subscription.basedOnPvOne
-											: t.subscription.basedOnPvMany,
-										{ price: billedPriceLabel, n: heroPvCount },
-									)}
-				</p>
-			</IzCard>
+				<div>
+					<p>
+						{fill(t.subscription.lastPayrollWeek, { cycle: payrollWeek.cycle })}
+					</p>
+					<strong>
+						{heroPvCount === null
+							? t.subscription.loadingCard
+							: fill(
+									heroPvCount === 1
+										? t.subscription.pvIssuedOne
+										: t.subscription.pvIssuedMany,
+									{ n: heroPvCount },
+								)}
+					</strong>
+				</div>
+				<div>
+					<p>{t.approvedDesign.nextBilling}</p>
+					<strong>{heroBillingLabel}</strong>
+					{heroOverdue && heroOverdue.count > 0 && (
+						// `!` because the card's own `p { color: muted }` is unlayered
+						// and would otherwise win over the utility — red is the
+						// owner's colour for money that is late.
+						<p className="!text-[var(--iz-red)]">
+							{fill(
+								heroOverdue.count === 1
+									? t.subscription.heroOverdueOne
+									: t.subscription.heroOverdueMany,
+								{
+									amount: formatRM(heroOverdue.amountRm),
+									n: heroOverdue.count,
+								},
+							)}
+						</p>
+					)}
+					<p>{agencyWindowLabel}</p>
+					<p>
+						{sub.backed && sub.onCustom
+							? t.subscription.atAgreedPrice
+							: billing.plan.renegotiate
+								? t.agencyMisc.contactAdminCustomPricing
+								: heroPvCount === null
+									? ""
+									: fill(
+											heroPvCount === 1
+												? t.subscription.basedOnPvOne
+												: t.subscription.basedOnPvMany,
+											{ price: billedPriceLabel, n: heroPvCount },
+										)}
+					</p>
+				</div>
+			</section>
 
 			{/*
 			 * Custom is the agency's negotiated arrangement — the counterpart to the
@@ -626,7 +671,13 @@ function AgencySubscription() {
 					? t.subscription.tierChosenByPv
 					: t.subscription.referenceTiers}
 			</p>
-			<div className="grid grid-cols-2 gap-2">
+			<section className="iz-approved-plan-table">
+				<div className="iz-approved-plan-head">
+					<span>{t.approvedDesign.tierIncludes}</span>
+					<span>{t.approvedDesign.pvsPerWeek}</span>
+					<span>{t.approvedDesign.weeklyPrice}</span>
+					<span>{t.approvedDesign.statusAction}</span>
+				</div>
 				{ratePlans.map((plan) => {
 					const isBilledTier = sub.backed
 						? sub.currentSubscriptionId
@@ -639,113 +690,73 @@ function AgencySubscription() {
 							? formatRM(plan.weeklyRm)
 							: t.subscription.priceRenegotiate);
 					return (
-						<IzCard
-							key={plan.id}
-							className={
-								isBilledTier
-									? "border-[rgba(57,217,138,.35)] bg-[rgba(57,217,138,.06)]"
-									: undefined
-							}
-						>
-							<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-								<div className="min-w-0">
-									<div className="flex flex-wrap items-center gap-2">
-										<p className="iz-heading text-sm font-bold">{plan.label}</p>
-										{isBilledTier && (
-											<IzPill variant="green">{t.agencyMisc.yourTier}</IzPill>
-										)}
-									</div>
-									<p className="mt-1 text-lg font-bold text-[var(--iz-gold-l)]">
-										{priceDisplay}
-										{!plan.priceLabel && plan.weeklyRm != null && (
-											<span className="iz-tiny iz-muted font-normal">
-												{t.subscription.perWeek}
-											</span>
-										)}
-									</p>
-								</div>
-								<div className="shrink-0 sm:text-right">
-									<div className="flex items-center gap-1.5 text-[var(--iz-txt)] sm:justify-end">
-										<Users className="h-4 w-4 text-[var(--iz-gold)]" />
-										<span className="iz-heading text-sm font-bold">
-											{planCapacityLabel(
-												"agency",
-												plan.id,
-												plan.capacityLabel,
-												t,
-											)}
-										</span>
-									</div>
-								</div>
+						<div className="iz-approved-plan-row" key={plan.id}>
+							<div>
+								<strong>{plan.label}</strong>
+								<p>{planDescription("agency", plan.id, plan.description, t)}</p>
 							</div>
-							<p className="iz-tiny iz-muted mt-2">
-								{planDescription("agency", plan.id, plan.description, t)}
-							</p>
-							{/*
-							 * The ONE actionable tile on an otherwise read-only rate card.
-							 * Custom is the only band with no list price, so it is the only
-							 * one a human has to be involved in — and an agency that knows
-							 * its volume is about to pass 150 should not have to wait for the
-							 * week to prove it. Every other tier is chosen by PV count alone,
-							 * which is why no other tile has a button.
-							 */}
-							{/* Compared against the LITERAL "Custom", not the translated word:
-							    `plan.label` is the plan's name as the backend sends it, so
-							    matching it against the dictionary would silently stop matching
-							    the moment the portal switched to Chinese. */}
-							{sub.backed &&
-								canEdit &&
-								plan.label === "Custom" &&
-								!isBilledTier && (
-									<div className="mt-2">
-										{waitingOn ? (
-											/*
-											 * A waiting state, not a dead button. The disabled button
-											 * that used to sit here read as something broken rather
-											 * than something in progress — the agency cannot act, so
-											 * it should not be shown a control at all.
-											 */
-											<div className="flex items-center gap-2 rounded-lg border border-[rgba(244,183,64,.28)] bg-[var(--iz-amber-bg,rgba(244,183,64,.12))] px-2.5 py-2">
-												<span className="relative flex h-2 w-2 shrink-0">
-													<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--iz-amber,#f4b740)] opacity-60" />
-													<span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--iz-amber,#f4b740)]" />
-												</span>
-												<div className="min-w-0">
-													<p className="iz-tiny font-semibold text-[var(--iz-amber,#f4b740)]">
-														{t.subscription.requestedWithAdmin}
-													</p>
-													<p className="iz-tiny iz-muted2">
-														{t.subscription.preparingYourPrice}
-													</p>
-												</div>
-											</div>
-										) : (
-											/*
-											 * Styled to the tile it sits on rather than the neutral
-											 * soft button used elsewhere: Custom carries the violet
-											 * accent everywhere on this screen, and a grey button
-											 * under a violet "Renegotiate Price" read as disabled.
-											 */
-											<button
-												type="button"
-												className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(139,124,246,.4)] bg-[rgba(139,124,246,.1)] px-3 py-2 transition-colors hover:bg-[rgba(139,124,246,.18)] disabled:opacity-60"
-												disabled={sub.isRequesting}
-												onClick={handleAskForCustom}
-											>
-												<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
-												<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
-													{sub.isRequesting
-														? t.subscription.sending
-														: t.subscription.askAdminForPrice}
-												</span>
-											</button>
-										)}
-									</div>
+							<div>
+								{planCapacityLabel("agency", plan.id, plan.capacityLabel, t)}
+							</div>
+							<div>{priceDisplay}</div>
+							<div>
+								{isBilledTier && (
+									<IzPill variant="green">{t.agencyMisc.yourTier}</IzPill>
 								)}
-						</IzCard>
+								{sub.backed &&
+									canEdit &&
+									plan.label === "Custom" &&
+									!isBilledTier && (
+										<div className="mt-2">
+											{waitingOn ? (
+												/*
+												 * A waiting state, not a dead button. The disabled button
+												 * that used to sit here read as something broken rather
+												 * than something in progress — the agency cannot act, so
+												 * it should not be shown a control at all.
+												 */
+												<div className="flex items-center gap-2 rounded-lg border border-[rgba(244,183,64,.28)] bg-[var(--iz-amber-bg,rgba(244,183,64,.12))] px-2.5 py-2">
+													<span className="relative flex h-2 w-2 shrink-0">
+														<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--iz-amber,#f4b740)] opacity-60" />
+														<span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--iz-amber,#f4b740)]" />
+													</span>
+													<div className="min-w-0">
+														<p className="iz-tiny font-semibold text-[var(--iz-amber,#f4b740)]">
+															{t.subscription.requestedWithAdmin}
+														</p>
+														<p className="iz-tiny iz-muted2">
+															{t.subscription.preparingYourPrice}
+														</p>
+													</div>
+												</div>
+											) : (
+												/*
+												 * Styled to the tile it sits on rather than the neutral
+												 * soft button used elsewhere: Custom carries the violet
+												 * accent everywhere on this screen, and a grey button
+												 * under a violet "Renegotiate Price" read as disabled.
+												 */
+												<button
+													type="button"
+													className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(139,124,246,.4)] bg-[rgba(139,124,246,.1)] px-3 py-2 transition-colors hover:bg-[rgba(139,124,246,.18)] disabled:opacity-60"
+													disabled={sub.isRequesting}
+													onClick={handleAskForCustom}
+												>
+													<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
+													<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
+														{sub.isRequesting
+															? t.subscription.sending
+															: t.subscription.askAdminForPrice}
+													</span>
+												</button>
+											)}
+										</div>
+									)}
+							</div>
+						</div>
 					);
 				})}
-			</div>
+			</section>
 
 			{sub.backed && (
 				<>

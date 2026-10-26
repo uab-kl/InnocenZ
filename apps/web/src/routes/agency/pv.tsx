@@ -1,3 +1,4 @@
+import "@agency-portal/components/agency/agency-finance-design.css";
 import {
 	AgencyReceiptsPanel,
 	receiptsInPayrollWeek,
@@ -21,6 +22,7 @@ import {
 	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { PortalBackButton } from "@agency-portal/components/Nav";
+import { OutletMobileFilters } from "@agency-portal/components/outlet/OutletMobileFilters";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { NavAlertBadge } from "@agency-portal/components/portal/NavAlertBadge";
 import { PrSignaturePad } from "@agency-portal/components/pr/PrSignaturePad";
@@ -29,11 +31,12 @@ import {
 	agencyLivePlanLabel,
 	useAgencyLivePlan,
 } from "@agency-portal/hooks/use-agency-live-plan";
+import { useAgencySignerName } from "@agency-portal/hooks/use-agency-member-name";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
 import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-review";
 import {
 	isBackedVoucherId,
-	useAgencyPvDetail,
+	useAgencyPvDetailState,
 	useAgencyPvs,
 	useVoucherPayeeBank,
 } from "@agency-portal/hooks/use-agency-pvs";
@@ -60,13 +63,25 @@ import {
 	payrollWeekWork,
 	voucherIdsWithOpenDispute,
 } from "@agency-portal/lib/payroll-action-counts";
+import {
+	formatPayrollDay,
+	formatPayrollWeekRange,
+	listedWeekSpan,
+	type PvLinesState,
+	pvLinesReady,
+	pvRefLabel,
+	pvVoucherRef,
+	withLinesStateNote,
+	withReadableHeader,
+	withReadableLines,
+	withRowNumbersFromOne,
+} from "@agency-portal/lib/payroll-display";
 import type { MoneyKind } from "@agency-portal/lib/payroll-kind-day";
 import { dayBelongsToWeekTab } from "@agency-portal/lib/payroll-week-scope";
 import {
 	DEMO_PV_ISSUED_WEEKS_AGO,
 	demoPayrollWeekBoundsForWeeksAgo,
 	downloadPvReceipt,
-	FINANCE_HEAD_LABEL,
 	getLatestPvIssuedMs,
 	getPvNetTotal,
 	PAYROLL_CYCLE,
@@ -718,6 +733,23 @@ function AgencyPV() {
 				: lastWeekBounds;
 
 	/**
+	 * The Vouchers heading names the weeks its LIST covers.
+	 *
+	 * On the payment week that is not the tab's own seven days: the tab is the
+	 * catch-all for everything still unpaid (see `lastLastWeekPvs`), so the
+	 * heading read "04 Oct – 10 Oct 2026" over vouchers worked 26 Jul–19 Sep —
+	 * the same mismatch the summary line above already stopped printing. The two
+	 * newer weeks are strict windows, so their own range is exactly right.
+	 */
+	const vouchersSectionHint = useMemo(() => {
+		if (payrollWeekTab !== "last_last_week") return activeWeekBounds.cycle;
+		const span = listedWeekSpan(weekTabPvs);
+		return span
+			? formatPayrollWeekRange(span.startIso, span.endIso, t)
+			: activeWeekBounds.cycle;
+	}, [payrollWeekTab, activeWeekBounds.cycle, weekTabPvs, t]);
+
+	/**
 	 * WHICH MONEY and WHICH NIGHT — one selection, read by the Receipts feed and
 	 * the Dispute queue alike (owner, 3 Sep 2026).
 	 *
@@ -1220,7 +1252,7 @@ function AgencyPV() {
 
 	if (detail) {
 		return (
-			<div className="iz-screen">
+			<div className="iz-screen iz-agency-finance iz-agency-payroll">
 				{/* The back control ALONE, exactly as Manage Outlet does it.
 
 				    The lingering black box was never the button — it was `AppTopbar`,
@@ -1248,7 +1280,7 @@ function AgencyPV() {
 	}
 
 	return (
-		<div className="iz-screen">
+		<div className="iz-screen iz-agency-finance iz-agency-payroll">
 			<header>
 				{/* The cycle and the calc pill ride INSIDE the one date line rather
 				    than forming a second one: they are more facts about today, not a
@@ -1293,6 +1325,7 @@ function AgencyPV() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "this_week" ? " on" : ""}`}
+					aria-pressed={payrollWeekTab === "this_week"}
 					onClick={() => selectPayrollWeekTab("this_week")}
 				>
 					{t.payroll.thisWeek}
@@ -1301,6 +1334,7 @@ function AgencyPV() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_week" ? " on" : ""}`}
+					aria-pressed={payrollWeekTab === "last_week"}
 					onClick={() => selectPayrollWeekTab("last_week")}
 				>
 					{t.payroll.lastWeek}
@@ -1309,6 +1343,7 @@ function AgencyPV() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_last_week" ? " on" : ""}`}
+					aria-pressed={payrollWeekTab === "last_last_week"}
 					onClick={() => selectPayrollWeekTab("last_last_week")}
 				>
 					{t.payroll.paymentWeek}
@@ -1364,7 +1399,10 @@ function AgencyPV() {
 			    owed. Whichever changes, they must keep being computed from the same
 			    rule — SIGNED and unpaid — or they would disagree for a reason
 			    nobody could see. */}
-			<div className="iz-grid3 mt-3">
+			<div
+				className="iz-grid3 iz-agency-payroll-metrics mt-3"
+				data-payment-week={payrollWeekTab === "last_last_week"}
+			>
 				<div className="iz-stat-tile">
 					<div className="n text-[var(--iz-gold-l)]">
 						{activeWeekStats.prCount}
@@ -1375,12 +1413,14 @@ function AgencyPV() {
 					<div className="n">{activeWeekStats.pvCount}</div>
 					<IzKpiLabel>PV</IzKpiLabel>
 				</div>
-				<div className="iz-stat-tile">
-					<div className="n text-[var(--iz-gold-l)]">
-						{formatRM(activeWeekStats.pendingPayout)}
+				{payrollWeekTab === "last_last_week" && (
+					<div className="iz-stat-tile">
+						<div className="n text-[var(--iz-gold-l)]">
+							{formatRM(activeWeekStats.pendingPayout)}
+						</div>
+						<IzKpiLabel>{t.payroll.pendingPayout}</IzKpiLabel>
 					</div>
-					<IzKpiLabel>{t.payroll.pendingPayout}</IzKpiLabel>
-				</div>
+				)}
 			</div>
 
 			{/* Above the tabs, not inside one: an uncollected fee is not scoped to
@@ -1423,6 +1463,7 @@ function AgencyPV() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${pvSubTab === "vouchers" ? " on" : ""}`}
+					aria-pressed={pvSubTab === "vouchers"}
 					onClick={() => selectPvSubTab("vouchers")}
 				>
 					{t.payroll.paymentVouchers}
@@ -1431,6 +1472,7 @@ function AgencyPV() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${pvSubTab === "receipts" ? " on" : ""}`}
+					aria-pressed={pvSubTab === "receipts"}
 					onClick={() => selectPvSubTab("receipts")}
 				>
 					{t.receipts.receipts}
@@ -1455,6 +1497,7 @@ function AgencyPV() {
 					<button
 						type="button"
 						className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
+						aria-pressed={pvSubTab === "disputes"}
 						onClick={() => selectPvSubTab("disputes")}
 					>
 						{t.agencyHome.disputes}
@@ -1467,6 +1510,7 @@ function AgencyPV() {
 					<button
 						type="button"
 						className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
+						aria-pressed={pvSubTab === "overtime"}
 						onClick={() => selectPvSubTab("overtime")}
 					>
 						{t.payroll.overtime}
@@ -1498,7 +1542,7 @@ function AgencyPV() {
 				<OutletSection
 					title={t.payroll.paymentVouchers}
 					iconKey="Payment Vouchers"
-					hint={activeWeekBounds.cycle}
+					hint={vouchersSectionHint}
 				>
 					{/*
 					 * The payment week's two notices, SIDE BY SIDE — the same 2-up grid
@@ -1608,75 +1652,82 @@ function AgencyPV() {
 					{/* Rendered on EVERY week — `visibleStatusFilters` decides WHICH chips
 					    each week offers, so the payment week gets All / Disputed / To pay /
 					    Pending reviews and the newer weeks keep their granular ones. */}
-					<IzCard flat className="!mb-2.5">
-						<div className="flex items-center gap-2 iz-tiny iz-muted">
-							<Filter className="h-3.5 w-3.5 shrink-0" />
-							{t.payroll.filterAndSort}
-							{hasActiveFilters && (
-								<button
-									type="button"
-									className="ml-auto text-[var(--iz-gold-l)]"
-									onClick={clearFilters}
-								>
-									{t.payroll.clearAll}
-								</button>
-							)}
-						</div>
-
-						{/* Same field the Receipts tab uses, so the two lists search alike. */}
-						<div className="relative mt-2">
-							<Search
-								className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--iz-muted)]"
-								aria-hidden
-							/>
-							<input
-								type="search"
-								className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
-								placeholder={t.agencyPv.searchVouchersPlaceholder}
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								aria-label={t.agencyPv.searchVouchers}
-							/>
-						</div>
-
-						<div className="iz-filter-groups">
-							<div className="iz-filter-group">
-								<p className="iz-filter-group-label">{t.table.pr}</p>
-								<IzSelect
-									block
-									value={prFilter}
-									onChange={(e) => setPrFilter(e.target.value)}
-								>
-									<option value="">{t.receipts.allPrs}</option>
-									{prOptions.map(([id, label]) => (
-										<option key={id} value={id}>
-											{label}
-										</option>
-									))}
-								</IzSelect>
+					<OutletMobileFilters>
+						<IzCard flat className="iz-agency-payroll-filters !mb-2.5">
+							<div className="iz-payroll-filter-heading">
+								<Filter className="h-3.5 w-3.5 shrink-0" />
+								{t.payroll.filterAndSort}
+								{hasActiveFilters && (
+									<button
+										type="button"
+										className="ml-auto text-[var(--iz-gold-l)]"
+										onClick={clearFilters}
+									>
+										{t.payroll.clearAll}
+									</button>
+								)}
 							</div>
-							<div className="iz-filter-group iz-filter-group--grow">
-								<p className="iz-filter-group-label">{t.table.status}</p>
-								<div className="iz-filter-chips">
-									{visibleStatusFilters.map((f) => {
-										const active = statusFilter === f.value;
-										const count = statusCounts[f.value];
-										return (
-											<button
-												key={f.value}
-												type="button"
-												className={`iz-filter-chip${active ? " on" : ""}`}
-												onClick={() => setStatusFilter(f.value)}
-											>
-												{f.label(t)}
-												<span className="iz-filter-chip__count">({count})</span>
-											</button>
-										);
-									})}
+
+							{/* Same field the Receipts tab uses, so the two lists search alike. */}
+							<div className="iz-payroll-filter-search">
+								<span className="iz-payroll-filter-label">
+									{t.filters.search}
+								</span>
+								<div className="relative">
+									<Search
+										className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--iz-muted)]"
+										aria-hidden
+									/>
+									<input
+										type="search"
+										className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
+										placeholder={t.agencyPv.searchVouchersPlaceholder}
+										value={search}
+										onChange={(e) => setSearch(e.target.value)}
+										aria-label={t.agencyPv.searchVouchers}
+									/>
 								</div>
 							</div>
-						</div>
-					</IzCard>
+
+							<div className="iz-filter-groups">
+								<div className="iz-filter-group">
+									<span className="iz-payroll-filter-label">{t.table.pr}</span>
+									<IzSelect
+										block
+										aria-label={t.table.pr}
+										value={prFilter}
+										onChange={(e) => setPrFilter(e.target.value)}
+									>
+										<option value="">{t.receipts.allPrs}</option>
+										{prOptions.map(([id, label]) => (
+											<option key={id} value={id}>
+												{label}
+											</option>
+										))}
+									</IzSelect>
+								</div>
+								<div className="iz-filter-group iz-filter-group--grow">
+									<span className="iz-payroll-filter-label">
+										{t.table.status}
+									</span>
+									<IzSelect
+										block
+										aria-label={t.table.status}
+										value={statusFilter}
+										onChange={(e) =>
+											setStatusFilter(e.target.value as PvStatusFilter)
+										}
+									>
+										{visibleStatusFilters.map((f) => (
+											<option key={f.value} value={f.value}>
+												{f.label(t)} ({statusCounts[f.value]})
+											</option>
+										))}
+									</IzSelect>
+								</div>
+							</div>
+						</IzCard>
+					</OutletMobileFilters>
 
 					{/*
 					 * Directly above the cards, NOT in the section heading, and built as
@@ -1700,33 +1751,37 @@ function AgencyPV() {
 					    "Signed PVs" note above carries the same two classes and renders
 					    with the default grey frame that its author did not intend.
 					    Measured with getComputedStyle, not assumed. */}
-					<IzCard
-						flat
-						className="iz-between !mb-2.5 !mt-2.5 !border-[rgba(232,194,122,.32)] !bg-[linear-gradient(180deg,rgba(232,194,122,.07),transparent)]"
-					>
-						<div className="flex min-w-0 items-center gap-2">
-							<Wallet className="h-4 w-4 shrink-0 text-[var(--iz-gold-l)]" />
-							<div className="min-w-0">
-								<p className="iz-sm font-bold">{t.payroll.pendingPayout}</p>
+					{payrollWeekTab === "last_last_week" && (
+						<IzCard
+							flat
+							className="iz-agency-payout-summary iz-between !mb-2.5 !mt-2.5 !border-[rgba(232,194,122,.32)] !bg-[linear-gradient(180deg,rgba(232,194,122,.07),transparent)]"
+						>
+							<div className="flex min-w-0 items-center gap-2">
+								<Wallet className="h-4 w-4 shrink-0 text-[var(--iz-gold-l)]" />
+								<div className="min-w-0">
+									<p className="iz-sm font-bold">{t.payroll.pendingPayout}</p>
+									<p className="iz-tiny iz-muted2 mt-0.5">
+										{prFilter
+											? (prOptions.find(([id]) => id === prFilter)?.[1] ??
+												t.receipts.allPrs)
+											: t.receipts.allPrs}{" "}
+										·{" "}
+										{fill(t.payroll.pendingPayoutCount, {
+											n: filteredPendingPayout.count,
+										})}
+									</p>
+								</div>
+							</div>
+							<div className="shrink-0 text-right">
+								<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
+									{formatRM(filteredPendingPayout.total)}
+								</div>
 								<p className="iz-tiny iz-muted2 mt-0.5">
-									{prFilter
-										? (prOptions.find(([id]) => id === prFilter)?.[1] ??
-											t.receipts.allPrs)
-										: t.receipts.allPrs}{" "}
-									·{" "}
-									{fill(t.payroll.pendingPayoutCount, {
-										n: filteredPendingPayout.count,
-									})}
+									{t.payroll.netPayable}
 								</p>
 							</div>
-						</div>
-						<div className="shrink-0 text-right">
-							<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
-								{formatRM(filteredPendingPayout.total)}
-							</div>
-							<p className="iz-tiny iz-muted2 mt-0.5">{t.payroll.netPayable}</p>
-						</div>
-					</IzCard>
+						</IzCard>
+					)}
 
 					{/*
 					 * THE BULK BAR — only where a bulk action exists, and only once
@@ -1869,65 +1924,81 @@ function AgencyPV() {
 						   truncates — the file has no `truncate` at all — so halving the
 						   width costs no words; the id gets `break-words` because a UUID is
 						   one unbreakable token that would otherwise run past the card. */
-						<div className="grid items-start gap-2.5 xl:grid-cols-2">
-							{filteredVouchers.map((pv) => {
-								const selectable = isBulkEligible(pv);
-								const ticked = selectedIds.includes(pv.id);
-								return (
-									/* The tick sits BESIDE the card, never inside it. The card is
-								   one big <button> that opens the voucher, and a checkbox
-								   nested in a button is invalid markup whose clicks fight each
-								   other — the reader would tick a row and land in its detail. */
-									<div key={pv.id} className="flex items-stretch gap-2">
-										{bulkMode && (
-											<label className="flex shrink-0 cursor-pointer items-start pt-4">
-												<input
-													type="checkbox"
-													className="h-4 w-4 cursor-pointer accent-[var(--iz-gold-l)] disabled:cursor-not-allowed disabled:opacity-30"
-													checked={ticked}
-													disabled={!selectable || bulkBusy}
-													aria-label={fill(
-														bulkMode === "pay"
-															? t.payroll.bulkSelectForPay
-															: t.payroll.bulkSelectForSend,
-														{ ref: pv.voucherNo?.trim() || pv.id },
-													)}
-													onChange={(e) => {
-														setBulkArmed(false);
-														setSelectedPvIds((prev) =>
-															e.target.checked
-																? [...prev, pv.id]
-																: prev.filter((id) => id !== pv.id),
-														);
-													}}
-												/>
-											</label>
-										)}
-										<button
-											type="button"
-											className="iz-card iz-between w-full cursor-pointer text-left"
-											onClick={() => setDetailId(pv.id)}
-										>
-											<PvCardSummary
-												pv={pv}
-												agencyPRs={voucherRoster}
-												latestIssuedMs={latestIssuedMs}
-											/>
-											<div className="shrink-0 text-right">
-												<IzPill variant={statusPill(pv.status)}>
-													{agencyPvStatusLabel(pv.status, t)}
-												</IzPill>
-												<div className="iz-ledger iz-heading mt-1.5 text-base font-bold">
-													{formatRM(getPvNetTotal(pv))}
-												</div>
-												<p className="iz-tiny iz-muted2 mt-0.5">
-													{t.payroll.netPayable}
-												</p>
-											</div>
-										</button>
-									</div>
-								);
-							})}
+						<div className="iz-approved-voucher-table-scroll">
+							<table className="iz-approved-voucher-table">
+								<thead>
+									<tr>
+										<th>{t.approvedDesign.prVoucher}</th>
+										<th>{t.approvedDesign.wages}</th>
+										<th>{t.approvedDesign.drinksTips}</th>
+										<th>{t.approvedDesign.otherEarnings}</th>
+										<th>{t.approvedDesign.deductions}</th>
+										<th>{t.payroll.netPayable}</th>
+										<th>{t.approvedDesign.statusAction}</th>
+									</tr>
+								</thead>
+								<tbody>
+									{filteredVouchers.map((pv) => {
+										const selectable = isBulkEligible(pv);
+										const ticked = selectedIds.includes(pv.id);
+										const amounts = summarizePv(pv);
+										return (
+											<tr key={pv.id}>
+												<td>
+													<div className="flex gap-3">
+														{bulkMode && (
+															<label className="flex shrink-0 cursor-pointer items-start pt-4">
+																<input
+																	type="checkbox"
+																	className="h-4 w-4 cursor-pointer accent-[var(--iz-gold-l)] disabled:cursor-not-allowed disabled:opacity-30"
+																	checked={ticked}
+																	disabled={!selectable || bulkBusy}
+																	aria-label={fill(
+																		bulkMode === "pay"
+																			? t.payroll.bulkSelectForPay
+																			: t.payroll.bulkSelectForSend,
+																		{ ref: pvVoucherRef(pv) || pv.prName },
+																	)}
+																	onChange={(e) => {
+																		setBulkArmed(false);
+																		setSelectedPvIds((prev) =>
+																			e.target.checked
+																				? [...prev, pv.id]
+																				: prev.filter((id) => id !== pv.id),
+																		);
+																	}}
+																/>
+															</label>
+														)}
+														<PvCardSummary
+															pv={pv}
+															agencyPRs={voucherRoster}
+															latestIssuedMs={latestIssuedMs}
+														/>
+													</div>
+												</td>
+												<td>{formatRM(amounts.wages)}</td>
+												<td>{formatRM(amounts.drinks + amounts.tips)}</td>
+												<td>{formatRM(amounts.overtime + amounts.other)}</td>
+												<td>{formatRM(amounts.deductions - pv.deduct)}</td>
+												<td>{formatRM(getPvNetTotal(pv))}</td>
+												<td>
+													<IzPill variant={statusPill(pv.status)}>
+														{agencyPvStatusLabel(pv.status, t)}
+													</IzPill>
+													<button
+														type="button"
+														className="iz-btn iz-btn-soft"
+														onClick={() => setDetailId(pv.id)}
+													>
+														{t.approvedDesign.reviewVoucher}
+													</button>
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
 						</div>
 					)}
 				</OutletSection>
@@ -2154,11 +2225,19 @@ function PvWorkflowRail({ status }: { status: PrPvStatus }) {
 	);
 }
 
-function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
+function PvBreakdownCard({
+	breakdown,
+	lines,
+}: {
+	breakdown: PvEarningsBreakdown;
+	lines: PvLinesState;
+}) {
 	const { t } = usePortalLocale();
 	// One shared builder — this list used to be a byte-identical copy of the one
-	// in `AgencyPaidPvDetail`, deduction-hiding `> 0` filter and all.
-	const rows = pvBreakdownRows(breakdown, t);
+	// in `AgencyPaidPvDetail`, deduction-hiding `> 0` filter and all. Without the
+	// real lines the split would be the list row's stand-in filed under "Other",
+	// so it waits for them and says so.
+	const rows = pvLinesReady(lines) ? pvBreakdownRows(breakdown, t) : [];
 	return (
 		<IzCard flat className="mb-2.5">
 			{/* `uppercase` carries the heading's shouty look, which used to be baked
@@ -2166,6 +2245,14 @@ function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
 			    a second all-caps key would have been a second term for a heading the
 			    dictionary already names. */}
 			<p className="iz-card-sect mb-2">{t.payroll.fourPartBreakdown}</p>
+			{lines === "loading" && (
+				<p className="iz-tiny iz-muted2">{t.agencyPv.breakdownLinesLoading}</p>
+			)}
+			{lines === "error" && (
+				<p className="iz-tiny text-[var(--iz-red)]">
+					{t.agencyPv.breakdownLinesFailed}
+				</p>
+			)}
 			{rows.map((r) => (
 				<div key={r.key} className="iz-v-sum">
 					<span className="iz-muted">{r.label}</span>
@@ -2320,9 +2407,11 @@ function PvDetail({
 	// demo session, which falls the template back to its own issuer.
 	const pvIssuer = usePvIssuer();
 	// The list omits line items — pull the full voucher (falls back to the list
-	// row until it resolves).
-	const detailPv = useAgencyPvDetail(pv.id, pv);
-	const v = detailPv ?? pv;
+	// row until it resolves). `linesState` says which of the two is on screen, so
+	// the list row's stand-in is never presented as the voucher's lines.
+	const { pv: v, lines: linesState } = useAgencyPvDetailState(pv.id, pv);
+	// "signed by" a person — `finance_head_name` can hold an email or a user id.
+	const signerName = useAgencySignerName()(v.financeHeadName);
 	// Shares the day-review panel's fetch (same query key), so the button and the
 	// panel below it can never disagree about whether a day is held.
 	const { sendGate } = useAgencyPvDayReview(pv.id);
@@ -2374,6 +2463,14 @@ function PvDetail({
 	 * Send button enabled against a 409.
 	 */
 	const financeSigned = Boolean(v.financeHeadSignedAt);
+	/** Who signed for the agency, as the dual-sign row names them. */
+	const agencySignerLabel =
+		[
+			signerName,
+			v.financeHeadRole ? portalRoleLabel(v.financeHeadRole, t) : null,
+		]
+			.filter((part): part is string => Boolean(part?.trim()))
+			.join(" · ") || t.agencyPv.agencySignatory;
 
 	/**
 	 * The signer's own signature on file, if they have recorded one — the ink the
@@ -2470,6 +2567,9 @@ function PvDetail({
 		: v;
 
 	const saveEdit = () => {
+		// Never save while the rows are the list row's stand-in: that would
+		// replace the voucher's real lines with the single "week total" line.
+		if (!pvLinesReady(linesState)) return;
 		editLines(pv.id, rows, deduct);
 		setEditing(false);
 	};
@@ -2485,14 +2585,18 @@ function PvDetail({
 					    screen uses. The uuid is a database key, one unbreakable
 					    token that tells the reader nothing; it stays the fallback
 					    only for a voucher that was never numbered. */}
-					<span className="iz-pv-detail-id">
-						{pv.voucherNo?.trim() || pv.id}
-					</span>
+					<span className="iz-pv-detail-id">{pvVoucherRef(pv) || "—"}</span>
 				</div>
 				<button type="button" className="iz-chip" onClick={onClose}>
 					{t.common.close}
 				</button>
 			</div>
+			{/* `v`, the DETAIL copy — only the detail read carries the IC check. */}
+			{v.prIcMismatch && (
+				<p className="iz-tiny mb-2 text-[var(--iz-amber)]">
+					{t.izPv.prIcDiffersFromProfile}
+				</p>
+			)}
 
 			<PvWorkflowRail status={pv.status} />
 
@@ -2511,19 +2615,24 @@ function PvDetail({
 					
 					A voucher with no recorded capacity prints the agency alone rather
 					than guessing a title; see migration 0149.
+
+					IN WORDS, NOT A FORM WITH BLANKS. The line was "{capacity · agency}:
+					{name} · pending", so an unsigned voucher read "Atlas Agency: ·
+					pending" — a label, a colon, nothing, and a status that is wrong on
+					a PAID voucher sent before the agency signature was required
+					(PV-000002 and PV-000006). The name is a PERSON's, through
+					`signerDisplayName`, never the email `finance_head_name` can hold.
 				*/}
 				<p className="iz-tiny mt-1">
 					{t.agencyPv.signerFirst} ·{" "}
-					{[
-						v.financeHeadRole ? portalRoleLabel(v.financeHeadRole, t) : null,
-						pvIssuer.issuer?.name,
-					]
-						.filter((part): part is string => Boolean(part?.trim()))
-						.join(" · ") || FINANCE_HEAD_LABEL}
-					: <b className="text-[var(--iz-txt)]">{v.financeHeadName}</b>
-					{v.financeHeadSignedAt
-						? ` · ${formatPvSignStamp(v.financeHeadSignedAt)}`
-						: ` · ${t.agencyPv.pendingSignature}`}
+					{financeSigned
+						? fill(t.agencyPv.agencySignedBy, {
+								name: agencySignerLabel,
+								when: formatPvSignStamp(v.financeHeadSignedAt),
+							})
+						: pv.status === "SIGNED" || pv.status === "PAID"
+							? t.agencyPv.agencyNoSignatureOnRecord
+							: t.agencyPv.agencyWaitingToSign}
 				</p>
 				{/* The drawn mark, read from the voucher's own `finance_head_signature`.
 				    Reads `v`, not `pv` — the ink rides on the DETAIL fetch, and the list
@@ -2536,14 +2645,14 @@ function PvDetail({
 							<SignatureInkMark
 								ink={v.financeHeadSignatureInk}
 								label={fill(t.agencyPv.signatureOf, {
-									name: v.financeHeadName,
+									name: agencySignerLabel,
 								})}
 							/>
 						) : v.financeHeadSignatureDataUrl ? (
 							<img
 								src={v.financeHeadSignatureDataUrl}
 								alt={fill(t.agencyPv.signatureOf, {
-									name: v.financeHeadName,
+									name: agencySignerLabel,
 								})}
 							/>
 						) : null}
@@ -2584,7 +2693,7 @@ function PvDetail({
 				)}
 			</IzCard>
 
-			<PvBreakdownCard breakdown={breakdown} />
+			<PvBreakdownCard breakdown={breakdown} lines={linesState} />
 
 			{pv.status === "DISPUTED" && (
 				<IzCard flat className="mb-2 border-[var(--iz-red)]">
@@ -2626,7 +2735,20 @@ function PvDetail({
 				</IzCard>
 			)}
 
-			<PvSummaryView pv={displayPv} payee={payee} className="mb-2.5" />
+			{/* Readable lines counted from 1, the voucher's own week instead of
+			    "Weekly", the signer by name, and an honest stand-in row until the
+			    lines arrive — the same reading History's paid voucher gets. */}
+			<PvSummaryView
+				pv={withLinesStateNote(
+					withRowNumbersFromOne(
+						withReadableHeader(withReadableLines(displayPv, t), signerName, t),
+					),
+					linesState,
+					t,
+				)}
+				payee={payee}
+				className="mb-2.5"
+			/>
 
 			{receiptScans.length > 0 && (
 				<OutletSection
@@ -2653,86 +2775,91 @@ function PvDetail({
 			 * server refuses. A Director oversees and does not sign; that is the
 			 * distinction the rest of this page already makes.
 			 */}
-			{canEditDisputedLines(can, pv.status) && rows.length > 0 && (
-				<OutletSection
-					title={t.payroll.editLineItems}
-					iconKey="Edit line items"
-					hint={t.payroll.disputeResolution}
-					trailing={
-						<button
-							type="button"
-							className="iz-chip"
-							onClick={() => setEditing(!editing)}
-						>
-							<Pencil className="mr-1 inline h-3 w-3" />{" "}
-							{editing ? t.common.cancel : t.common.edit}
-						</button>
-					}
-				>
-					<IzCard>
-						{rows.map((r, idx) => (
-							<div
-								key={r.i}
-								className="iz-v-sum border-b border-[var(--iz-line)] py-2 last:border-0"
+			{canEditDisputedLines(can, pv.status) &&
+				rows.length > 0 &&
+				pvLinesReady(linesState) && (
+					<OutletSection
+						title={t.payroll.editLineItems}
+						iconKey="Edit line items"
+						hint={t.payroll.disputeResolution}
+						trailing={
+							<button
+								type="button"
+								className="iz-chip"
+								onClick={() => setEditing(!editing)}
 							>
-								<div className="min-w-0 pr-2">
+								<Pencil className="mr-1 inline h-3 w-3" />{" "}
+								{editing ? t.common.cancel : t.common.edit}
+							</button>
+						}
+					>
+						<IzCard>
+							{rows.map((r, idx) => (
+								<div
+									key={r.i}
+									className="iz-v-sum border-b border-[var(--iz-line)] py-2 last:border-0"
+								>
+									<div className="min-w-0 pr-2">
+										{editing ? (
+											<input
+												className="w-full rounded bg-[var(--iz-bg2)] px-2 py-1 text-sm"
+												value={r.desc}
+												onChange={(e) => {
+													const next = [...rows];
+													next[idx] = { ...r, desc: e.target.value };
+													setRows(next);
+												}}
+											/>
+										) : (
+											<span className="iz-sm">{r.desc}</span>
+										)}
+										<p className="iz-tiny iz-muted2 mt-0.5">
+											{/* Display only — `rows` keeps the packed ref the save writes back. */}
+											{formatPayrollDay(r.date, t)}
+											{r.day ? ` (${r.day})` : ""} · {r.outlet} ·{" "}
+											{pvRefLabel(r.ref, t)}
+										</p>
+									</div>
 									{editing ? (
 										<input
-											className="w-full rounded bg-[var(--iz-bg2)] px-2 py-1 text-sm"
-											value={r.desc}
+											type="number"
+											className="w-20 rounded bg-[var(--iz-bg2)] px-2 py-1 text-right text-sm"
+											value={r.amt}
 											onChange={(e) => {
 												const next = [...rows];
-												next[idx] = { ...r, desc: e.target.value };
+												next[idx] = { ...r, amt: Number(e.target.value) };
 												setRows(next);
 											}}
 										/>
 									) : (
-										<span className="iz-sm">{r.desc}</span>
+										<b className="iz-ledger shrink-0">{formatRM(r.amt)}</b>
 									)}
-									<p className="iz-tiny iz-muted2 mt-0.5">
-										{r.date} ({r.day}) · {r.outlet} · {r.ref}
-									</p>
 								</div>
-								{editing ? (
+							))}
+							{editing && (
+								<div className="mt-2">
+									<label htmlFor={deductId} className="iz-tiny iz-muted">
+										{t.payroll.deductions}
+									</label>
 									<input
+										id={deductId}
 										type="number"
-										className="w-20 rounded bg-[var(--iz-bg2)] px-2 py-1 text-right text-sm"
-										value={r.amt}
-										onChange={(e) => {
-											const next = [...rows];
-											next[idx] = { ...r, amt: Number(e.target.value) };
-											setRows(next);
-										}}
+										className="mt-1 w-full rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2 text-sm"
+										value={deduct}
+										onChange={(e) => setDeduct(Number(e.target.value))}
 									/>
-								) : (
-									<b className="iz-ledger shrink-0">{formatRM(r.amt)}</b>
-								)}
-							</div>
-						))}
-						{editing && (
-							<div className="mt-2">
-								<label htmlFor={deductId} className="iz-tiny iz-muted">
-									{t.payroll.deductions}
-								</label>
-								<input
-									id={deductId}
-									type="number"
-									className="mt-1 w-full rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2 text-sm"
-									value={deduct}
-									onChange={(e) => setDeduct(Number(e.target.value))}
-								/>
-								<button
-									type="button"
-									className="iz-btn iz-btn-primary mt-2 w-full"
-									onClick={saveEdit}
-								>
-									{t.payroll.saveDisputeEdit}
-								</button>
-							</div>
-						)}
-					</IzCard>
-				</OutletSection>
-			)}
+									<button
+										type="button"
+										className="iz-btn iz-btn-primary mt-2 w-full"
+										onClick={saveEdit}
+									>
+										{t.payroll.saveDisputeEdit}
+									</button>
+								</div>
+							)}
+						</IzCard>
+					</OutletSection>
+				)}
 
 			{/* No letterhead, no document — see AgencyPaidPvDetail for the why. */}
 			<div className="mt-2.5 flex gap-2">
@@ -2791,7 +2918,8 @@ function PvDetail({
 					onClick={() => {
 						downloadPvReceipt(displayPv, {
 							name: payee.name,
-							bank: payee.bank ?? "Maybank",
+							// Blank, never a made-up bank (no payee-bank access = no account).
+							bank: payee.bank ?? "",
 							acc: payee.accountNo ?? "",
 							ic: payee.ic ?? pv.prIc ?? "",
 						});

@@ -5,7 +5,8 @@ import {
 } from "@agency-portal/components/outlet/ShiftHistoryMoneyBreakdownView";
 import type { ShiftHistoryMoneyBreakdown } from "@agency-portal/lib/shift-history-amounts";
 import { cn } from "@agency-portal/lib/utils";
-import { useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { useId, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /** Clickable Total Received / Total Payout tiles with on-demand breakdown. */
@@ -14,6 +15,7 @@ export function ShiftHistoryExpandableMoneyBlock({
 	className,
 	payoutLabel,
 	payoutNote,
+	inlineBreakdown = false,
 }: {
 	breakdown: ShiftHistoryMoneyBreakdown;
 	className?: string;
@@ -25,8 +27,11 @@ export function ShiftHistoryExpandableMoneyBlock({
 	payoutLabel?: string;
 	/** A line under the payout figure — the wage part beside a take-home. */
 	payoutNote?: string;
+	/** Keep the active breakdown beside its metric on small Agency screens. */
+	inlineBreakdown?: boolean;
 }) {
 	const { t } = usePortalLocale();
+	const breakdownId = useId();
 	const [openKind, setOpenKind] = useState<HistoryMoneyKind | null>(null);
 
 	const toggle = (kind: HistoryMoneyKind) => {
@@ -34,7 +39,13 @@ export function ShiftHistoryExpandableMoneyBlock({
 	};
 
 	return (
-		<div className={cn("iz-hist-expandable-money", className)}>
+		<div
+			className={cn(
+				"iz-hist-expandable-money",
+				inlineBreakdown && "iz-hist-expandable-money--inline",
+				className,
+			)}
+		>
 			<div className="iz-outlet-shift-log-summary__metrics iz-outlet-shift-log-summary__metrics--pair">
 				<button
 					type="button"
@@ -45,6 +56,7 @@ export function ShiftHistoryExpandableMoneyBlock({
 					)}
 					onClick={() => toggle("received")}
 					aria-expanded={openKind === "received"}
+					aria-controls={openKind === "received" ? breakdownId : undefined}
 				>
 					<span className="iz-outlet-shift-log-summary__metric-label">
 						{t.history.metricTotalReceived}
@@ -52,7 +64,23 @@ export function ShiftHistoryExpandableMoneyBlock({
 					<span className="iz-outlet-shift-log-summary__metric-value">
 						{formatRM(breakdown.totalReceived)}
 					</span>
+					{inlineBreakdown && (
+						<span className="iz-hist-breakdown-toggle">
+							{openKind === "received"
+								? t.approvedDesign.hideBreakdown
+								: t.approvedDesign.viewBreakdown}
+							<ChevronDown className="iz-hist-metric-chevron" aria-hidden />
+						</span>
+					)}
 				</button>
+				{inlineBreakdown && openKind === "received" && (
+					<div id={breakdownId} className="iz-hist-inline-breakdown">
+						<ShiftHistoryMoneyBreakdownView
+							breakdown={breakdown}
+							kind="received"
+						/>
+					</div>
+				)}
 				<button
 					type="button"
 					className={cn(
@@ -62,6 +90,7 @@ export function ShiftHistoryExpandableMoneyBlock({
 					)}
 					onClick={() => toggle("payout")}
 					aria-expanded={openKind === "payout"}
+					aria-controls={openKind === "payout" ? breakdownId : undefined}
 				>
 					<span className="iz-outlet-shift-log-summary__metric-label">
 						{payoutLabel ?? t.history.metricTotalPayout}
@@ -72,10 +101,31 @@ export function ShiftHistoryExpandableMoneyBlock({
 					{payoutNote ? (
 						<span className="iz-tiny iz-muted2 mt-0.5 block">{payoutNote}</span>
 					) : null}
+					{inlineBreakdown && (
+						<span className="iz-hist-breakdown-toggle">
+							{openKind === "payout"
+								? t.approvedDesign.hideBreakdown
+								: t.approvedDesign.viewBreakdown}
+							<ChevronDown className="iz-hist-metric-chevron" aria-hidden />
+						</span>
+					)}
 				</button>
+				{inlineBreakdown && openKind === "payout" && (
+					<div id={breakdownId} className="iz-hist-inline-breakdown">
+						<ShiftHistoryMoneyBreakdownView
+							breakdown={breakdown}
+							kind="payout"
+						/>
+					</div>
+				)}
 			</div>
-			{openKind ? (
-				<ShiftHistoryMoneyBreakdownView breakdown={breakdown} kind={openKind} />
+			{!inlineBreakdown && openKind ? (
+				<div id={breakdownId}>
+					<ShiftHistoryMoneyBreakdownView
+						breakdown={breakdown}
+						kind={openKind}
+					/>
+				</div>
 			) : null}
 		</div>
 	);

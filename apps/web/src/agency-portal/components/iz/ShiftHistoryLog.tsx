@@ -12,6 +12,7 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
+import { OutletMobileFilters } from "@agency-portal/components/outlet/OutletMobileFilters";
 import { ShiftTxnMetricsRow } from "@agency-portal/components/outlet/outlet-history-metrics";
 import {
 	findOutletRatingForPr,
@@ -20,6 +21,7 @@ import {
 	OutletShiftLogShiftCard,
 	OutletShiftLogSummaryCard,
 	type PrHistoryCardMoney,
+	ShiftHoursLine,
 } from "@agency-portal/components/outlet/outlet-history-ui";
 import { ShiftHistoryExpandableMoneyBlock } from "@agency-portal/components/outlet/ShiftHistoryExpandableMoneyBlock";
 import { useAgencyRatings } from "@agency-portal/hooks/use-agency-ratings";
@@ -142,18 +144,6 @@ export function ShiftHistoryLog({
 	const outlets = useMemo(
 		() => [...new Set(rows.map((r) => r.outlet))].sort(),
 		[rows],
-	);
-	const dates = useMemo(
-		() => [...new Set(rows.map((r) => r.dateIso))].sort().reverse(),
-		[rows],
-	);
-	const dateOptions = useMemo(
-		() =>
-			dates.map((d) => {
-				const row = rows.find((r) => r.dateIso === d);
-				return { key: d, label: row?.dateDisplay ?? d };
-			}),
-		[dates, rows],
 	);
 	const thirdOptions = useMemo(() => {
 		if (portal === "agency") {
@@ -427,6 +417,20 @@ export function ShiftHistoryLog({
 			: "mt-2"
 		: "iz-screen";
 	const outletStyleLayout = useOutletCardLayout;
+	const summaryBreakdown = sumShiftHistoryBreakdowns(
+		filtered,
+		breakdownOpts(filtered),
+	);
+	if (takeHome && prTakeHome) {
+		const money = [...prTakeHome.values()];
+		summaryBreakdown.totalPayout = money.reduce(
+			(sum, row) => sum + (takeHome.ready ? row.takeHomeRm : row.wagesRm),
+			0,
+		);
+		summaryBreakdown.deductionsRm = takeHome.ready
+			? money.reduce((sum, row) => sum + row.deductionsRm, 0)
+			: 0;
+	}
 
 	return (
 		<div className={shellClass}>
@@ -462,64 +466,115 @@ export function ShiftHistoryLog({
 			 * TitleWithIcon's fallback lookup would miss in zh and silently drop
 			 * the icon. Same for the transaction-log headings below.
 			 */}
-			<p className="iz-txn-filter-heading mt-4">
-				<TitleWithIcon icon={iconForNav("Filter by")}>
-					{t.history.filterBy}
-				</TitleWithIcon>
-			</p>
-			<div className="iz-txn-filters">
-				<HistSelectField
-					label={primaryLabel}
-					value={nameFilter}
-					onChange={setNameFilter}
-					options={
-						agencyByVenue
-							? [
-									{ value: "", label: t.filters.allOutlets },
-									...outlets.map((o) => ({ value: o, label: o })),
-								]
-							: [
-									{ value: "", label: t.history.allNames },
-									...prNames.map((n) => {
-										const row = rows.find((r) => r.prName === n);
-										return { value: row?.prId ?? n, label: n };
-									}),
-								]
+			<OutletMobileFilters enabled={portal === "outlet" || portal === "agency"}>
+				<p className="iz-txn-filter-heading mt-4">
+					<TitleWithIcon icon={iconForNav("Filter by")}>
+						{t.history.filterBy}
+					</TitleWithIcon>
+				</p>
+				<div className="iz-txn-filters">
+					<HistSelectField
+						label={primaryLabel}
+						value={nameFilter}
+						onChange={setNameFilter}
+						options={
+							agencyByVenue
+								? [
+										{ value: "", label: t.filters.allOutlets },
+										...outlets.map((o) => ({ value: o, label: o })),
+									]
+								: [
+										{ value: "", label: t.history.allNames },
+										...prNames.map((n) => {
+											const row = rows.find((r) => r.prName === n);
+											return { value: row?.prId ?? n, label: n };
+										}),
+									]
+						}
+					/>
+					<label className="iz-approved-history-date">
+						{t.approvedDesign.fromDate}
+						<input
+							type="date"
+							value={dateRange.from}
+							onChange={(e) =>
+								setDateRange({ ...dateRange, from: e.target.value })
+							}
+						/>
+					</label>
+					<label className="iz-approved-history-date">
+						{t.approvedDesign.toDate}
+						<input
+							type="date"
+							value={dateRange.to}
+							onChange={(e) =>
+								setDateRange({ ...dateRange, to: e.target.value })
+							}
+						/>
+					</label>
+					<HistSelectField
+						label={thirdLabel}
+						value={thirdFilter}
+						onChange={setThirdFilter}
+						options={
+							agencyByVenue
+								? [
+										{ value: "", label: t.filters.allPrs },
+										...prNames.map((n) => {
+											const row = rows.find((r) => r.prName === n);
+											return { value: row?.prId ?? n, label: n };
+										}),
+									]
+								: [
+										{
+											value: "",
+											label:
+												portal === "agency"
+													? t.filters.allOutlets
+													: t.history.allAgencies,
+										},
+										...thirdOptions.map((o) => ({ value: o, label: o })),
+									]
+						}
+					/>
+					<button
+						type="button"
+						className="iz-btn iz-btn-ghost"
+						onClick={() => {
+							setNameFilter("");
+							setThirdFilter("");
+							setDateRange({ from: "", to: "" });
+						}}
+					>
+						{t.approvedDesign.clearFilters}
+					</button>
+				</div>
+			</OutletMobileFilters>
+			<div className="iz-approved-history-summary">
+				<ShiftHistoryExpandableMoneyBlock
+					breakdown={summaryBreakdown}
+					inlineBreakdown
+					payoutLabel={
+						takeHome
+							? takeHome.ready
+								? t.history.metricTakeHome
+								: t.history.metricWages
+							: undefined
+					}
+					payoutNote={
+						takeHome?.ready
+							? fill(t.history.wagesBeside, {
+									amount: formatRM(summaryBreakdown.wagesRm),
+								})
+							: undefined
 					}
 				/>
-				<HistDateRangePickerField
-					label={t.history.colDate}
-					range={dateRange}
-					onChange={setDateRange}
-					dateOptions={dateOptions}
-				/>
-				<HistSelectField
-					label={thirdLabel}
-					value={thirdFilter}
-					onChange={setThirdFilter}
-					options={
-						agencyByVenue
-							? [
-									{ value: "", label: t.filters.allPrs },
-									...prNames.map((n) => {
-										const row = rows.find((r) => r.prName === n);
-										return { value: row?.prId ?? n, label: n };
-									}),
-								]
-							: [
-									{
-										value: "",
-										label:
-											portal === "agency"
-												? t.filters.allOutlets
-												: t.history.allAgencies,
-									},
-									...thirdOptions.map((o) => ({ value: o, label: o })),
-								]
-					}
-				/>
+				<section className="iz-approved-history-count">
+					<p>{t.approvedDesign.completedShifts}</p>
+					<strong>{filtered.length}</strong>
+					<p>{logCountLabel}</p>
+				</section>
 			</div>
-
 			<div
 				className={
 					outletStyleLayout ? "iz-outlet-hist-log-head" : "iz-between mt-4"
@@ -696,6 +751,7 @@ export function ShiftHistoryLog({
 									})}
 								</p>
 								<ShiftHistoryExpandableMoneyBlock
+									inlineBreakdown={portal === "agency"}
 									className="mt-2"
 									breakdown={detailPrVenueBreakdown}
 									// Until the take-home can be stated these nights carry
@@ -746,6 +802,7 @@ export function ShiftHistoryLog({
 											: ""}
 								</p>
 								<ShiftHistoryExpandableMoneyBlock
+									inlineBreakdown={portal === "agency"}
 									className="mt-2"
 									breakdown={detailMoney.breakdown}
 									payoutLabel={detailMoney.label}
@@ -852,6 +909,7 @@ export function ShiftHistoryLog({
 							})}
 						</p>
 						<ShiftHistoryExpandableMoneyBlock
+							inlineBreakdown={portal === "agency"}
 							className="mt-2"
 							breakdown={detailOutletBreakdown}
 						/>
@@ -933,12 +991,15 @@ function ShiftHistoryShiftCard({
 					<div className="iz-heading text-sm font-bold text-[var(--iz-gold-l)]">
 						{formatRM(breakdown.totalPayout)}
 					</div>
-					<p className="iz-tiny iz-muted2">
-						{fill(t.izPv.hoursShift, { n: row.durationHours })}
-					</p>
+					<ShiftHoursLine
+						className="iz-tiny iz-muted2"
+						hours={row.durationHours}
+						label={fill(t.izPv.hoursShift, { n: row.durationHours })}
+					/>
 				</div>
 			</div>
 			<ShiftHistoryExpandableMoneyBlock
+				inlineBreakdown={portal === "agency"}
 				className="mt-2"
 				breakdown={breakdown}
 			/>

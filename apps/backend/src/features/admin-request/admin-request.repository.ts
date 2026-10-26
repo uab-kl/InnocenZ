@@ -1,4 +1,16 @@
-import { and, desc, eq, ilike, inArray, isNotNull, ne, not, sql, SQL } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  ne,
+  not,
+  or,
+  sql,
+  SQL,
+} from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -39,6 +51,55 @@ export type NegotiatedByRoleRow = {
  * out of it. Different question, different test, on purpose.
  */
 export const AWAITING_ANSWER = ['pending', 'contacted'] as const;
+
+/**
+ * "The organisation this request names still exists."
+ *
+ * `admin_request.subscriber_id` carries NO foreign key — it points into one of
+ * two tables — so nothing in the schema closes a request when its outlet or
+ * agency row goes. On 22 Oct 2026 two such rows were holding the admin's
+ * dashboard at "2 need attention" ("Finish quote: Bear Lounge" among them) for
+ * venues found in neither table; their ids had been minted by
+ * `seed-sample-activity.ts` and never named a real organisation at all.
+ *
+ * A row naming no organisation, or no type to look one up by, PASSES: what
+ * cannot be proved gone is not hidden. Same question `subscriberOrgExists`
+ * (subscription/plan-limit.ts) asks of one id, asked here of every row.
+ */
+export function requestOrgStillExists(): SQL {
+  return sql`(
+    ${AdminRequestTable.subscriberId} is null
+    or ${AdminRequestTable.subscriberType} is null
+    or (${AdminRequestTable.subscriberType} = 'outlet'
+        and exists (select 1 from "main"."outlet" o where o.id = ${AdminRequestTable.subscriberId}))
+    or (${AdminRequestTable.subscriberType} = 'agency'
+        and exists (select 1 from "main"."agency" a where a.id = ${AdminRequestTable.subscriberId}))
+  )`;
+}
+
+/**
+ * NOTHING WAITS ON AN ORGANISATION THAT NO LONGER EXISTS.
+ *
+ * A request still awaiting an answer (`AWAITING_ANSWER`) for an org that is
+ * gone is not work — there is nobody to quote, approve or call back, and
+ * approving a plan change for one is refused anyway (`validatePlanChange`) — so it leaves every
+ * admin queue and count: the dashboard's "need attention", the Plan Request /
+ * Plan Change inboxes it links to, the header bell and the sidebar badges. All
+ * of those read `listPaginated` or `countPending`, which is why the rule lives
+ * HERE rather than in any one screen: a count that disagrees with the list it
+ * links to is the fault the dashboard was rewritten once already to stop.
+ *
+ * ANSWERED rows (resolved / approved / declined / direct / withdrawn) stay
+ * listed: they are the record of what was decided, org or no org. The rows are
+ * not changed — `src/scripts/_close-orphaned-org-records.ts` lists them and,
+ * with `--apply`, declines them with a system note.
+ */
+export function notAwaitingAGoneOrg(): SQL {
+  return or(
+    not(inArray(AdminRequestTable.status, AWAITING_ANSWER)),
+    requestOrgStillExists(),
+  ) as SQL;
+}
 
 export class AdminRequestRepositoryClass {
   /**
@@ -85,7 +146,9 @@ export class AdminRequestRepositoryClass {
   }
 
   private buildConditions(filter?: AdminRequestFilter): SQL | undefined {
-    const conditions: SQL[] = [];
+    // Always on — see `notAwaitingAGoneOrg`. Never a filter a caller opts into,
+    // or the count and the list it links to start disagreeing again.
+    const conditions: SQL[] = [notAwaitingAGoneOrg()];
     if (filter?.type) {
       const typeClause = Array.isArray(filter.type)
         ? inArray(AdminRequestTable.type, filter.type)
@@ -102,11 +165,22 @@ export class AdminRequestRepositoryClass {
       const clause = this.negotiatedClause();
       conditions.push(filter.negotiated === 'only' ? clause : not(clause));
     }
-    if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
-    if (filter?.status) conditions.push(eq(AdminRequestTable.status, filter.status));
-    if (filter?.search) conditions.push(ilike(AdminRequestTable.subscriberName, `%${filter.search}%`));
-    if (filter?.subscriberType) conditions.push(eq(AdminRequestTable.subscriberType, filter.subscriberType));
-    const requestedOn = buildMultiDayWhere(AdminRequestTable.createdAt, filter?.dates);
+    if (filter?.excludeType)
+      conditions.push(ne(AdminRequestTable.type, filter.excludeType));
+    if (filter?.status)
+      conditions.push(eq(AdminRequestTable.status, filter.status));
+    if (filter?.search)
+      conditions.push(
+        ilike(AdminRequestTable.subscriberName, `%${filter.search}%`),
+      );
+    if (filter?.subscriberType)
+      conditions.push(
+        eq(AdminRequestTable.subscriberType, filter.subscriberType),
+      );
+    const requestedOn = buildMultiDayWhere(
+      AdminRequestTable.createdAt,
+      filter?.dates,
+    );
     if (requestedOn) conditions.push(requestedOn);
     return conditions.length > 0 ? and(...conditions) : undefined;
   }
@@ -140,13 +214,17 @@ export class AdminRequestRepositoryClass {
     const outstandingFirst = sql`(${AdminRequestTable.status} = 'pending') desc`;
 
     const latest = db
-      .selectDistinctOn([sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`])
+      .selectDistinctOn([
+        sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`,
+      ])
       .from(AdminRequestTable)
       .where(whereClause)
       .orderBy(key, outstandingFirst, desc(AdminRequestTable.createdAt))
       .as('latest');
 
-    const [countRow] = await db.select({ value: sql<number>`count(*)::int` }).from(latest);
+    const [countRow] = await db
+      .select({ value: sql<number>`count(*)::int` })
+      .from(latest);
     const totalCount = Number(countRow?.value ?? 0);
 
     const records = (await db
@@ -169,7 +247,11 @@ export class AdminRequestRepositoryClass {
       const whereClause = this.buildConditions(filter);
 
       if (filter?.latestPerSubscriber) {
-        return await this.listLatestPerSubscriber({ whereClause, page, pageSize });
+        return await this.listLatestPerSubscriber({
+          whereClause,
+          page,
+          pageSize,
+        });
       }
 
       const [countRow] = await db
@@ -214,7 +296,10 @@ export class AdminRequestRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[AdminRequestRepository.latestPendingByType] Error:', error);
+      logger.error(
+        '[AdminRequestRepository.latestPendingByType] Error:',
+        error,
+      );
       return null;
     }
   }
@@ -239,7 +324,9 @@ export class AdminRequestRepositoryClass {
    * runs a PV count per agency, and adding a second per-agency round trip to a
    * weekly loop is a cost with nothing to show for it.
    */
-  async subscriberIdsAwaitingAnswer(type: AdminRequestType): Promise<Set<string> | null> {
+  async subscriberIdsAwaitingAnswer(
+    type: AdminRequestType,
+  ): Promise<Set<string> | null> {
     try {
       const rows = await db
         .select({ subscriberId: AdminRequestTable.subscriberId })
@@ -252,17 +339,26 @@ export class AdminRequestRepositoryClass {
           ),
         );
       return new Set(
-        rows.map((row) => row.subscriberId).filter((id): id is string => Boolean(id)),
+        rows
+          .map((row) => row.subscriberId)
+          .filter((id): id is string => Boolean(id)),
       );
     } catch (error) {
-      logger.error('[AdminRequestRepository.subscriberIdsAwaitingAnswer] Error:', error);
+      logger.error(
+        '[AdminRequestRepository.subscriberIdsAwaitingAnswer] Error:',
+        error,
+      );
       return null;
     }
   }
 
   async getById(id: string): Promise<AdminRequest | null> {
     try {
-      const [row] = await db.select().from(AdminRequestTable).where(eq(AdminRequestTable.id, id)).limit(1);
+      const [row] = await db
+        .select()
+        .from(AdminRequestTable)
+        .where(eq(AdminRequestTable.id, id))
+        .limit(1);
       return row ?? null;
     } catch (error) {
       logger.error('[AdminRequestRepository.getById] Error:', error);
@@ -276,7 +372,10 @@ export class AdminRequestRepositoryClass {
   ): Promise<AdminRequest | null> {
     try {
       const dbClient = tx ?? db;
-      const [row] = await dbClient.insert(AdminRequestTable).values(data).returning();
+      const [row] = await dbClient
+        .insert(AdminRequestTable)
+        .values(data)
+        .returning();
       return row ?? null;
     } catch (error) {
       logger.error('[AdminRequestRepository.create] Error:', error);
@@ -336,7 +435,10 @@ export class AdminRequestRepositoryClass {
       .update(AdminRequestTable)
       .set({ ...data, updatedAt: new Date() })
       .where(
-        and(eq(AdminRequestTable.id, id), inArray(AdminRequestTable.status, AWAITING_ANSWER)),
+        and(
+          eq(AdminRequestTable.id, id),
+          inArray(AdminRequestTable.status, AWAITING_ANSWER),
+        ),
       )
       .returning();
     return row ?? null;
@@ -346,7 +448,12 @@ export class AdminRequestRepositoryClass {
     filter?: Pick<AdminRequestFilter, 'type' | 'excludeType'>,
   ): Promise<number> {
     try {
-      const conditions: SQL[] = [eq(AdminRequestTable.status, 'pending')];
+      // A pending request for an organisation that is gone needs nobody's
+      // attention — the bell and the badges must agree with the inbox.
+      const conditions: SQL[] = [
+        eq(AdminRequestTable.status, 'pending'),
+        requestOrgStillExists(),
+      ];
       if (filter?.type) {
         conditions.push(
           Array.isArray(filter.type)
@@ -354,7 +461,8 @@ export class AdminRequestRepositoryClass {
             : eq(AdminRequestTable.type, filter.type),
         );
       }
-      if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
+      if (filter?.excludeType)
+        conditions.push(ne(AdminRequestTable.type, filter.excludeType));
       const [row] = await db
         .select({ value: sql<number>`count(*)::int` })
         .from(AdminRequestTable)
@@ -378,7 +486,12 @@ export class AdminRequestRepositoryClass {
           average: sql<string>`coalesce(round(avg(${AdminRequestTable.quotedAmount}), 2), 0)::text`,
         })
         .from(AdminRequestTable)
-        .where(and(eq(AdminRequestTable.status, 'resolved'), isNotNull(AdminRequestTable.quotedAmount)))
+        .where(
+          and(
+            eq(AdminRequestTable.status, 'resolved'),
+            isNotNull(AdminRequestTable.quotedAmount),
+          ),
+        )
         .groupBy(AdminRequestTable.subscriberType);
       return rows;
     } catch (error) {

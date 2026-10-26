@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	keepPreviousData,
 	useMutation,
@@ -14,10 +15,15 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { InvoicePaymentSheet } from "@/components/admin/invoice-payment-sheet";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { RefundsDueCard } from "@/components/admin/refunds-due-card";
 import { SourceToggle } from "@/components/admin/source-toggle";
+import {
+	currentOrgName,
+	useCurrentOrgNames,
+} from "@/components/admin/use-current-org-names";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -234,9 +240,12 @@ function PlanPaymentPage() {
 	const pagination = invoicesQuery.data?.pagination;
 	const showLoading = invoicesQuery.isLoading && groups.length === 0;
 	const isSaving = generateMutation.isPending;
+	// The group's name is the subscription's stored copy; the org row holds the
+	// name it goes by today — the same one the payment panel's header shows.
+	const orgNames = useCurrentOrgNames();
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={CreditCard}
 				title={t.admin.navPlanPayment}
@@ -277,71 +286,73 @@ function PlanPaymentPage() {
 							</CardDescription>
 						</div>
 
-						<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-							<SourceToggle<"all" | SubscriberType>
-								className="sm:mr-auto"
-								value={roleFilter}
-								onChange={(value) => {
-									setRoleFilter(value);
-									setPage(1);
-								}}
-							/>
-
-							<div className="relative sm:w-56">
-								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-								<Input
-									value={searchInput}
-									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder={t.adminService.searchOutletOrAgencyPlaceholder}
-									className="pl-8"
-									aria-label={t.adminService.searchOutletOrAgency}
+						<AdminFilters className="admin-finance-filters">
+							<div className="admin-finance-filter-row flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+								<SourceToggle<"all" | SubscriberType>
+									className="sm:mr-auto"
+									value={roleFilter}
+									onChange={(value) => {
+										setRoleFilter(value);
+										setPage(1);
+									}}
 								/>
-							</div>
 
-							<Select
-								value={statusFilter}
-								onValueChange={(value) => {
-									setStatusFilter(value);
-									setPage(1);
-								}}
-							>
-								<SelectTrigger
-									className="sm:w-36"
-									aria-label={t.admin.filterByStatus}
+								<div className="relative sm:w-56">
+									<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										value={searchInput}
+										onChange={(event) => setSearchInput(event.target.value)}
+										placeholder={t.adminService.searchOutletOrAgencyPlaceholder}
+										className="pl-8"
+										aria-label={t.adminService.searchOutletOrAgency}
+									/>
+								</div>
+
+								<Select
+									value={statusFilter}
+									onValueChange={(value) => {
+										setStatusFilter(value);
+										setPage(1);
+									}}
 								>
-									<SelectValue placeholder={t.admin.allStatus} />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-									<SelectItem value="unpaid">
-										{statusLabels.unpaid(t)}
-									</SelectItem>
-									<SelectItem value="paid">{statusLabels.paid(t)}</SelectItem>
-									<SelectItem value="void">{statusLabels.void(t)}</SelectItem>
-								</SelectContent>
-							</Select>
+									<SelectTrigger
+										className="sm:w-36"
+										aria-label={t.admin.filterByStatus}
+									>
+										<SelectValue placeholder={t.admin.allStatus} />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+										<SelectItem value="unpaid">
+											{statusLabels.unpaid(t)}
+										</SelectItem>
+										<SelectItem value="paid">{statusLabels.paid(t)}</SelectItem>
+										<SelectItem value="void">{statusLabels.void(t)}</SelectItem>
+									</SelectContent>
+								</Select>
 
-							{/* Idempotent — the server refuses to bill a period twice — so this
+								{/* Idempotent — the server refuses to bill a period twice — so this
 							    is safe to press, and it exists so a newly-started period does
 							    not wait for the nightly job. */}
-							<Button
-								variant="outline"
-								disabled={isSaving}
-								onClick={() => generateMutation.mutate()}
-							>
-								{generateMutation.isPending ? (
-									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-								) : (
-									<RefreshCw className="mr-2 h-4 w-4" />
-								)}
-								{t.adminService.refreshPeriods}
-							</Button>
-						</div>
+								<Button
+									variant="outline"
+									disabled={isSaving}
+									onClick={() => generateMutation.mutate()}
+								>
+									{generateMutation.isPending ? (
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+									) : (
+										<RefreshCw className="mr-2 h-4 w-4" />
+									)}
+									{t.adminService.refreshPeriods}
+								</Button>
+							</div>
+						</AdminFilters>
 					</div>
 				</CardHeader>
 				<CardContent>
 					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
 									<TableHead>{t.adminService.colWho}</TableHead>
@@ -430,10 +441,18 @@ function PlanPaymentPage() {
 												className="cursor-pointer bg-muted/30 hover:bg-muted/50"
 												onClick={() => newest && setDetailId(newest.id)}
 											>
-												<TableCell className="text-base font-medium">
-													{group.subscriberName}
+												<TableCell
+													data-label={t.adminService.colWho}
+													className="text-base font-medium"
+												>
+													{currentOrgName(
+														orgNames,
+														group.subscriberType,
+														group.subscriberId,
+														group.subscriberName,
+													)}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.adminService.role}>
 													<Badge
 														variant="outline"
 														className={`${roleBadgeColors[group.subscriberType]} w-fit`}
@@ -443,18 +462,27 @@ function PlanPaymentPage() {
 												</TableCell>
 												{/* Every lane the org is billed on — plan, Custom, POS —
 												    named once rather than once per period. */}
-												<TableCell className="text-base">
+												<TableCell
+													data-label={t.adminService.colPlan}
+													className="text-base"
+												>
 													{summary.lanes.join(" · ")}
 												</TableCell>
-												<TableCell className="text-base whitespace-nowrap text-muted-foreground">
+												<TableCell
+													data-label={t.adminService.colBillingPeriod}
+													className="text-base whitespace-nowrap text-muted-foreground"
+												>
 													{fill(t.adminService.periodsCount, {
 														n: summary.periods,
 													})}
 												</TableCell>
-												<TableCell className="text-base font-medium whitespace-nowrap">
+												<TableCell
+													data-label={`${t.adminService.colAmount} (RM)`}
+													className="text-base font-medium whitespace-nowrap"
+												>
 													{formatPrice(summary.owed)}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.admin.colStatus}>
 													{summary.unpaidCount === 0 ? (
 														// Nothing owed: "Paid" when something was paid, and
 														// "Void" when every bill on the card was voided —
@@ -483,14 +511,30 @@ function PlanPaymentPage() {
 														</Badge>
 													)}
 												</TableCell>
-												<TableCell className="text-base whitespace-nowrap text-muted-foreground">
+												<TableCell
+													data-label={t.adminService.colPaidOn}
+													className="text-base whitespace-nowrap text-muted-foreground"
+												>
 													{summary.paidCount > 0
 														? fill(t.adminService.paidCount, {
 																n: summary.paidCount,
 															})
 														: "—"}
 												</TableCell>
-												<TableCell />
+												<TableCell data-label={t.admin.colAction}>
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="admin-finance-review"
+														onClick={(event) => {
+															event.stopPropagation();
+															if (newest) setDetailId(newest.id);
+														}}
+													>
+														{t.rbac.review}
+													</Button>
+												</TableCell>
 											</TableRow>
 										);
 										// The per-period rows used to unfold here. They now live in the
@@ -553,7 +597,7 @@ function PlanPaymentPage() {
 			>
 				<SheetContent
 					side="right"
-					className="w-full overflow-y-auto sm:max-w-xl md:max-w-2xl"
+					className="admin-finance-sheet w-full overflow-y-auto sm:max-w-xl md:max-w-2xl"
 				>
 					{/* Keyed on the id so switching rows remounts rather than showing
 					    the previous invoice's figures while the next one loads. */}

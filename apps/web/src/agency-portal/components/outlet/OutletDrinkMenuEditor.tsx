@@ -133,7 +133,10 @@ export function OutletDrinkMenuEditor({
 				 */
 				const locked = isOutletTipsRow(drink);
 				return (
-					<div key={drink.id} className="flex items-end gap-2">
+					<div
+						key={drink.id}
+						className="iz-workspace-menu-row flex items-end gap-2"
+					>
 						<div className="min-w-0 flex-1">
 							<div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
 								{label}
@@ -158,7 +161,7 @@ export function OutletDrinkMenuEditor({
 							<div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
 								{t.workspace.price}
 							</div>
-							<div className="flex items-center gap-1.5 rounded-xl border border-[var(--iz-line2)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5">
+							<div className="iz-workspace-number-control flex items-center gap-1.5 rounded-xl border border-[var(--iz-line2)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5">
 								<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
 									RM
 								</span>

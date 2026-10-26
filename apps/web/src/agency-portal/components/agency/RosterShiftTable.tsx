@@ -450,7 +450,12 @@ export function RosterShiftTable({
 				{t.rosterGrid.tapComcardHint}
 			</p>
 
-			<div className="iz-roster-table-wrap hidden md:block">
+			<section
+				className="iz-roster-table-wrap hidden md:block"
+				aria-label={t.nav.roster}
+				// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users must be able to focus and horizontally scroll all roster columns.
+				tabIndex={0}
+			>
 				<table className="iz-roster-table">
 					<thead>
 						<tr>
@@ -509,7 +514,7 @@ export function RosterShiftTable({
 						})}
 					</tbody>
 				</table>
-			</div>
+			</section>
 
 			<div className="space-y-2 md:hidden">
 				{slots.map((slot) => {
@@ -582,8 +587,27 @@ function StatusPills({ slot }: { slot: AgencyRosterSlot }) {
 		<div className="flex flex-wrap gap-1">
 			{slot.lateFlag && <IzPill variant="amber">{t.rosterGrid.late}</IzPill>}
 			{slot.noShowFlag && <IzPill variant="red">{t.rosterGrid.noShow}</IzPill>}
-			<IzPill variant={st.variant}>{st.label(t)}</IzPill>
+			{statusPillShown(slot) && (
+				<IzPill variant={st.variant}>{st.label(t)}</IzPill>
+			)}
 		</div>
+	);
+}
+
+/**
+ * ONE PILL FOR A NO-SHOW, not two.
+ *
+ * A no-show arrives as the UI status "unavailable" (backend-shift-map folds
+ * leave_approved, cancelled and no_show into it) AND carries `noShowFlag`, so
+ * the row printed a red "No-show" beside a red "Unavailable" for the same fact.
+ * The flag is the more exact word; the generic status pill steps aside for it.
+ * Any other status beside a no-show flag still shows — it says something else.
+ */
+export function statusPillShown(
+	slot: Pick<AgencyRosterSlot, "noShowFlag" | "status">,
+): boolean {
+	return !(
+		slot.noShowFlag && rosterPageDisplayStatus(slot.status) === "unavailable"
 	);
 }
 
@@ -788,7 +812,7 @@ function RosterShiftCard({
 		? agencyPortalLabel(viewingAgencyId)
 		: rosterSlotAgencyName(slot);
 	return (
-		<IzCard>
+		<IzCard className="agency-roster-live-card">
 			<div className="iz-between gap-2">
 				<div className="flex min-w-0 items-start gap-2.5">
 					<PrComcardIdentity

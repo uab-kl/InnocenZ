@@ -8,6 +8,7 @@ import {
 } from "@agency-portal/lib/agency-demo";
 import { specialEventPillLabel } from "@agency-portal/lib/outlet-demo";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
+import { isImplausibleClockedHours } from "@agency-portal/lib/shift-clocked-hours";
 import { shiftHistorySubline } from "@agency-portal/lib/shift-history";
 import {
 	resolveShiftHistoryBreakdown,
@@ -228,6 +229,42 @@ export function OutletShiftLogRatingBlock({
 	);
 }
 
+/**
+ * The hours line under a night's total — "{n}h shift" — or, when check-in to
+ * check-out is over 16 h, a note that the STAMP looks wrong. Velvet 23's 23 Jul
+ * night was printed as a "119.13h shift" beside an ordinary wage; a span like
+ * that is a check-out nobody tapped, not a shift. The wage beside it is sealed
+ * and stays as it is. Shared by the outlet and the agency History cards so the
+ * two portals cannot disagree about what a plausible night is.
+ *
+ * The colour is inline because the line's own class (`iz-outlet-shift-log-
+ * card__hours`, un-layered) sets one and would beat a Tailwind utility.
+ */
+export function ShiftHoursLine({
+	hours,
+	label,
+	className,
+}: {
+	hours: number;
+	/** The normal "{n}h shift" text, in the caller's own namespace. */
+	label: string;
+	className: string;
+}) {
+	const { t } = usePortalLocale();
+	if (!isImplausibleClockedHours(hours)) {
+		return <p className={className}>{label}</p>;
+	}
+	return (
+		<p
+			className={className}
+			style={{ color: "var(--iz-amber)" }}
+			title={t.history.checkOutLooksWrongHint}
+		>
+			{fill(t.history.checkOutLooksWrong, { n: hours })}
+		</p>
+	);
+}
+
 export function OutletShiftLogShiftCard({ row }: { row: ShiftHistoryRow }) {
 	const { t } = usePortalLocale();
 	const [openKind, setOpenKind] = useState<"received" | "payout" | null>(null);
@@ -277,9 +314,11 @@ export function OutletShiftLogShiftCard({ row }: { row: ShiftHistoryRow }) {
 					<p className="iz-outlet-shift-log-card__total">
 						{formatRM(breakdown.totalPayout)}
 					</p>
-					<p className="iz-outlet-shift-log-card__hours">
-						{fill(t.outletPanels.hoursShift, { n: row.durationHours })}
-					</p>
+					<ShiftHoursLine
+						className="iz-outlet-shift-log-card__hours"
+						hours={row.durationHours}
+						label={fill(t.outletPanels.hoursShift, { n: row.durationHours })}
+					/>
 				</div>
 			</div>
 			<div className="iz-outlet-shift-log-card__metrics iz-outlet-shift-log-card__metrics--pair">
@@ -586,6 +625,11 @@ export function OutletPrHistoryCard({
 				</div>
 				<span className="iz-outlet-hist-bar__label">{pctLabel}</span>
 			</div>
+			{onTap && (
+				<span className="iz-approved-card-link">
+					{t.approvedDesign.viewBreakdown} →
+				</span>
+			)}
 		</article>
 	);
 

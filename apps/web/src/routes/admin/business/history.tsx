@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	keepPreviousData,
 	useMutation,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import {
 	CancelSubscriptionDialog,
 	isCancellable,
@@ -25,6 +27,10 @@ import {
 } from "@/components/admin/date-multi-filter";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { SourceToggle } from "@/components/admin/source-toggle";
+import {
+	currentOrgName,
+	useCurrentOrgNames,
+} from "@/components/admin/use-current-org-names";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +57,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -186,6 +193,16 @@ function HistoryPage() {
 	const records = historyQuery.data?.data ?? [];
 	const pagination = historyQuery.data?.pagination;
 	const showLoading = historyQuery.isLoading && records.length === 0;
+	// The row's `subscriberName` is a copy taken when it opened; the org's own
+	// row holds the name it goes by today.
+	const orgNames = useCurrentOrgNames();
+	const nameOf = (record: MemberSubscription) =>
+		currentOrgName(
+			orgNames,
+			record.subscriberType,
+			record.subscriberId,
+			record.subscriberName,
+		);
 
 	/**
 	 * Ending a subscription row. There was no control for it at all, so a row
@@ -221,12 +238,16 @@ function HistoryPage() {
 	 */
 	const outletsQuery = useQuery({
 		queryKey: ["outlets", "history-coverage"],
-		queryFn: () => fetchOutlets({ pageSize: 200 }, logout),
+		// Same key and fetch as useCurrentOrgNames — every page, 100 at a time
+		// (the server's clamp), so both screens share one complete list.
+		queryFn: () =>
+			fetchAllPages((page) => fetchOutlets({ page, pageSize: 100 }, logout)),
 		staleTime: 60_000,
 	});
 	const agenciesQuery = useQuery({
 		queryKey: ["agencies", "history-coverage"],
-		queryFn: () => fetchAgencies({ pageSize: 200 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) => fetchAgencies({ page, pageSize: 100 }, logout)),
 		staleTime: 60_000,
 	});
 	const ledgerIdsQuery = useQuery({
@@ -275,7 +296,7 @@ function HistoryPage() {
 	const resetToFirstPage = () => setPage(1);
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={HistoryIcon}
 				title={t.admin.navCurrentPlan}
@@ -299,94 +320,101 @@ function HistoryPage() {
 							</CardDescription>
 						</div>
 
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-							<SourceToggle
-								className="sm:mr-auto"
-								value={subscriberTypeFilter}
-								onChange={(value) => {
-									setSubscriberTypeFilter(value);
-									resetToFirstPage();
-								}}
-							/>
+						<AdminFilters className="admin-finance-filters">
+							<div className="admin-finance-filter-row flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+								<SourceToggle
+									className="sm:mr-auto"
+									value={subscriberTypeFilter}
+									onChange={(value) => {
+										setSubscriberTypeFilter(value);
+										resetToFirstPage();
+									}}
+								/>
 
-							<div className="relative sm:w-56">
-								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-								<Input
-									value={searchInput}
-									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder={t.adminBusiness.searchOutletOrAgencyPlaceholder}
-									className="pl-8"
-									aria-label={t.adminBusiness.searchOutletOrAgency}
+								<div className="relative sm:w-56">
+									<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										value={searchInput}
+										onChange={(event) => setSearchInput(event.target.value)}
+										placeholder={
+											t.adminBusiness.searchOutletOrAgencyPlaceholder
+										}
+										className="pl-8"
+										aria-label={t.adminBusiness.searchOutletOrAgency}
+									/>
+								</div>
+
+								{/* Current = the plan each subscriber is on today; History =
+							    every subscription it has held, with dates. */}
+								<Select
+									value={view}
+									onValueChange={(value) => {
+										setView(value as "current" | "history");
+										resetToFirstPage();
+									}}
+								>
+									<SelectTrigger
+										className="sm:w-40"
+										aria-label={t.adminBusiness.viewSwitchLabel}
+									>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="current">
+											{t.adminBusiness.viewCurrentPlan}
+										</SelectItem>
+										<SelectItem value="history">
+											{t.adminBusiness.viewFullHistory}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+
+								<Select
+									value={statusFilter}
+									onValueChange={(value) => {
+										setStatusFilter(value as StatusFilter);
+										resetToFirstPage();
+									}}
+								>
+									<SelectTrigger
+										className="sm:w-36"
+										aria-label={t.admin.filterByStatus}
+									>
+										<SelectValue placeholder={t.admin.allStatus} />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+										<SelectItem value="active">
+											{statusLabels.active(t)}
+										</SelectItem>
+										<SelectItem value="cancelled">
+											{statusLabels.cancelled(t)}
+										</SelectItem>
+										<SelectItem value="expired">
+											{statusLabels.expired(t)}
+										</SelectItem>
+										<SelectItem value="past_due">
+											{statusLabels.past_due(t)}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+
+								<DateMultiFilter
+									selectedDates={selectedDates}
+									onChange={(dates) => {
+										setSelectedDates(dates);
+										resetToFirstPage();
+									}}
+									ariaLabel={t.adminBusiness.filterBySubscribedDate}
 								/>
 							</div>
-
-							{/* Current = the plan each subscriber is on today; History =
-							    every subscription it has held, with dates. */}
-							<Select
-								value={view}
-								onValueChange={(value) => {
-									setView(value as "current" | "history");
-									resetToFirstPage();
-								}}
-							>
-								<SelectTrigger className="sm:w-40">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="current">
-										{t.adminBusiness.viewCurrentPlan}
-									</SelectItem>
-									<SelectItem value="history">
-										{t.adminBusiness.viewFullHistory}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-
-							<Select
-								value={statusFilter}
-								onValueChange={(value) => {
-									setStatusFilter(value as StatusFilter);
-									resetToFirstPage();
-								}}
-							>
-								<SelectTrigger
-									className="sm:w-36"
-									aria-label={t.admin.filterByStatus}
-								>
-									<SelectValue placeholder={t.admin.allStatus} />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-									<SelectItem value="active">
-										{statusLabels.active(t)}
-									</SelectItem>
-									<SelectItem value="cancelled">
-										{statusLabels.cancelled(t)}
-									</SelectItem>
-									<SelectItem value="expired">
-										{statusLabels.expired(t)}
-									</SelectItem>
-									<SelectItem value="past_due">
-										{statusLabels.past_due(t)}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-
-							<DateMultiFilter
-								selectedDates={selectedDates}
-								onChange={(dates) => {
-									setSelectedDates(dates);
-									resetToFirstPage();
-								}}
-								ariaLabel={t.adminBusiness.filterBySubscribedDate}
-							/>
-						</div>
+						</AdminFilters>
 					</div>
 				</CardHeader>
 
 				<CardContent>
 					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
 									<TableHead>{t.adminBusiness.colSubscriber}</TableHead>
@@ -451,10 +479,13 @@ function HistoryPage() {
 								) : (
 									records.map((record) => (
 										<TableRow key={record.id}>
-											<TableCell className="font-medium">
-												{record.subscriberName}
+											<TableCell
+												data-label={t.adminBusiness.colSubscriber}
+												className="font-medium"
+											>
+												{nameOf(record)}
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminBusiness.colRole}>
 												<Badge
 													variant="outline"
 													className={`${subscriberTypeColors[record.subscriberType]} w-fit`}
@@ -462,12 +493,16 @@ function HistoryPage() {
 													{subscriberTypeLabels[record.subscriberType](t)}
 												</Badge>
 											</TableCell>
-											<TableCell>{record.planName}</TableCell>
-											<TableCell>{formatPrice(record.amount)}</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminBusiness.colPlan}>
+												{record.planName}
+											</TableCell>
+											<TableCell data-label={t.adminBusiness.colAmount}>
+												{formatPrice(record.amount)}
+											</TableCell>
+											<TableCell data-label={t.adminBusiness.colBillingCycle}>
 												{billingCycleLabels[record.billingCycle](t)}
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.admin.colStatus}>
 												<Badge
 													variant="outline"
 													className={`${statusBadgeColors[record.status]} w-fit`}
@@ -475,10 +510,16 @@ function HistoryPage() {
 													{statusLabels[record.status](t)}
 												</Badge>
 											</TableCell>
-											<TableCell className="text-muted-foreground text-sm">
+											<TableCell
+												data-label={t.adminBusiness.colSubscribed}
+												className="text-muted-foreground text-sm"
+											>
 												{formatDate(record.startedAt)}
 											</TableCell>
-											<TableCell className="text-right">
+											<TableCell
+												data-label={t.admin.colActions}
+												className="text-right"
+											>
 												{isCancellable(record) && (
 													<Button
 														type="button"
@@ -487,7 +528,7 @@ function HistoryPage() {
 														className="text-destructive"
 														aria-label={fill(
 															t.adminBusiness.cancelSubscriptionFor,
-															{ name: record.subscriberName },
+															{ name: nameOf(record) },
 														)}
 														disabled={cancelMutation.isPending}
 														onClick={() => {
@@ -569,7 +610,7 @@ function HistoryPage() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						<Table>
+						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
 									<TableHead>{t.adminBusiness.colSubscriber}</TableHead>
@@ -581,14 +622,24 @@ function HistoryPage() {
 							<TableBody>
 								{unsubscribedOrgs.map((org) => (
 									<TableRow key={`${org.role}-${org.id}`}>
-										<TableCell className="font-medium">{org.name}</TableCell>
-										<TableCell>
+										<TableCell
+											data-label={t.adminBusiness.colSubscriber}
+											className="font-medium"
+										>
+											{org.name}
+										</TableCell>
+										<TableCell data-label={t.adminBusiness.colRole}>
 											<Badge variant="outline">
 												{subscriberTypeLabels[org.role](t)}
 											</Badge>
 										</TableCell>
-										<TableCell className="text-muted-foreground">—</TableCell>
-										<TableCell>
+										<TableCell
+											data-label={t.adminBusiness.colPlan}
+											className="text-muted-foreground"
+										>
+											—
+										</TableCell>
+										<TableCell data-label={t.admin.colStatus}>
 											<Badge variant="outline">
 												{t.adminBusiness.notSubscribed}
 											</Badge>
@@ -602,7 +653,11 @@ function HistoryPage() {
 			)}
 
 			<CancelSubscriptionDialog
-				record={cancelTarget}
+				record={
+					cancelTarget
+						? { ...cancelTarget, subscriberName: nameOf(cancelTarget) }
+						: null
+				}
 				onOpenChange={(open) => {
 					// Never dismissed mid-request: the answer must land somewhere
 					// the admin can read it.

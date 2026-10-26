@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
 import { formatDate, formatDay, getErrorMessage } from "@/lib/utils";
 import {
@@ -38,7 +39,7 @@ import {
 	DetailsHero,
 	SystemInfoCard,
 } from "./details-sheet-parts";
-import { formatSubRole } from "./org-status";
+import { memberStatusLabel } from "./org-status";
 import {
 	AGENCY_TEAM_GROUPS,
 	type OrgTeamMember,
@@ -148,19 +149,20 @@ export function OrgMemberPage({
 	const groups = isAgency ? AGENCY_TEAM_GROUPS : OUTLET_TEAM_GROUPS;
 	const lane = membership
 		? (groups.find((g) => g.subRole === membership.subRole)?.title(t) ??
-			formatSubRole(membership.subRole))
+			portalRoleLabel(membership.subRole, t))
 		: null;
 
 	/*
 	 * `username` can be empty on an invited account that never finished sign-up;
-	 * the card falls back to a truncated id and so must the page, or the header
-	 * renders blank.
+	 * the header falls back to how they can be reached, never to a raw id.
 	 */
 	const displayName =
 		account?.username ||
 		account?.profile?.fullName ||
 		membership?.username ||
-		`${userId.slice(0, 8)}…`;
+		account?.email ||
+		account?.phoneNum ||
+		t.adminUsers.actorUnknown;
 
 	const backTo = isAgency
 		? "/admin/user-management/agency"
@@ -172,7 +174,7 @@ export function OrgMemberPage({
 	const loading = membersQuery.isLoading || userQuery.isLoading;
 
 	return (
-		<PageShell>
+		<PageShell className="iz-admin-management iz-admin-member-detail">
 			<PageHeader
 				icon={UserCog}
 				title={displayName}
@@ -198,10 +200,17 @@ export function OrgMemberPage({
 				</p>
 			) : (
 				<div className="space-y-4">
+					{/*
+					 * The MEMBERSHIP's status, not the login's. This page is opened
+					 * from an organisation's team, and the header answers "are they on
+					 * that team?" — it read the account first, so a removed member
+					 * whose login still worked was headed "Active" over a Membership
+					 * status of Inactive. The account's own state stays in its section.
+					 */}
 					<DetailsHero
 						name={displayName}
 						subtitle={lane}
-						status={account?.status ?? membership?.status ?? "active"}
+						status={membership?.status ?? account?.status ?? "active"}
 						imageUrl={apiAssetUrl(account?.profileImage)}
 					/>
 
@@ -220,7 +229,7 @@ export function OrgMemberPage({
 							<DetailField
 								icon={Shield}
 								label={t.adminOrg.membershipStatus}
-								value={recordStatusLabel(membership.status, t)}
+								value={memberStatusLabel(membership.status, t)}
 							/>
 							<DetailField
 								icon={CalendarDays}
@@ -271,7 +280,7 @@ export function OrgMemberPage({
 						<DetailField
 							icon={Shield}
 							label={t.adminOrg.memberAccountStatus}
-							value={account ? recordStatusLabel(account.status, t) : undefined}
+							value={account ? memberStatusLabel(account.status, t) : undefined}
 						/>
 						<DetailField
 							icon={Globe}
@@ -374,7 +383,10 @@ export function OrgMemberPage({
 										>
 											<div className="min-w-0">
 												<div className="truncate text-sm font-medium">
-													{grant.roleName}
+													{/* One role, one name: the header's lane title and
+												    this stored role_name read the same words
+												    ("Financial Head", never "Finance" beside it). */}
+													{portalRoleLabel(grant.roleName, t)}
 												</div>
 												<div className="truncate text-xs text-muted-foreground">
 													{portalName(grant.portalId) ?? grant.portalId ?? "—"}
@@ -505,14 +517,17 @@ function OrganisationsSection({
 												)}
 											</div>
 											<div className="truncate text-xs text-muted-foreground">
-												{[row.sub, row.lane ? formatSubRole(row.lane) : null]
+												{[
+													row.sub,
+													row.lane ? portalRoleLabel(row.lane, t) : null,
+												]
 													.filter(Boolean)
 													.join(" · ")}
 											</div>
 										</div>
 									</div>
 									<span className="shrink-0 text-xs text-muted-foreground">
-										{recordStatusLabel(row.status, t)}
+										{memberStatusLabel(row.status, t)}
 									</span>
 								</li>
 							);

@@ -41,6 +41,30 @@ function TwoSheets({ a, b }: { a: boolean; b: boolean }) {
 }
 
 describe("IzSheet scroll lock", () => {
+	it("closes from the backdrop without reopening its parent calendar event", () => {
+		function CalendarEvent() {
+			const [open, setOpen] = useState(false);
+			return (
+				<button type="button" onClick={() => setOpen(true)}>
+					Open calendar event
+					<IzSheet open={open} onClose={() => setOpen(false)}>
+						<p>Event details</p>
+					</IzSheet>
+				</button>
+			);
+		}
+		const view = render(<CalendarEvent />);
+		for (let pass = 0; pass < 2; pass++) {
+			act(() =>
+				view.getByRole("button", { name: "Open calendar event" }).click(),
+			);
+			expect(view.getByRole("dialog")).toBeTruthy();
+			act(() => view.getByRole("button", { name: /^Close$/ }).click());
+			expect(view.queryByRole("dialog")).toBeNull();
+			expect(document.body.style.overflow).toBe("");
+		}
+	});
+
 	it("locks the page while a sheet is open and frees it on close", () => {
 		const view = render(<TwoSheets a b={false} />);
 		expect(document.body.style.overflow).toBe("hidden");

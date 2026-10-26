@@ -83,6 +83,7 @@ function lockScroll() {
 }
 
 function SheetContent({
+	className,
 	onClose,
 	children,
 	mode,
@@ -97,6 +98,7 @@ function SheetContent({
 	mode: MountMode;
 	variant: SheetVariant;
 	wide?: boolean;
+	className?: string;
 	rating?: boolean;
 	comcard?: boolean;
 	liveSales?: boolean;
@@ -121,7 +123,12 @@ function SheetContent({
 				type="button"
 				className="iz-sheet-bg"
 				aria-label={t.common.close}
-				onClick={onClose}
+				onClick={(event) => {
+					// Portalled clicks still bubble through React to the row that opened
+					// this sheet. Stop there before closing so that row cannot reopen it.
+					event.stopPropagation();
+					onClose();
+				}}
 			/>
 			{/*
 			 * biome-ignore lint/a11y/useKeyWithClickEvents: this onClick performs no
@@ -134,7 +141,7 @@ function SheetContent({
 			 * since stopping the keydown would stop Escape reaching that listener.
 			 */}
 			<div
-				className={`iz-sheet${sheetVariantClass(mode, variant)}${wide ? " iz-sheet--wide" : ""}${rating ? " iz-sheet--rating" : ""}${comcard ? " iz-sheet--comcard" : ""}${liveSales ? " iz-sheet--live-sales" : ""}`}
+				className={`iz-sheet${sheetVariantClass(mode, variant)}${wide ? " iz-sheet--wide" : ""}${rating ? " iz-sheet--rating" : ""}${comcard ? " iz-sheet--comcard" : ""}${liveSales ? " iz-sheet--live-sales" : ""}${className ? ` ${className}` : ""}`}
 				role="dialog"
 				aria-modal="true"
 				onClick={(e) => e.stopPropagation()}
@@ -147,6 +154,7 @@ function SheetContent({
 }
 
 export function IzSheet({
+	className,
 	open,
 	onClose,
 	children,
@@ -163,6 +171,7 @@ export function IzSheet({
 	/** bottom = phone frame; dialog = centered/bottom overlay; side = right panel (portal) */
 	variant?: SheetVariant;
 	wide?: boolean;
+	className?: string;
 	rating?: boolean;
 	liveSales?: boolean;
 	/** Compact PR comcard preview — no inner scroll, content sized to fit. */
@@ -179,6 +188,7 @@ export function IzSheet({
 	const sheetVariant = mount.mode === "phone" ? "bottom" : variant;
 	const sheet = (
 		<SheetContent
+			className={className}
 			onClose={onClose}
 			mode={mount.mode}
 			variant={sheetVariant}

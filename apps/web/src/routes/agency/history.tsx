@@ -1,3 +1,4 @@
+import "@agency-portal/components/agency/agency-finance-design.css";
 import { AgencyPaidPvHistory } from "@agency-portal/components/agency/AgencyPaidPvHistory";
 import {
 	ShiftHistoryLog,
@@ -108,9 +109,9 @@ function AgencyHistory() {
 
 	// Real session → backend History; demo store otherwise. Shift tabs come from
 	// completed shift-assignments; the Paid tab reuses the wired PV backend + PR
-	// roster (which the Paid view filters to PAID + scopes by PR). Receipt scans
-	// and itemized PV lines have no backend, so they stay empty / summary-only
-	// when backed.
+	// roster (which the Paid view filters to PAID + scopes by PR). The list rows
+	// carry no lines; an opened paid voucher fetches its own, through the same
+	// detail request the Payroll screen uses. Receipt scans stay demo-only.
 	const backend = useAgencyHistory();
 
 	// Tenant scoping — Delta must never see Atlas records (and vice-versa).
@@ -210,7 +211,7 @@ function AgencyHistory() {
 	};
 
 	return (
-		<OutletPage>
+		<OutletPage className="iz-agency-finance iz-agency-history">
 			<OutletPageHeader
 				eyebrow={orgName}
 				title={t.agencyMisc.history}
@@ -222,6 +223,7 @@ function AgencyHistory() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${tab === "shifts" ? " on" : ""}`}
+					aria-pressed={tab === "shifts"}
 					onClick={() => setTab("shifts")}
 				>
 					{/* `TitleWithIcon` derives its icon from the rendered children, so a
@@ -235,6 +237,7 @@ function AgencyHistory() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${tab === "outlets" ? " on" : ""}`}
+					aria-pressed={tab === "outlets"}
 					onClick={() => setTab("outlets")}
 				>
 					<TitleWithIcon icon={iconForNav("By outlet")}>
@@ -244,6 +247,7 @@ function AgencyHistory() {
 				<button
 					type="button"
 					className={`iz-payroll-tab${tab === "paid" ? " on" : ""}`}
+					aria-pressed={tab === "paid"}
 					onClick={() => setTab("paid")}
 				>
 					<TitleWithIcon>
@@ -254,7 +258,10 @@ function AgencyHistory() {
 
 			{tab === "shifts" && (
 				<>
-					<p className="iz-tiny iz-muted mt-2">{t.history.prViewHint}</p>
+					<details className="iz-approved-history-help">
+						<summary>{t.approvedDesign.aboutFigures}</summary>
+						<p>{t.history.prViewHint}</p>
+					</details>
 					<ShiftHistoryLog
 						key="history-by-pr"
 						portal="agency"
@@ -269,7 +276,10 @@ function AgencyHistory() {
 
 			{tab === "outlets" && (
 				<>
-					<p className="iz-tiny iz-muted mt-2">{t.history.outletViewHint}</p>
+					<details className="iz-approved-history-help">
+						<summary>{t.approvedDesign.aboutFigures}</summary>
+						<p>{t.history.outletViewHint}</p>
+					</details>
 					<ShiftHistoryLog
 						key="history-by-outlet"
 						portal="agency"

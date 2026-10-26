@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	keepPreviousData,
 	useMutation,
@@ -17,12 +18,17 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import {
 	DateMultiFilter,
 	datesToQueryParam,
 } from "@/components/admin/date-multi-filter";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { SourceToggle } from "@/components/admin/source-toggle";
+import {
+	currentOrgName,
+	useCurrentOrgNames,
+} from "@/components/admin/use-current-org-names";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -275,6 +281,9 @@ function priceOf(
 
 function PlanChangesPage() {
 	const { t } = usePortalLocale();
+	// `subscriberName` is the copy stored when the request was filed; the org
+	// row holds the name it goes by today.
+	const orgNames = useCurrentOrgNames();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -408,7 +417,7 @@ function PlanChangesPage() {
 		remarksMutation.isPending;
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={ArrowRightLeft}
 				title={t.admin.navPlanChange}
@@ -440,100 +449,102 @@ function PlanChangesPage() {
 							</CardDescription>
 						</div>
 
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-							<SourceToggle
-								className="sm:mr-auto"
-								value={roleFilter}
-								onChange={(value) => {
-									setRoleFilter(value);
-									setPage(1);
-								}}
-							/>
+						<AdminFilters className="admin-finance-filters">
+							<div className="admin-finance-filter-row flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+								<SourceToggle
+									className="sm:mr-auto"
+									value={roleFilter}
+									onChange={(value) => {
+										setRoleFilter(value);
+										setPage(1);
+									}}
+								/>
 
-							<div className="relative sm:w-56">
-								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-								<Input
-									value={searchInput}
-									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder={t.adminRequests.searchPlaceholder}
-									className="pl-8"
-									aria-label={t.adminRequests.searchAria}
+								<div className="relative sm:w-56">
+									<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										value={searchInput}
+										onChange={(event) => setSearchInput(event.target.value)}
+										placeholder={t.adminRequests.searchPlaceholder}
+										className="pl-8"
+										aria-label={t.adminRequests.searchAria}
+									/>
+								</div>
+
+								{/* Latest = what still needs answering; All = every switch a
+							    subscriber has ever filed, so its history can be traced. */}
+								<Select
+									value={view}
+									onValueChange={(value) => {
+										setView(value as "latest" | "all");
+										setPage(1);
+									}}
+								>
+									<SelectTrigger className="sm:w-40">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{/* Values drive the query; only the labels move. */}
+										<SelectItem value="latest">
+											{t.adminRequests.viewLatestOnly}
+										</SelectItem>
+										<SelectItem value="all">
+											{t.adminRequests.viewFullHistory}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+
+								<Select
+									value={statusFilter}
+									onValueChange={(value) => {
+										setStatusFilter(value as StatusFilter);
+										setPage(1);
+									}}
+								>
+									<SelectTrigger
+										className="sm:w-36"
+										aria-label={t.admin.filterByStatus}
+									>
+										<SelectValue placeholder={t.admin.allStatus} />
+									</SelectTrigger>
+									<SelectContent>
+										{/* Values are the stored status; only the labels move. */}
+										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+										<SelectItem value="direct">
+											{t.adminRequests.statusDirect}
+										</SelectItem>
+										<SelectItem value="pending">
+											{t.admin.statusPending}
+										</SelectItem>
+										<SelectItem value="approved">
+											{t.adminRequests.statusApproved}
+										</SelectItem>
+										<SelectItem value="declined">
+											{t.adminRequests.statusDeclined}
+										</SelectItem>
+										<SelectItem value="withdrawn">
+											{t.adminRequests.statusWithdrawn}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+
+								<DateMultiFilter
+									selectedDates={switchedDates}
+									onChange={(dates) => {
+										setSwitchedDates(dates);
+										setPage(1);
+									}}
+									ariaLabel={t.adminRequests.filterBySwitchedDate}
+									emptyLabel={t.adminRequests.switchedDate}
 								/>
 							</div>
-
-							{/* Latest = what still needs answering; All = every switch a
-							    subscriber has ever filed, so its history can be traced. */}
-							<Select
-								value={view}
-								onValueChange={(value) => {
-									setView(value as "latest" | "all");
-									setPage(1);
-								}}
-							>
-								<SelectTrigger className="sm:w-40">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{/* Values drive the query; only the labels move. */}
-									<SelectItem value="latest">
-										{t.adminRequests.viewLatestOnly}
-									</SelectItem>
-									<SelectItem value="all">
-										{t.adminRequests.viewFullHistory}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-
-							<Select
-								value={statusFilter}
-								onValueChange={(value) => {
-									setStatusFilter(value as StatusFilter);
-									setPage(1);
-								}}
-							>
-								<SelectTrigger
-									className="sm:w-36"
-									aria-label={t.admin.filterByStatus}
-								>
-									<SelectValue placeholder={t.admin.allStatus} />
-								</SelectTrigger>
-								<SelectContent>
-									{/* Values are the stored status; only the labels move. */}
-									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-									<SelectItem value="direct">
-										{t.adminRequests.statusDirect}
-									</SelectItem>
-									<SelectItem value="pending">
-										{t.admin.statusPending}
-									</SelectItem>
-									<SelectItem value="approved">
-										{t.adminRequests.statusApproved}
-									</SelectItem>
-									<SelectItem value="declined">
-										{t.adminRequests.statusDeclined}
-									</SelectItem>
-									<SelectItem value="withdrawn">
-										{t.adminRequests.statusWithdrawn}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-
-							<DateMultiFilter
-								selectedDates={switchedDates}
-								onChange={(dates) => {
-									setSwitchedDates(dates);
-									setPage(1);
-								}}
-								ariaLabel={t.adminRequests.filterBySwitchedDate}
-								emptyLabel={t.adminRequests.switchedDate}
-							/>
-						</div>
+						</AdminFilters>
 					</div>
 				</CardHeader>
 
 				<CardContent>
 					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
 									<TableHead>{t.adminRequests.colWho}</TableHead>
@@ -605,9 +616,14 @@ function PlanChangesPage() {
 												className="cursor-pointer hover:bg-muted/30"
 												onClick={() => setEditRequest(request)}
 											>
-												<TableCell>
+												<TableCell data-label={t.adminRequests.colWho}>
 													<div className="text-base font-medium">
-														{request.subscriberName}
+														{currentOrgName(
+															orgNames,
+															request.subscriberType,
+															request.subscriberId,
+															request.subscriberName,
+														)}
 													</div>
 													{request.contactName && (
 														<div className="text-sm text-muted-foreground">
@@ -615,7 +631,7 @@ function PlanChangesPage() {
 														</div>
 													)}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.adminRequests.colRole}>
 													{request.subscriberType ? (
 														<Badge
 															variant="outline"
@@ -627,10 +643,16 @@ function PlanChangesPage() {
 														<span className="text-muted-foreground">—</span>
 													)}
 												</TableCell>
-												<TableCell className="text-base font-medium">
+												<TableCell
+													data-label={t.adminRequests.colFromPlan}
+													className="text-base font-medium"
+												>
 													{fromPlan?.name ?? "—"}
 												</TableCell>
-												<TableCell className="text-base font-medium">
+												<TableCell
+													data-label={t.adminRequests.colToPlan}
+													className="text-base font-medium"
+												>
 													{toLabelOf(request, toPlan)}
 													{status === "pending" && (
 														<div className="text-sm text-muted-foreground">
@@ -638,7 +660,10 @@ function PlanChangesPage() {
 														</div>
 													)}
 												</TableCell>
-												<TableCell className="text-base">
+												<TableCell
+													data-label={t.adminRequests.colPrice}
+													className="text-base"
+												>
 													{price.amount != null ? (
 														<div className="flex flex-col leading-tight">
 															<span>RM {formatPrice(price.amount)}</span>
@@ -656,7 +681,7 @@ function PlanChangesPage() {
 														<span className="text-muted-foreground">—</span>
 													)}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.admin.colStatus}>
 													<Badge
 														variant="outline"
 														className={`${statusBadgeColors[status]} w-fit`}
@@ -664,8 +689,23 @@ function PlanChangesPage() {
 														{statusLabels[status](t)}
 													</Badge>
 												</TableCell>
-												<TableCell className="text-base text-muted-foreground">
+												<TableCell
+													data-label={t.adminRequests.colSwitchedAt}
+													className="text-base text-muted-foreground"
+												>
 													{formatDate(request.createdAt)}
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="admin-finance-review"
+														onClick={(event) => {
+															event.stopPropagation();
+															(() => setEditRequest(request))();
+														}}
+													>
+														{t.rbac.review}
+													</Button>
 												</TableCell>
 											</TableRow>
 										);
@@ -726,7 +766,7 @@ function PlanChangesPage() {
 			>
 				<SheetContent
 					side="right"
-					className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+					className="admin-finance-sheet w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
 				>
 					{editRequest && (
 						<PlanChangeEditForm
@@ -773,6 +813,9 @@ function PlanChangeEditForm({
 	onDone,
 }: PlanChangeEditFormProps) {
 	const { t } = usePortalLocale();
+	// `subscriberName` is the copy stored when the request was filed; the org
+	// row holds the name it goes by today.
+	const orgNames = useCurrentOrgNames();
 	const status = planChangeStatus(request);
 	const needsApproval = status === "pending";
 	const [remarks, setRemarks] = useState(request.remarks ?? "");
@@ -837,7 +880,14 @@ function PlanChangeEditForm({
 				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">{t.adminRequests.colWho}</dt>
-						<dd className="text-right font-medium">{request.subscriberName}</dd>
+						<dd className="text-right font-medium">
+							{currentOrgName(
+								orgNames,
+								request.subscriberType,
+								request.subscriberId,
+								request.subscriberName,
+							)}
+						</dd>
 					</div>
 					{request.contactName && (
 						<div className="flex items-center justify-between gap-2">
@@ -992,13 +1042,23 @@ function PlanChangeEditForm({
 						{t.common.cancel}
 					</Button>
 				</SheetClose>
+				{/*
+				 * This button only stores the remarks (PATCH, `remarks` alone) —
+				 * it never applies, approves or re-opens anything, and the server
+				 * takes remarks on a request in any state. So it stays on an
+				 * applied switch, where an admin may still annotate it, but it is
+				 * named for what it does there: "Save without resolving" on a
+				 * Direct row offered a choice that was settled when it was filed.
+				 */}
 				<Button
 					type="button"
 					disabled={isSaving || !remarksChanged}
 					onClick={handleSave}
 				>
 					{isSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-					{t.adminRequests.saveChanges}
+					{needsApproval
+						? t.adminRequests.saveChanges
+						: t.adminRequests.saveRemarks}
 				</Button>
 			</SheetFooter>
 		</div>

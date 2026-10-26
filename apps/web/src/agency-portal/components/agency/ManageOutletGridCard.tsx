@@ -1,10 +1,12 @@
 import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
+import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { useAgencyOutletWorkspace } from "@agency-portal/hooks/use-agency-outlet-workspace";
 import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import type { AgencyOutletSummary } from "@agency-portal/lib/agency-outlet-shifts";
 import { outletHeadlineRates } from "@agency-portal/lib/outlet-card-rates";
 import { cn } from "@agency-portal/lib/utils";
 import { Check } from "lucide-react";
+import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -84,7 +86,8 @@ export function ManageOutletGridCard({
 	logo,
 	ended,
 }: ManageOutletGridCardProps) {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
+	const [photoOpen, setPhotoOpen] = useState(false);
 	const theme = outletThemeKey(summary.outlet);
 	// The venue's own saved rate card — the same query the detail view runs, so
 	// opening the venue costs no second request. Null = nothing to quote, and the
@@ -102,91 +105,126 @@ export function ManageOutletGridCard({
 	// button). The card class already carries the flex layout, left alignment and
 	// pointer cursor a button needs.
 	return (
-		<button
-			type="button"
-			className={cn(
-				"iz-outlet-manage-card w-full",
-				`iz-outlet-manage-card--${theme}`,
-				picked && "iz-outlet-manage-card--picked",
-			)}
-			onClick={onActivate}
-		>
-			{selectMode && (
-				<div
-					className={cn(
-						"iz-outlet-manage-card__check",
-						picked && "iz-outlet-manage-card__check--on",
-					)}
-					aria-hidden
-				>
-					{picked && <Check className="h-3 w-3" strokeWidth={3} />}
-				</div>
-			)}
+		<div className="iz-approved-gallery-item">
+			<button
+				type="button"
+				className={cn(
+					"iz-outlet-manage-card w-full",
+					`iz-outlet-manage-card--${theme}`,
+					picked && "iz-outlet-manage-card--picked",
+				)}
+				onClick={onActivate}
+				aria-pressed={selectMode ? picked : undefined}
+			>
+				{selectMode && (
+					<div
+						className={cn(
+							"iz-outlet-manage-card__check",
+							picked && "iz-outlet-manage-card__check--on",
+						)}
+						aria-hidden
+					>
+						{picked && <Check className="h-3 w-3" strokeWidth={3} />}
+					</div>
+				)}
 
-			<div className="iz-outlet-manage-card__head">
-				<div className="iz-outlet-manage-card__identity">
-					<OutletLogoTile logo={logo} className="iz-outlet-manage-card__icon" />
-					<div className="min-w-0">
-						<p className="iz-outlet-manage-card__name">{summary.outlet}</p>
-						{/* Under the name, not over the card: the venue is still workable
+				<div className="iz-approved-venue-photo">
+					<OutletLogoTile logo={logo} className="iz-approved-venue-image" />
+				</div>
+				<div className="iz-outlet-manage-card__head">
+					<div className="iz-outlet-manage-card__identity">
+						<OutletLogoTile
+							logo={logo}
+							className="iz-outlet-manage-card__icon"
+						/>
+						<div className="min-w-0">
+							<p className="iz-outlet-manage-card__name">{summary.outlet}</p>
+							{/* Under the name, not over the card: the venue is still workable
 						    and the shifts on it are still yours to fill, so this states a
 						    fact rather than greying out work that must still be done.
 						    Grey, never red — the partnership ran its course, nothing
 						    failed. */}
-						{ended && (
-							<p className="iz-tiny iz-muted2 mt-0.5">
-								{t.manageOutlet.endedFinishing}
-							</p>
-						)}
-						{rates && (
-							<p className="iz-outlet-manage-card__rate">
-								{fill(t.manageOutlet.perShift, {
-									wage: rates.wage.toLocaleString("en-MY"),
-								})}
-							</p>
-						)}
+							{ended && (
+								<p className="iz-tiny iz-muted2 mt-0.5">
+									{t.manageOutlet.endedFinishing}
+								</p>
+							)}
+							{rates && (
+								<p className="iz-outlet-manage-card__rate">
+									{fill(t.manageOutlet.perShift, {
+										wage: rates.wage.toLocaleString("en-MY"),
+									})}
+								</p>
+							)}
+						</div>
 					</div>
+					<span className="iz-outlet-manage-card__events">
+						{fill(
+							summary.openShiftCount === 1
+								? t.manageOutlet.eventCountOne
+								: t.manageOutlet.eventCountMany,
+							{ n: summary.openShiftCount },
+						)}
+					</span>
 				</div>
-				<span className="iz-outlet-manage-card__events">
-					{fill(
-						summary.openShiftCount === 1
-							? t.manageOutlet.eventCountOne
-							: t.manageOutlet.eventCountMany,
-						{ n: summary.openShiftCount },
-					)}
-				</span>
-			</div>
 
-			<div className="iz-outlet-manage-card__kpi">
-				<DemandKpi
-					label={t.manageOutlet.today}
-					demand={summary.todayDemand}
-					supplied={summary.todaySupplied}
-					highlight
-				/>
-				<DemandKpi
-					label={t.manageOutlet.future}
-					demand={summary.futureDemand}
-					supplied={summary.futureSupplied}
-				/>
-			</div>
+				<div className="iz-outlet-manage-card__kpi">
+					<DemandKpi
+						label={t.manageOutlet.today}
+						demand={summary.todayDemand}
+						supplied={summary.todaySupplied}
+						highlight
+					/>
+					<DemandKpi
+						label={t.manageOutlet.future}
+						demand={summary.futureDemand}
+						supplied={summary.futureSupplied}
+					/>
+				</div>
 
-			<div className="iz-outlet-manage-card__foot">
-				{/* The venue's own percentages, the same pair the detail header
+				<div className="iz-outlet-manage-card__foot">
+					{/* The venue's own percentages, the same pair the detail header
 				    quotes — not a tip "range" derived from the wage, which no rate
 				    card holds. */}
-				{rates && (
-					<p className="iz-outlet-manage-card__meta">
-						{fill(t.manageOutlet.drinksAndTips, {
-							pct: rates.drinkPct,
-							tips: rates.tipPct,
-						})}
-					</p>
+					{rates && (
+						<p className="iz-outlet-manage-card__meta">
+							{fill(t.manageOutlet.drinksAndTips, {
+								pct: rates.drinkPct,
+								tips: rates.tipPct,
+							})}
+						</p>
+					)}
+					<span className="iz-outlet-manage-card__legend">
+						{t.manageOutlet.demandSupplied}
+					</span>
+				</div>
+				{!selectMode && (
+					<span className="iz-agency-card-open">
+						{locale === "zh" ? "查看场所详情" : "View venue details"}
+						<span aria-hidden>→</span>
+					</span>
 				)}
-				<span className="iz-outlet-manage-card__legend">
-					{t.manageOutlet.demandSupplied}
-				</span>
-			</div>
-		</button>
+			</button>
+			{logo && !selectMode && (
+				<button
+					type="button"
+					className="iz-btn iz-btn-soft iz-approved-gallery-preview"
+					onClick={() => setPhotoOpen(true)}
+				>
+					{t.approvedDesign.viewVenue}
+				</button>
+			)}
+			<IzSheet open={photoOpen} onClose={() => setPhotoOpen(false)}>
+				<h2 className="iz-section-title">{summary.outlet}</h2>
+				<OutletLogoTile logo={logo} className="iz-approved-venue-photo-full" />
+				<button
+					type="button"
+					className="iz-btn iz-btn-ghost mt-4"
+					onClick={() => setPhotoOpen(false)}
+				>
+					{t.common.close}
+				</button>
+			</IzSheet>
+		</div>
 	);
 }

@@ -1,5 +1,7 @@
 import { Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { AdminBackToTop } from "@/components/admin/admin-design-chrome";
+import "@/components/admin/admin-design.css";
 import { Header } from "@/components/layout/header";
 import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -16,6 +18,12 @@ export function AdminLayout() {
 	// render the admin tree on a hard navigation to /admin.
 	const [allowed, setAllowed] = useState(false);
 	const { user } = useCurrentUser();
+	useEffect(() => {
+		document.body.dataset.adminDesign = "approved";
+		return () => {
+			delete document.body.dataset.adminDesign;
+		};
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -35,14 +43,15 @@ export function AdminLayout() {
 		// Wraps the whole admin tree so the header's switcher and every page
 		// below it read one locale.
 		<PortalLocaleProvider accountLocale={user?.preferredLocale}>
-			<div className="flex h-svh max-h-svh w-full overflow-hidden">
+			<div className="iz-admin-portal flex h-dvh max-h-dvh w-full overflow-hidden">
 				<Sidebar />
-				<SidebarInset className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+				<SidebarInset className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 					<Header />
-					<main className="min-h-0 flex-1 overflow-y-auto">
+					<main className="iz-admin-viewport min-h-0 min-w-0 flex-1 overflow-y-auto">
 						<Outlet />
 						<div className="mt-10 p-5" />
 					</main>
+					<AdminBackToTop />
 					<GlobalLoadingShadow />
 				</SidebarInset>
 			</div>

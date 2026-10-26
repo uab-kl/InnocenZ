@@ -139,7 +139,9 @@ export function AgencyOutletFilters({
 						</option>
 					</IzSelect>
 				</label>
-
+			</div>
+			<details className="iz-approved-more-filters">
+				<summary>{t.approvedDesign.moreFilters}</summary>
 				<label className="iz-roster-filterbar__field">
 					<span className="iz-roster-filterbar__label">
 						{t.manageOutlet.minOpenSlots}
@@ -153,7 +155,7 @@ export function AgencyOutletFilters({
 						onChange={(e) => onChange({ minOpenSlots: e.target.value })}
 					/>
 				</label>
-			</div>
+			</details>
 		</div>
 	);
 }

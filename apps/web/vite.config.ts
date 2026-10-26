@@ -95,21 +95,23 @@ const config = defineConfig({
 				changeOrigin: true,
 			},
 		},
-		...(coRunWithMetro
-			? {
-					watch: {
-						// Don't compete with Metro for these trees on Windows.
-						ignored: [
+		watch: {
+			// Nitro replaces build output while a production check is running.
+			// Watching those files can crash Vite with EBUSY on Windows.
+			ignored: [
+				"**/.output/**",
+				...(coRunWithMetro
+					? [
 							"**/apps/mobile/**",
 							"**/apps/backend/**",
 							"**/postgres/**",
 							"**/.git/**",
 							"**/android/**",
 							"**/ios/**",
-						],
-					},
-				}
-			: {}),
+						]
+					: []),
+			],
+		},
 	},
 	plugins: [
 		forceProductionNodeEnv,

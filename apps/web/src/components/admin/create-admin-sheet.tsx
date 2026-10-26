@@ -66,7 +66,7 @@ export function CreateAdminSheet({
 
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>
-			<SheetContent className="flex w-full flex-col sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+			<SheetContent className="iz-admin-detail-sheet flex w-full flex-col overflow-y-auto sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
 				<SheetHeader className="border-b border-border pb-4">
 					<div className="flex items-start gap-3 pr-8">
 						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--lavender-soft)/50 bg-(--lavender-soft)/20 text-lavender">
@@ -89,7 +89,7 @@ export function CreateAdminSheet({
 						form.handleSubmit();
 					}}
 				>
-					<FieldGroup className="flex-1 gap-6 px-4 py-6">
+					<FieldGroup className="iz-admin-create-account-form flex-1 gap-6 px-4 py-6">
 						<form.Field name="displayName">
 							{(field) => {
 								const isInvalid =

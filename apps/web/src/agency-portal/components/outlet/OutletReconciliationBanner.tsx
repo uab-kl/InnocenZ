@@ -1,10 +1,7 @@
 import { formatRM } from "@agency-portal/components/iz/ui";
 import { useOutletCollections } from "@agency-portal/hooks/use-outlet-collections";
 import { useOutletSalesReport } from "@agency-portal/hooks/use-outlet-sales-report";
-import {
-	collectionAmountRm,
-	collectionWeekLabel,
-} from "@agency-portal/lib/collections";
+import { collectionWeekLabel } from "@agency-portal/lib/collections";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
 	parseIsoDateLocal,
@@ -19,6 +16,13 @@ import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dayMonthLabel } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import {
+	type AgencyStatementCheck,
+	checkStatementsByAgency,
+	isMismatch,
+	newestWeekStatements,
+} from "./reconcile-by-agency";
 
 /**
  * Weekly reconciliation on outlet Today.
@@ -32,11 +36,11 @@ import { fill } from "@/lib/portal-i18n/fill";
  * venue's business. Giving an outlet that figure just to render a banner would be
  * the wrong trade.
  *
- * So a real session reconciles the pair an outlet legitimately holds: what its
+ * So a real session reconciles the pair an outlet legitimately holds: what each
  * agency BILLED it for a week (`collection_invoice`) against its own record of the
- * shift assignments behind that week (`shift_assignment.pay_amount`, via the sales
- * report). Both derive from the same column, so they should agree — and when they
- * do not, that is the outlet's own question to ask.
+ * shift assignments THAT agency supplied that week (`shift_assignment.pay_amount`,
+ * via the sales report). Both derive from the same column, so they should agree —
+ * and when they do not, that is the outlet's own question to ask.
  */
 export function OutletReconciliationBanner() {
 	// Not a hook — a localStorage read, so it can pick a branch before either
@@ -45,8 +49,15 @@ export function OutletReconciliationBanner() {
 	return backed ? <BilledVsRecordsBanner /> : <DemoReconciliationBanner />;
 }
 
-/** Below a cent the two sides agree; floats summed in a different order will not. */
-const CENT = 0.005;
+/** "Billed RM x above …" / "Your records show RM x more …" for one check. */
+function varianceLine(t: PortalTranslations, check: AgencyStatementCheck) {
+	if (!isMismatch(check)) return t.today.statementMatches;
+	return check.varianceRm > 0
+		? fill(t.today.billedAbove, { amount: formatRM(check.varianceRm) })
+		: fill(t.today.recordsShowMore, {
+				amount: formatRM(Math.abs(check.varianceRm)),
+			});
+}
 
 function BilledVsRecordsBanner() {
 	const { t } = usePortalLocale();
@@ -60,43 +71,50 @@ function BilledVsRecordsBanner() {
 	if (!can("viewBilling")) return null;
 	if (collections.isLoading || sales.isLoading) return null;
 
-	// The newest statement defines the period. Deriving the week on the client
-	// instead would risk comparing a statement against a different seven days than
-	// the agency billed for.
-	const statement = collections.invoices[0];
-	if (!statement) return null;
+	// The newest statement defines the period — and every agency that billed
+	// that same week is checked, each on its own row.
+	const statements = newestWeekStatements(collections.invoices);
+	const week = statements[0];
+	if (!week) return null;
+	const range = { startIso: week.weekStart, endIso: week.weekEnd };
 
-	const report = sales.buildReport({
-		startIso: statement.weekStart,
-		endIso: statement.weekEnd,
-	});
+	const report = sales.buildReport(range);
 	// No shift rows for that week on this side: there is nothing to check the
 	// statement against, and an empty report is not evidence of a discrepancy.
 	if (!report) return null;
 
-	const billedRm = collectionAmountRm(statement);
-	// WAGES, not the report's headline PR spend.
+	// WAGES, not the report's headline PR spend — and each agency's own.
 	//
-	// `collection_invoice.amount` is `sum(shift_assignment.pay_amount)` and
-	// nothing else, so the wage half is the only like-for-like figure on this
-	// side. `totalCost` also carries the commission the PRs earned on their
-	// receipts — real money, and the right number for the Reports screen, but
-	// money this statement never claimed to bill. Comparing against it would
-	// raise a variance EVERY week, on every venue with receipts, between two
-	// numbers that were never measuring the same thing.
-	const ownRecordRm = report.totalWages;
-	const variance = Math.round((billedRm - ownRecordRm) * 100) / 100;
+	// `collection_invoice.amount` is `sum(shift_assignment.pay_amount)` for ONE
+	// agency and nothing else, so that agency's wage half is the only
+	// like-for-like figure on this side. `totalCost` also carries the commission
+	// the PRs earned on their receipts — real money, and the right number for
+	// the Reports screen, but money this statement never claimed to bill.
+	// Comparing against it would raise a variance EVERY week, on every venue with
+	// receipts, between two numbers that were never measuring the same thing.
+	const checks = checkStatementsByAgency(statements, {
+		byAgency: sales.buildWagesByAgency(range),
+		totalRm: report.totalWages,
+	});
+	const mismatched = checks.filter(isMismatch);
 
 	// A matching week is not news. This is an alert, and one that renders every
 	// week is one nobody reads by the third week.
-	if (Math.abs(variance) < CENT) return null;
+	const first = mismatched[0];
+	if (!first) return null;
 
-	const overBilled = variance > 0;
-	const summary = overBilled
-		? fill(t.today.billedAbove, { amount: formatRM(variance) })
-		: fill(t.today.recordsShowMore, {
-				amount: formatRM(Math.abs(variance)),
-			});
+	// One agency billed the week: the card reads exactly as it always has.
+	// Several: each agency gets its own row, named, so a gap is pinned on the
+	// statement it belongs to.
+	const multi = checks.length > 1;
+	const agencyName = (check: AgencyStatementCheck) =>
+		sales.agencyNames.get(check.statement.agencyId) ?? t.today.agency;
+	const summary = !multi
+		? varianceLine(t, first)
+		: mismatched.length === 1
+			? `${agencyName(first)} · ${varianceLine(t, first)}`
+			: fill(t.today.agenciesDiffer, { count: String(mismatched.length) });
+	const weekLabel = collectionWeekLabel(week.weekStart, week.weekEnd);
 
 	return (
 		<div className="mt-4 overflow-hidden rounded-2xl border border-[rgba(232,194,122,.28)] bg-[rgba(232,194,122,.06)]">
@@ -122,11 +140,33 @@ function BilledVsRecordsBanner() {
 
 			{open && (
 				<div className="border-t border-[rgba(232,194,122,.2)] px-3.5 pb-3.5 pt-2">
-					<p className="iz-tiny iz-muted">
-						{collectionWeekLabel(statement.weekStart, statement.weekEnd)} ·
-						Agency billed {formatRM(billedRm)} vs your shift records{" "}
-						{formatRM(ownRecordRm)}
-					</p>
+					{!multi ? (
+						<p className="iz-tiny iz-muted">
+							{fill(t.today.billedVsRecords, {
+								week: weekLabel,
+								billed: formatRM(first.billedRm),
+								own: formatRM(first.ownRecordRm),
+							})}
+						</p>
+					) : (
+						<ul className="space-y-2">
+							{checks.map((check) => (
+								<li key={check.statement.id}>
+									<p className="text-xs font-semibold text-[var(--iz-txt)]">
+										{agencyName(check)}
+									</p>
+									<p className="iz-tiny iz-muted">{varianceLine(t, check)}</p>
+									<p className="iz-tiny iz-muted">
+										{fill(t.today.billedVsRecords, {
+											week: weekLabel,
+											billed: formatRM(check.billedRm),
+											own: formatRM(check.ownRecordRm),
+										})}
+									</p>
+								</li>
+							))}
+						</ul>
+					)}
 					{/* Both figures come from shift_assignment.pay_amount but through
               different filters — a statement counts only `completed`, while the
               cost side of the sales report excludes just cancelled and no-show.

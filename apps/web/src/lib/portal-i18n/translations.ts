@@ -19,6 +19,72 @@
  */
 
 const en = {
+	approvedDesign: {
+		aboutFigures: "About these figures",
+		clearFilters: "Clear filters",
+		fromDate: "From date",
+		toDate: "To date",
+		templateHint:
+			"Use a saved event or start from blank. Each shift keeps its own dates, people and pay.",
+		choosePrs: "Choose PRs",
+		staffedDemand: "Staffed / demand",
+		todayShifts: "Today’s shifts",
+		shiftSelectionHint:
+			"Earliest to latest. Select a shift to update the figures and panels below. Expanding details does not change the selection.",
+		viewComcard: "View comcard",
+		viewVenue: "View venue",
+		moreFilters: "More filters",
+		completedShifts: "Completed shifts",
+		prVoucher: "PR / voucher",
+		drinksTips: "Drinks / tips",
+		otherEarnings: "Overtime / other",
+		deductions: "Deductions",
+		reviewVoucher: "Review voucher",
+		organizationProfile: "Organization profile",
+		identityContact: "Your organization identity and contact details.",
+		address: "Address",
+		currentPlan: "Current plan",
+		nextBilling: "Next billing date",
+		shiftsThisMonth: "Shifts this month",
+		staffedUpcoming: "Staffed upcoming",
+		prPlaces: "PR places",
+		unfilled: "Unfilled",
+		staffingSuggestions: "Staffing suggestions",
+		reviewAutoAssignment: "Review auto-assignment",
+		venueShare: "Venue share",
+		salesDescription: "Floor sales · drinks, tips and services",
+		prSpendDescription: "Wages, commission and approved OT",
+		venueShareDescription: "Before other venue costs",
+		wages: "Wages",
+		commission: "Commission",
+		approvedOvertime: "Approved overtime",
+		rank: "Rank",
+		prAgency: "PR / agency",
+		totalPayout: "Total payout",
+		comparedWithTop: "Compared with top",
+		viewBreakdown: "View breakdown",
+		hideBreakdown: "Hide breakdown",
+		tierIncludes: "Tier / includes",
+		pvsPerWeek: "PVs per week",
+		dailyCapacity: "Daily capacity",
+		weeklyPrice: "Weekly price",
+		monthlyPrice: "Monthly price",
+		statusAction: "Status / action",
+		approvalsDescription:
+			"Review requests, check the details, and make a decision.",
+		outletApprovalsDescription: "Review requests to join your outlet team.",
+		personalInformation: "Personal information",
+		race: "Race",
+		floorName: "Floor nickname",
+		languages: "Languages",
+		age: "Age",
+		height: "Height",
+		weight: "Weight",
+		email: "Email",
+		mobile: "Mobile",
+		documentCompleteness: "Document completeness",
+		requests: "Requests",
+	},
 	lang: {
 		/** The switcher's own trigger label. */
 		language: "Language",
@@ -479,6 +545,9 @@ const en = {
 		reports: "Reports",
 		workspace: "Workspace",
 		dashboard: "Dashboard",
+		/** Breadcrumb only — pages reached without a sidebar item of their own. */
+		specialService: "Special service",
+		profile: "Profile",
 	},
 	agencyHome: {
 		totalPr: "Total PR",
@@ -692,6 +761,8 @@ const en = {
 		postShiftOne: "Post {n} shift",
 		postShiftMany: "Post {n} shifts",
 		greenWord: "Green",
+		submitHint:
+			"Posting creates the job and notifies your linked agencies instantly.",
 		greenExplains:
 			" creates the job and notifies your linked agencies instantly.",
 		sendTo: "Send to",
@@ -1015,6 +1086,10 @@ const en = {
 		drinksCommission: "Drinks commission",
 		tipsCommission: "Tips commission",
 		overtimeShort: "Overtime",
+		/** Ref column on a voucher's breakdown, for a penalty or cancellation-fee line. */
+		refPenalty: "Penalty",
+		/** Day-strip row on the Payment Week: days before the week that the list still holds. */
+		earlierDays: "Earlier",
 		unclassified: "Unclassified",
 		thisWeekByComponent: "This week by component",
 		noCommissionLinesToVerify:
@@ -1122,6 +1197,8 @@ const en = {
 		previousWeek: "Previous week",
 		nextWeek: "Next week",
 		liveBackendRoster: "Live backend roster · tap a free cell to assign a PR",
+		/** The same line for a lane that cannot assign (every cell disabled). */
+		liveBackendRosterViewOnly: "Live backend roster · view only",
 		checkInLocations: "Check-in locations",
 		nobodyRostered: "Nobody rostered",
 		loading: "Loading",
@@ -1484,7 +1561,14 @@ const en = {
 		attendance: "Attendance",
 		paid: "Paid",
 		penalties: "Penalties",
-		noActivePenalties: "No active penalties.",
+		/**
+		 * Manage PR's breach panel and the PR profile. Both read rule BREACHES (what
+		 * the rules find this week); Payroll's "Uncharged penalties & fees" lists
+		 * RECORDED charges and cancellation fees from any week not yet billed. "No
+		 * active penalties" beside an RM 150 Payroll total read as a contradiction.
+		 */
+		noActivePenalties:
+			"No new rule breaches. Recorded penalties and cancellation fees not yet billed are listed on Payroll.",
 		loadingPenalties: "Loading penalties…",
 		loadingPenaltyRules: "Loading penalty rules…",
 		couldNotSavePenaltyRules: "Could not save penalty rules",
@@ -1558,7 +1642,8 @@ const en = {
 		shiftsHint: "Editable roster · synced with outlet floor",
 		assignReplacement: "Assign replacement",
 		selectPr: "Select PR…",
-		availableShiftToday: "Available shift today",
+		/** Key name kept; the list is the slot's own date, which may be past. */
+		availableShiftToday: "Available shift that day",
 		selectOpenShift: "Select open shift…",
 		assigning: "Assigning…",
 		assign: "Assign",
@@ -1593,7 +1678,7 @@ const en = {
 		replacementPr: "Replacement PR",
 		sendOfferToReplacement: "Send offer to replacement",
 		reassign: "Reassign",
-		noOpenShiftsOtherOutlets: "No open shifts at other outlets today.",
+		noOpenShiftsOtherOutlets: "No open shifts at other outlets that day.",
 		editShift: "Edit shift",
 		requestOutletSwap: "Request outlet swap",
 		/** The shift is over — the PR stamped out. Not a status, a stamp. */
@@ -1725,6 +1810,14 @@ const en = {
 		summary: "{n} PR shifts · {range} · {total} in wages",
 		latestOn: "Latest {day} · {date}",
 		latestPlain: "Latest {date}",
+		/*
+		 * Shown INSTEAD of "{n}h shift" when check-in to check-out is over 16 h
+		 * (MAX_PLAUSIBLE_SHIFT_HOURS) — a 119.13 h night is a wrong stamp, not a
+		 * shift. {n} = the clocked hours. The pay shown beside it is unchanged.
+		 */
+		checkOutLooksWrong: "Check-out looks wrong · {n}h clocked",
+		checkOutLooksWrongHint:
+			"Over 16 hours between check-in and check-out, so a stamp is probably wrong. The pay shown is not affected.",
 		topEarner: "Top earner",
 		rating: "Rating",
 		starsOutOf: "{filled} out of {total} stars",
@@ -1955,6 +2048,9 @@ const en = {
 		 */
 		overdueWarning:
 			"{amount} is past its due date across {n} billing period(s). The oldest was due {date} — {days} days ago.",
+		/** Under "Next billing date" on the Subscription hero when past periods are unpaid. {amount} carries RM. */
+		heroOverdueOne: "Overdue — {amount} from 1 past week is unpaid",
+		heroOverdueMany: "Overdue — {amount} from {n} past weeks is unpaid",
 		noAccess: "You do not have access to subscription billing.",
 		financeReadOnly: "Finance view — read-only · contact owner to update card",
 		/** Every other non-owner lane — Ops Head, Director, anything added later. */
@@ -2735,6 +2831,9 @@ const en = {
 			"Finance view — read-only · contact owner to change plan or card",
 		memberReadOnly:
 			"Read-only · only the owner can change the plan, pay, or update the card",
+		/** The guarantor may change the plan, but subscription pay is the owner's alone. */
+		guarantorReadOnly:
+			"Guarantor view · only the owner can pay or update the card — you see what is paid and unpaid",
 		plansMonthly: "Plans · monthly",
 		prLimitHint:
 			"PR limit = max specific PRs you name per day (agency fill does not count) · {today} requested today · peak day {peak}",
@@ -2859,11 +2958,14 @@ const en = {
 		ratesByPrTier: "Rates by PR tier",
 		drinksPrice: "Drinks Price",
 		drinksSummary: "{n} drinks · RM {min}–{max}",
+		/** n === 1 — English needs the singular; "1 drinks" read as a typo. */
+		drinksSummaryOne: "{n} drink · RM {min}–{max}",
 		addDrinksBelow: "Add drinks below",
 		drink: "Drink",
 		moveToServices: "Move to Services",
 		serviceEntitlement: "Service Entitlement",
 		servicesSummary: "{n} services · RM {min}–{max}",
+		servicesSummaryOne: "{n} service · RM {min}–{max}",
 		addServicesBelow: "Add services below",
 		service: "Service",
 		moveToDrinks: "Move to Drinks",
@@ -2959,6 +3061,8 @@ const en = {
 		colServices: "Services",
 		colTotal: "Total",
 		rowMobileSummary: "{sales} sales · −{cost} PR · {pct}% margin",
+		/** A night with no floor sales has no margin to print. */
+		rowMobileSummaryNoSales: "{sales} sales · −{cost} PR",
 		drinkSales: "Drink sales",
 		tipsSales: "Tips sales",
 		serviceSales: "Service sales",
@@ -3263,6 +3367,13 @@ const en = {
 		confirm: "Confirm",
 		billedAbove: "Billed {amount} above your shift records",
 		recordsShowMore: "Your records show {amount} more than billed",
+		/** Header when several agencies billed the same week and more than one disagrees. */
+		agenciesDiffer: "{count} agency statements differ from your records",
+		/** One agency's row when its statement agrees with its own shifts. */
+		statementMatches: "Matches your shift records",
+		/** The banner's detail line; {week} is the statement's own Mon–Sun label. */
+		billedVsRecords:
+			"{week} · Agency billed {billed} vs your shift records {own}",
 		varianceActionNeeded: "Variance {amount} · action needed",
 		awaitingAgencyConfirm: "Awaiting agency confirm",
 		confirmWeek: "Confirm week · {date}",
@@ -3389,8 +3500,7 @@ const en = {
 		dashLoading: "Loading…",
 
 		dashPlatformBreakdown: "Platform breakdown",
-		dashPlatformBreakdownHint:
-			"Live status distribution across organizations and jobs.",
+		dashPlatformBreakdownHint: "Live status distribution across the platform.",
 		dashAgenciesByStatus: "PR Agencies by status",
 		dashOutletsByStatus: "Outlets by status",
 		dashJobsByStatus: "Jobs by status",
@@ -3400,7 +3510,7 @@ const en = {
 
 		dashActionItems: "Today's action items",
 		dashActionItemsHint:
-			"Approvals, quotes & job reviews — click any row to handle it.",
+			"Items awaiting your review — select a row to handle it.",
 		dashNeedAttention: "{n} need attention",
 		dashAllClear: "All clear",
 		dashLoadingReminders: "Loading today's reminders…",
@@ -3439,7 +3549,10 @@ const en = {
 		dashDaysAgo: "{n} days ago",
 
 		dashLatestRegistrations: "Latest registrations",
-		dashLatestRegistrationsHint: "New organizations awaiting review.",
+		/** The list holds every recent sign-up, active ones included — the status
+		    column says which still await review. */
+		dashLatestRegistrationsHint:
+			"The newest organizations to sign up, and where each one stands.",
 		dashFilterAll: "All",
 		dashLoadingRegistrations: "Loading registrations…",
 		dashNoRegistrations: "No registrations to show.",
@@ -3686,8 +3799,7 @@ const en = {
 		create: "Create",
 
 		pendingTitle: "Pending Approvals",
-		pendingSubtitle:
-			"Everything across the platform waiting on an admin decision.",
+		pendingSubtitle: "Agency and outlet registrations waiting for review.",
 		pendingIncomplete:
 			"Some pending items could not be loaded — this list is incomplete.",
 		colItem: "Item",
@@ -3697,7 +3809,7 @@ const en = {
 		loadingPending: "Loading pending items…",
 		nothingPending: "Nothing pending",
 		nothingPendingHint:
-			"New agency and outlet signups, plan requests, and agency job posts will appear here for review.",
+			"New agency and outlet registrations will appear here for review.",
 		review: "Review",
 		typePrAgency: "PR Agency",
 		typeOutlet: "Outlet",
@@ -4070,8 +4182,10 @@ const en = {
 		displayName: "Display name",
 		/** Placeholder for the display-name input. */
 		yourDisplayName: "Your display name",
-		/** Field label. The value beside it is the account's stored admin role name (adminConsoleRoleName), which stays English. */
+		/** Field label. The value beside it is `roleAdmin` below, never the stored lowercase `admin`. */
 		role: "Role",
+		/** The admin console's role, as the sidebar and this page name it (`adminConsoleRoleLabel`). */
+		roleAdmin: "Admin",
 		userId: "User ID",
 		/** Discards unsaved name/photo edits. */
 		reset: "Reset",
@@ -4173,6 +4287,8 @@ const en = {
 		 * has to be true of all five at once.
 		 */
 		colDeactivatedBy: "Deactivated by",
+		/** The same slot on a DECLINED request — the applicant was never on the team, so nothing was deactivated. */
+		declinedBy: "Declined by",
 		/** Shown when `updated_by` names an account that no longer exists. */
 		actorUnknown: "Unknown",
 		/** A scheduler or an unauthenticated path, not a person. */
@@ -4210,6 +4326,8 @@ const en = {
 		viewCurrentPlan: "Current plan",
 		/** View switch OPTION LABEL only — the stored value stays "history". */
 		viewFullHistory: "Full history",
+		/** aria-label on the Current plan / Full history switch. */
+		viewSwitchLabel: "Show current plans or full history",
 		filterBySubscribedDate: "Filter by subscribed date",
 		colSubscriber: "Subscriber",
 		colRole: "Role",
@@ -4811,6 +4929,24 @@ const en = {
 		/** The ✓ stays in the JSX. */
 		eSignOnFile: "e-sign on file",
 		awaitingManualSign: "awaiting manual sign",
+		/** The 1st-signer line, signed. {name} is the signer (or their capacity), {when} the stamp. */
+		agencySignedBy: "Agency — signed by {name} · {when}",
+		/** The 1st-signer line on an unsigned voucher still on the rail. */
+		agencyWaitingToSign: "Agency — waiting for the owner or finance to sign",
+		/** The 1st-signer line on a signed/paid voucher that carries no agency signature (sent before that was required). */
+		agencyNoSignatureOnRecord: "Agency — no agency signature on record",
+		/** Stands in for a signer's name when the record holds only an email or a key and no capacity. */
+		agencySignatory: "Agency signatory",
+		/** The single row a voucher shows before its line items arrive. */
+		weekTotalLinesLoading: "Week total — loading the line items…",
+		weekTotalLinesFailed: "Week total — the line items could not be loaded",
+		/** In place of the earnings split while the lines load / after they fail. */
+		breakdownLinesLoading: "Loading this voucher's line items…",
+		breakdownLinesFailed:
+			"This voucher's line items could not be loaded, so its earnings cannot be split. The net paid below is the amount on record.",
+		/** Under the PDF / Excel buttons while they wait for the lines. */
+		downloadsWaitForLines:
+			"PDF and Excel open once the line items have loaded.",
 		/** Alt/label text on a rendered signature mark. */
 		signatureOf: "{name} signature",
 		/** When the PR raised the dispute — the date follows. */
@@ -4946,8 +5082,13 @@ const en = {
 		replacementDeclined: "{name} declined: “{reason}”",
 		swapWantsToLeave:
 			"{name} wants to leave {from} for {to} · {date} · {shift}. Pick a replacement for their current slot.",
+		/**
+		 * The reassign sheet lists open shifts on the SLOT's own date, and opens on
+		 * past nights too — so "today" was wrong for every shift but tonight's.
+		 * The date pill above it names the day.
+		 */
 		pickOpenShiftHoursPaid:
-			"Pick an open shift today at another outlet. Hours already worked at {outlet} stay paid.",
+			"Pick an open shift that day at another outlet. Hours already worked at {outlet} stay paid.",
 		/** `amount` is already formatted by formatRM at the call site. */
 		suppliedEstimate: "{supplied}/{demand} supplied · est. {amount}",
 		mustApproveBeforeChange: "{name} must approve before the outlet changes.",
@@ -5085,6 +5226,12 @@ const en = {
 		 * survives being skimmed.
 		 */
 		saveChanges: "Save without resolving",
+		/**
+		 * The same footer button on a request that is ALREADY settled — applied,
+		 * approved, declined or withdrawn. It only stores the remarks; "without
+		 * resolving" there promised a choice that no longer exists.
+		 */
+		saveRemarks: "Save remarks",
 		/** {plan} is a plan name and stays English. */
 		toPlanReset: "Reset · {plan}",
 		/**
@@ -5718,10 +5865,25 @@ const en = {
 		thePr: "the PR",
 		onlyOwnerFinanceDecideOvertime:
 			"Only the agency owner or finance can decide overtime.",
+		/** Shown on an open dispute in place of Accept / Reject for a lane that may only read the queue. */
+		onlyOwnerFinanceDecideDisputes:
+			"Only the agency owner or finance can accept or reject a dispute.",
 		overtimeElsewhereOne:
 			"{n} claim in another week still undecided — switch weeks above to decide it.",
 		overtimeElsewhereMany:
 			"{n} claims in another week still undecided — switch weeks above to decide them.",
+		/** The four "elsewhere" lines for a lane that may only READ the queue — no "decide". */
+		openDisputesElsewhereViewOne:
+			"{n} open dispute in another week — switch weeks above to see it.",
+		openDisputesElsewhereViewMany:
+			"{n} open disputes in another week — switch weeks above to see them.",
+		overtimeElsewhereViewOne:
+			"{n} claim in another week still undecided — switch weeks above to see it.",
+		overtimeElsewhereViewMany:
+			"{n} claims in another week still undecided — switch weeks above to see them.",
+		/** In place of acceptingRecordsDecision for a lane that may only read the queue. */
+		disputesViewOnlyIntro:
+			"View only — the agency owner or finance accepts or rejects these claims.",
 		overtimeQueueHint:
 			"Each claim holds its payroll week until decided. The amount shown is what approval writes onto the voucher.",
 		cancellationFeeOnVoucherOne: "Cancellation fee on this voucher",
@@ -5866,6 +6028,9 @@ const en = {
 		prSigned: "PR signed",
 		/** Grid row label for the agency's half of the dual signature — whoever signed, whatever their title. The name and capacity follow it. */
 		agencySigned: "Agency signed",
+		/** Shown under the voucher's IC when the copy taken at issue no longer matches the PR's profile. */
+		prIcDiffersFromProfile:
+			"This IC differs from the PR's profile — check which one is right.",
 		/** Short form of payroll.bankReference, for the narrow summary grid. */
 		bankRef: "Bank ref",
 		/** Heading over the issuer method + payee bank details, which stay as stored. */
@@ -5925,7 +6090,7 @@ const en = {
 		/** The queue's own name — on the agency Approvals tabs and above the
 		    outlet's team list. "New member" not "Requests": the reader is being
 		    told WHO is waiting, not what kind of paperwork it is. */
-		newMembers: "New member",
+		newMembers: "Team members",
 		/** The queue's filter. "Waiting" is the work; the other two are the
 		    record — the same split every other approvals queue here uses. */
 		membersWaiting: "Waiting",
@@ -6058,6 +6223,18 @@ const en = {
 		 * page all section").
 		 */
 		changeRole: "Change their role",
+		/** An Owner / Guarantor row — the title is shown, not offered as a picker. */
+		currentRole: "Their role",
+		roleFixedHere: "This title is not changed from the approvals queue.",
+		/**
+		 * Under a greyed role picker / Approve for a lane without `settings:update`
+		 * (owner and guarantor on both portals) — a dead control needs its reason.
+		 */
+		onlyOwnerDecides:
+			"You can view members here, but only an owner or guarantor can make these changes.",
+		/** Mirrors the server's 409 on removing the last active owner. */
+		lastOwnerStays:
+			"The only active owner cannot be deactivated — appoint another owner first.",
 		saveRole: "Save role",
 		roleSaved: "Role updated",
 		roleSaveFailed: "Could not change this role",
@@ -6350,6 +6527,8 @@ const en = {
 		noPrsBookedYet: "No PRs booked yet — {detail}",
 		/** Lands mid-sentence inside noPrsBookedYet — keep it lower-case in English. */
 		openForApplications: "open for applications",
+		/** A shift that has ENDED with nobody booked — it is no longer open to anyone. */
+		noPrsBookedEnded: "No PRs were booked — this shift has ended.",
 		applicantsCount: "Applicants · {n}",
 		/** Commission a pay-tier row carries. The % is common to the tier, never per item. */
 		commissionDrinksAndTips: "+ drinks & tips",
@@ -6587,8 +6766,10 @@ const en = {
 		/** Plan editor sheet title when editing. */
 		editPlan: "Edit Plan",
 		editPlanHint: "Update the plan details.",
-		/** Kept faithful to the existing English, which predates the audience selector — see notes. */
+		/** Create-sheet line while the Audience field reads Agency. */
 		createPlanHint: "Add a new plan for agencies.",
+		/** The same line while the Audience field reads Outlet (its default). */
+		createPlanHintOutlet: "Add a new plan for outlets.",
 		/** Field label. The NAME itself is data the admin types here and stays English. */
 		planName: "Plan Name",
 		/** The examples are plan names, so they stay English inside the translated hint. */
@@ -6955,6 +7136,10 @@ const en = {
 		memberRoleHereHint: "The lane this person works in, and when they joined.",
 		memberSubRole: "Sub-role",
 		membershipStatus: "Membership status",
+		/** A stored membership `pending` — asked to join, nobody has answered yet. */
+		membershipStatusPending: "Awaiting approval",
+		/** A stored membership `rejected` — the request was turned down; never a member. */
+		membershipStatusDeclined: "Declined",
 		membershipId: "Membership ID",
 		memberAccount: "Account",
 		memberAccountHint: "The login itself — separate from the membership above.",
@@ -7668,6 +7853,71 @@ export type PortalTranslations = {
 };
 
 const zh: PortalTranslations = {
+	approvedDesign: {
+		aboutFigures: "关于这些数据",
+		clearFilters: "清除筛选",
+		fromDate: "开始日期",
+		toDate: "结束日期",
+		templateHint:
+			"选择已保存的活动或新建空白班次。每个班次都有独立的日期、人员及薪资。",
+		choosePrs: "选择 PR",
+		staffedDemand: "已安排 / 需求",
+		todayShifts: "今日班次",
+		shiftSelectionHint:
+			"按开始时间排序。选择班次以查看下方数据和详情。展开详情不会更改当前选择。",
+		viewComcard: "查看模卡",
+		viewVenue: "查看场所",
+		moreFilters: "更多筛选",
+		completedShifts: "已完成班次",
+		prVoucher: "PR / 凭单",
+		drinksTips: "酒水 / 小费",
+		otherEarnings: "加班 / 其他",
+		deductions: "扣款",
+		reviewVoucher: "查看凭单",
+		organizationProfile: "机构资料",
+		identityContact: "您的机构身份及联系方式。",
+		address: "地址",
+		currentPlan: "当前方案",
+		nextBilling: "下次账单日期",
+		shiftsThisMonth: "本月班次",
+		staffedUpcoming: "已安排的未来班次",
+		prPlaces: "PR 名额",
+		unfilled: "未填补",
+		staffingSuggestions: "排班建议",
+		reviewAutoAssignment: "审核自动排班",
+		venueShare: "门店所得",
+		salesDescription: "销售额 · 酒水、小费和服务",
+		prSpendDescription: "工资、佣金和已批准加班",
+		venueShareDescription: "未扣除门店其他费用",
+		wages: "工资",
+		commission: "佣金",
+		approvedOvertime: "已批准加班",
+		rank: "排名",
+		prAgency: "PR / 经纪公司",
+		totalPayout: "总报酬",
+		comparedWithTop: "与最高者比较",
+		viewBreakdown: "查看明细",
+		hideBreakdown: "收起明细",
+		tierIncludes: "方案 / 包含内容",
+		pvsPerWeek: "每周付款凭证",
+		dailyCapacity: "每日人数",
+		weeklyPrice: "每周费用",
+		monthlyPrice: "每月费用",
+		statusAction: "状态 / 操作",
+		approvalsDescription: "审核申请、查看详细资料并作出决定。",
+		outletApprovalsDescription: "审核加入门店团队的申请。",
+		personalInformation: "个人资料",
+		race: "族群",
+		floorName: "工作昵称",
+		languages: "语言",
+		age: "年龄",
+		height: "身高",
+		weight: "体重",
+		email: "邮箱",
+		mobile: "手机",
+		documentCompleteness: "文件完整度",
+		requests: "申请",
+	},
 	lang: {
 		language: "语言",
 		english: "English",
@@ -8031,6 +8281,8 @@ const zh: PortalTranslations = {
 		reports: "报表",
 		workspace: "工作区",
 		dashboard: "仪表板",
+		specialService: "特别服务",
+		profile: "个人资料",
 	},
 	agencyHome: {
 		totalPr: "PR 总数",
@@ -8213,6 +8465,7 @@ const zh: PortalTranslations = {
 		postShiftOne: "发布 {n} 个班次",
 		postShiftMany: "发布 {n} 个班次",
 		greenWord: "绿色",
+		submitHint: "发布会创建职位，并立即通知与你关联的经纪公司。",
 		greenExplains: "按钮会创建职位，并立即通知与你关联的经纪公司。",
 		sendTo: "发送给",
 		chooseWhoCanFill: "选择由谁来填补这个班次。",
@@ -8467,6 +8720,8 @@ const zh: PortalTranslations = {
 		drinksCommission: "酒水提成",
 		tipsCommission: "小费提成",
 		overtimeShort: "加班",
+		refPenalty: "罚款",
+		earlierDays: "更早",
 		unclassified: "未分类",
 		thisWeekByComponent: "本周各款项类别",
 		noCommissionLinesToVerify: "此付款单没有需要核实的提成明细。",
@@ -8546,6 +8801,7 @@ const zh: PortalTranslations = {
 		previousWeek: "上一周",
 		nextWeek: "下一周",
 		liveBackendRoster: "实时排班 · 点击空白格即可指派 PR",
+		liveBackendRosterViewOnly: "实时排班 · 仅可查看",
 		checkInLocations: "签到位置",
 		nobodyRostered: "当天无排班",
 		loading: "加载中",
@@ -8818,7 +9074,8 @@ const zh: PortalTranslations = {
 		attendance: "出勤",
 		paid: "已付款",
 		penalties: "罚款",
-		noActivePenalties: "暂无生效中的罚款。",
+		noActivePenalties:
+			"暂无新的违规记录。已记录但尚未入账的罚款与取消费用列在薪资页。",
 		loadingPenalties: "正在加载罚款…",
 		loadingPenaltyRules: "正在加载罚款规则…",
 		couldNotSavePenaltyRules: "罚款规则保存失败",
@@ -8882,7 +9139,7 @@ const zh: PortalTranslations = {
 		shiftsHint: "可编辑排班 · 与门店现场同步",
 		assignReplacement: "指派替班人员",
 		selectPr: "选择 PR…",
-		availableShiftToday: "今日可选班次",
+		availableShiftToday: "当日可选班次",
 		selectOpenShift: "选择空缺班次…",
 		assigning: "指派中…",
 		assign: "指派",
@@ -8911,7 +9168,7 @@ const zh: PortalTranslations = {
 		replacementPr: "替班 PR",
 		sendOfferToReplacement: "向替班人员发送邀约",
 		reassign: "重新指派",
-		noOpenShiftsOtherOutlets: "今天其他门店没有空缺班次。",
+		noOpenShiftsOtherOutlets: "当天其他门店没有空缺班次。",
 		editShift: "编辑班次",
 		requestOutletSwap: "申请换店",
 		checkedOut: "已签退",
@@ -9008,6 +9265,9 @@ const zh: PortalTranslations = {
 		summary: "{n} 个 PR 班次 · {range} · 工资 {total}",
 		latestOn: "最近 {day} · {date}",
 		latestPlain: "最近 {date}",
+		checkOutLooksWrong: "签退时间似乎有误 · 已打卡 {n} 小时",
+		checkOutLooksWrongHint:
+			"签到与签退相隔超过 16 小时，打卡时间可能有误。所显示的工资不受影响。",
 		topEarner: "收入榜首",
 		rating: "评分",
 		starsOutOf: "{total} 星中的 {filled} 星",
@@ -9162,6 +9422,8 @@ const zh: PortalTranslations = {
 		currentPeriodNotDue: "本期",
 		overdueWarning:
 			"{n} 个计费周期共 {amount} 已逾期。最早一笔到期日为 {date}，已逾期 {days} 天。",
+		heroOverdueOne: "已逾期 —— 过去 1 周共 {amount} 尚未付款",
+		heroOverdueMany: "已逾期 —— 过去 {n} 周共 {amount} 尚未付款",
 		agingDueSoon: "即将到期",
 		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
@@ -9744,6 +10006,8 @@ const zh: PortalTranslations = {
 		noAccessBilling: "你没有权限查看订阅账单。",
 		financeReadOnly: "财务视图 —— 只读 · 如需更改套餐或银行卡请联系东主",
 		memberReadOnly: "只读 · 只有东主可以更改套餐、付款或更新银行卡",
+		guarantorReadOnly:
+			"担保人视图 · 只有东主可以付款或更新银行卡 —— 你可以查看已付和未付账单",
 		plansMonthly: "套餐 · 按月",
 		prLimitHint:
 			"PR 上限 = 你每天可指名的 PR 人数上限（由经纪公司补位的不计入） · 今天已请求 {today} 位 · 峰值日 {peak} 位",
@@ -9846,11 +10110,13 @@ const zh: PortalTranslations = {
 		ratesByPrTier: "按 PR 等级的费率",
 		drinksPrice: "酒水价格",
 		drinksSummary: "{n} 款酒水 · RM {min}–{max}",
+		drinksSummaryOne: "{n} 款酒水 · RM {min}–{max}",
 		addDrinksBelow: "请在下方添加酒水",
 		drink: "酒水",
 		moveToServices: "移至服务项目",
 		serviceEntitlement: "服务项目",
 		servicesSummary: "{n} 项服务 · RM {min}–{max}",
+		servicesSummaryOne: "{n} 项服务 · RM {min}–{max}",
 		addServicesBelow: "请在下方添加服务项目",
 		service: "服务",
 		moveToDrinks: "移至酒水",
@@ -9936,6 +10202,7 @@ const zh: PortalTranslations = {
 		colServices: "服务",
 		colTotal: "合计",
 		rowMobileSummary: "销售 {sales} · PR −{cost} · 利润率 {pct}%",
+		rowMobileSummaryNoSales: "销售 {sales} · PR −{cost}",
 		drinkSales: "酒水销售",
 		tipsSales: "小费收入",
 		serviceSales: "服务销售",
@@ -10182,6 +10449,9 @@ const zh: PortalTranslations = {
 		confirm: "确认",
 		billedAbove: "计费比你的班次记录高出 {amount}",
 		recordsShowMore: "你的记录比计费多出 {amount}",
+		agenciesDiffer: "{count} 份经纪公司结算单与你的记录不符",
+		statementMatches: "与你的班次记录一致",
+		billedVsRecords: "{week} · 经纪公司计费 {billed}，你的班次记录为 {own}",
 		varianceActionNeeded: "差异 {amount} · 需要处理",
 		awaitingAgencyConfirm: "等待经纪公司确认",
 		confirmWeek: "确认本周 · {date}",
@@ -10293,7 +10563,7 @@ const zh: PortalTranslations = {
 		dashLoading: "加载中…",
 
 		dashPlatformBreakdown: "平台分布",
-		dashPlatformBreakdownHint: "各机构与工作的实时状态分布。",
+		dashPlatformBreakdownHint: "平台的实时状态分布。",
 		dashAgenciesByStatus: "公关公司状态分布",
 		dashOutletsByStatus: "门店状态分布",
 		dashJobsByStatus: "工作状态分布",
@@ -10302,7 +10572,7 @@ const zh: PortalTranslations = {
 		dashCenterJobs: "项工作",
 
 		dashActionItems: "今日待办事项",
-		dashActionItemsHint: "审批、报价与工作审核 — 点击任意一行进行处理。",
+		dashActionItemsHint: "等待您审核的事项 — 选择一行进行处理。",
 		dashNeedAttention: "{n} 项需要关注",
 		dashAllClear: "一切正常",
 		dashLoadingReminders: "正在加载今日提醒…",
@@ -10341,7 +10611,7 @@ const zh: PortalTranslations = {
 		dashDaysAgo: "{n} 天前",
 
 		dashLatestRegistrations: "最新注册",
-		dashLatestRegistrationsHint: "等待审核的新机构。",
+		dashLatestRegistrationsHint: "最新注册的机构，以及各自的当前状态。",
 		dashFilterAll: "全部",
 		dashLoadingRegistrations: "正在加载注册记录…",
 		dashNoRegistrations: "暂无注册记录。",
@@ -10574,7 +10844,7 @@ const zh: PortalTranslations = {
 		create: "创建",
 
 		pendingTitle: "待审批事项",
-		pendingSubtitle: "平台上所有等待管理员处理的事项。",
+		pendingSubtitle: "等待审核的经纪公司与门店注册。",
 		pendingIncomplete: "部分待审批事项未能加载 — 此列表并不完整。",
 		colItem: "事项",
 		colType: "类型",
@@ -10582,8 +10852,7 @@ const zh: PortalTranslations = {
 		colAction: "操作",
 		loadingPending: "正在加载待审批事项…",
 		nothingPending: "暂无待审批事项",
-		nothingPendingHint:
-			"新的经纪公司与门店注册、套餐申请，以及公司发布的工作，都会在此处等待审核。",
+		nothingPendingHint: "新的经纪公司与门店注册将在此处等待审核。",
 		review: "审核",
 		typePrAgency: "公关公司",
 		typeOutlet: "门店",
@@ -10864,6 +11133,7 @@ const zh: PortalTranslations = {
 		displayName: "显示名称",
 		yourDisplayName: "您的显示名称",
 		role: "角色",
+		roleAdmin: "管理员",
 		userId: "用户 ID",
 		reset: "重置",
 		saveChanges: "保存更改",
@@ -10911,6 +11181,7 @@ const zh: PortalTranslations = {
 		sortOrder: "排序顺序",
 		colUpdated: "更新时间",
 		colDeactivatedBy: "停用操作人",
+		declinedBy: "拒绝操作人",
 		actorUnknown: "未知",
 		actorSystem: "系统",
 		ascending: "升序",
@@ -10939,6 +11210,7 @@ const zh: PortalTranslations = {
 		searchOutletOrAgencyPlaceholder: "搜索门店或经纪公司…",
 		viewCurrentPlan: "当前套餐",
 		viewFullHistory: "全部历史",
+		viewSwitchLabel: "显示当前套餐或全部历史",
 		filterBySubscribedDate: "按订阅日期筛选",
 		colSubscriber: "订阅方",
 		colRole: "角色",
@@ -11334,6 +11606,16 @@ const zh: PortalTranslations = {
 		pendingSignature: "待签署",
 		eSignOnFile: "电子签名已存档",
 		awaitingManualSign: "待手动签署",
+		agencySignedBy: "机构 —— 由 {name} 签署 · {when}",
+		agencyWaitingToSign: "机构 —— 等待东主或财务签署",
+		agencyNoSignatureOnRecord: "机构 —— 没有机构签名记录",
+		agencySignatory: "机构签署人",
+		weekTotalLinesLoading: "本周合计 —— 正在载入明细…",
+		weekTotalLinesFailed: "本周合计 —— 明细无法载入",
+		breakdownLinesLoading: "正在载入此付款单的明细…",
+		breakdownLinesFailed:
+			"此付款单的明细无法载入，因此无法拆分收入。下方的实付金额为记录中的金额。",
+		downloadsWaitForLines: "明细载入后即可打开 PDF 和 Excel。",
 		signatureOf: "{name} 的签名",
 		raised: "提出于",
 		daysLeftToAdjust: "还有 {n} 天可修改并重新发送",
@@ -11439,7 +11721,7 @@ const zh: PortalTranslations = {
 		swapWantsToLeave:
 			"{name} 希望从 {from} 调往 {to} · {date} · {shift}。请为其原班次选择替班人员。",
 		pickOpenShiftHoursPaid:
-			"请选择今天其他门店的空缺班次。在 {outlet} 已工作的时数照常计薪。",
+			"请选择当天其他门店的空缺班次。在 {outlet} 已工作的时数照常计薪。",
 		suppliedEstimate: "已供给 {supplied}/{demand} · 预计 {amount}",
 		mustApproveBeforeChange: "需 {name} 同意后才会更换门店。",
 		swapTargetFull: "—— 已满",
@@ -11525,6 +11807,7 @@ const zh: PortalTranslations = {
 		cancelRequest: "取消申请",
 		resolve: "处理",
 		saveChanges: "仅保存，不处理",
+		saveRemarks: "保存备注",
 		toPlanReset: "重置 · {plan}",
 		toPlanCancelOnly: "POS 结束 · 继续使用 {plan}",
 		fallbackItsTier: "其档位",
@@ -11937,10 +12220,22 @@ const zh: PortalTranslations = {
 		approveAddsToVoucher: "{amount} 将加入 {name} 的付款单。此操作无法撤销。",
 		thePr: "该 PR",
 		onlyOwnerFinanceDecideOvertime: "只有经纪公司负责人或财务可以审批加班。",
+		onlyOwnerFinanceDecideDisputes:
+			"只有经纪公司负责人或财务可以接受或驳回争议。",
 		overtimeElsewhereOne:
 			"另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
 		overtimeElsewhereMany:
 			"另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次处理。",
+		openDisputesElsewhereViewOne:
+			"另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次查看。",
+		openDisputesElsewhereViewMany:
+			"另有 {n} 项未解决的争议属于其他周 —— 请在上方切换周次查看。",
+		overtimeElsewhereViewOne:
+			"另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次查看。",
+		overtimeElsewhereViewMany:
+			"另有 {n} 项加班申请属于其他周且尚未处理 —— 请在上方切换周次查看。",
+		disputesViewOnlyIntro:
+			"仅供查看 —— 由经纪公司负责人或财务接受或驳回这些争议。",
 		overtimeQueueHint:
 			"每项申请在处理前都会暂扣其薪资周。所示金额即批准后写入付款单的金额。",
 		cancellationFeeOnVoucherOne: "此付款单上的取消费用",
@@ -12026,6 +12321,7 @@ const zh: PortalTranslations = {
 		financeHead: "财务主管",
 		prSigned: "PR 已签署",
 		agencySigned: "机构已签署",
+		prIcDiffersFromProfile: "此身份证号与 PR 资料不一致——请核实哪一个正确。",
 		bankRef: "银行流水号",
 		paymentTo: "付款至",
 		description: "描述",
@@ -12057,7 +12353,7 @@ const zh: PortalTranslations = {
 		noDeclinedMembers: "没有被拒绝的加入申请。",
 		noDeactivatedMembers: "没有被停用的团队成员。",
 		noMemberRecords: "暂无成员记录。",
-		newMembers: "新成员",
+		newMembers: "团队成员",
 		membersWaiting: "待审批",
 		membersActive: "已在团队",
 		membersAll: "全部",
@@ -12112,6 +12408,10 @@ const zh: PortalTranslations = {
 		deactivatedOn: "停用时间",
 		deactivateMember: "停用",
 		changeRole: "更改职位",
+		currentRole: "当前职位",
+		roleFixedHere: "此职位无法在审批队列中更改。",
+		onlyOwnerDecides: "您可以在此查看成员，但仅限东主或担保人进行这些更改。",
+		lastOwnerStays: "唯一的在职东主无法停用——请先任命另一位东主。",
 		saveRole: "保存职位",
 		roleSaved: "职位已更新",
 		roleSaveFailed: "无法更改该职位",
@@ -12302,6 +12602,7 @@ const zh: PortalTranslations = {
 		prsOnShiftBooked: "当班 PR · 已预订 {n} 位",
 		noPrsBookedYet: "尚未预订 PR —— {detail}",
 		openForApplications: "开放申请中",
+		noPrsBookedEnded: "未预订任何 PR —— 此班次已结束。",
 		applicantsCount: "申请人 · {n}",
 		commissionDrinksAndTips: "+ 酒水与小费",
 		commissionDrinksOnly: "+ 酒水",
@@ -12483,6 +12784,7 @@ const zh: PortalTranslations = {
 		editPlan: "编辑套餐",
 		editPlanHint: "更新此套餐的详情。",
 		createPlanHint: "为经纪公司新增一个套餐。",
+		createPlanHintOutlet: "为门店新增一个套餐。",
 		planName: "套餐名称",
 		planNamePlaceholder: "例如 Basic、Pro、Enterprise",
 		planNameRequired: "请填写套餐名称",
@@ -12731,6 +13033,8 @@ const zh: PortalTranslations = {
 		memberRoleHereHint: "该成员所属的职能，以及加入时间。",
 		memberSubRole: "子角色",
 		membershipStatus: "成员状态",
+		membershipStatusPending: "等待批准",
+		membershipStatusDeclined: "已拒绝",
 		membershipId: "成员记录 ID",
 		memberAccount: "账户",
 		memberAccountHint: "登录账户本身 — 与上方的成员身份分开。",

@@ -4,7 +4,8 @@ import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { OutletMultiDatePopover } from "@agency-portal/components/outlet/outlet-date-popover";
 import {
 	formatCompactRm,
-	OutletReportTopPrCard,
+	pctOfSales,
+	pnlBarPct,
 } from "@agency-portal/components/outlet/outlet-reports-ui";
 import {
 	formatJobDates,
@@ -16,6 +17,7 @@ import {
 	ChartContainer,
 	ChartTooltip,
 } from "@agency-portal/components/ui/chart";
+import { useIsMobile } from "@agency-portal/hooks/use-mobile";
 import { useOutletSalesReport } from "@agency-portal/hooks/use-outlet-sales-report";
 import {
 	getLiveTodayIso,
@@ -58,16 +60,14 @@ import {
 import {
 	CalendarDays,
 	ChevronDown,
-	Clock,
 	TrendingDown,
 	TrendingUp,
-	Trophy,
-	Users,
 } from "lucide-react";
 import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useId,
 	useMemo,
 	useRef,
 	useState,
@@ -83,6 +83,8 @@ import {
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+
+import "./outlet-report-design.css";
 
 type ExpandedMetric = "floor" | "pr" | null;
 
@@ -243,8 +245,10 @@ type DayRow = {
 	dateDisplay: string;
 	sales: number;
 	prCost: number;
+	/** Sales minus PR spend — NEGATIVE on a night that cost more than it sold. */
 	earned: number;
-	marginPct: number;
+	/** Null on a night with no floor sales: a margin of nothing has no value. */
+	marginPct: number | null;
 };
 
 function EarningsTooltip({
@@ -339,6 +343,7 @@ const REPORT_TABS: {
 export function OutletSalesDashboard() {
 	const { t } = usePortalLocale();
 	const chartConfig = useChartConfig();
+	const breakdownId = useId();
 	const { shifts, shiftHistory, outletOwner, outletWorkspace } = useStore();
 	// On a real outlet session, Reports read live floor-sales + PR-cost from the
 	// backend; the demo store (velvet week) is used only in unauthenticated demo
@@ -497,6 +502,19 @@ export function OutletSalesDashboard() {
 		sealedEndIso,
 	]);
 
+	const reportCostRows = backed
+		? salesReport.buildTopPrs(backendSalesRange)
+		: [];
+	const costParts = reportCostRows.reduce(
+		(sum, row) => ({
+			wages: sum.wages + row.wages,
+			commission: sum.commission + row.commission,
+			overtime: sum.overtime + row.overtime,
+		}),
+		{ wages: 0, commission: 0, overtime: 0 },
+	);
+	const costByPr = new Map(reportCostRows.map((row) => [row.prId, row]));
+
 	const topPrs = useMemo(() => {
 		if (backed) {
 			return salesReport
@@ -599,8 +617,12 @@ export function OutletSalesDashboard() {
 	const dayRows = useMemo((): DayRow[] => {
 		if (!report) return [];
 		const rows = report.days.map((d) => {
-			const earned = Math.max(0, d.sales - d.manpowerCost);
-			const marginPct = d.sales > 0 ? Math.round((earned / d.sales) * 100) : 0;
+			// NOT clamped at zero. It was, so a venue whose nights all cost more
+			// than they sold (Velvet 23: wages, no floor sales) drew a row of
+			// "RM 0.00" bars beside "Venue share −RM 5,075.00" — the chart and the
+			// total disagreeing about the same nights.
+			const earned = d.sales - d.manpowerCost;
+			const marginPct = pctOfSales(earned, d.sales);
 			return {
 				dateIso: d.dateIso,
 				chartTick: weekdayLabel(d.dateIso),
@@ -619,18 +641,12 @@ export function OutletSalesDashboard() {
 
 	if (!report) {
 		return (
-			<div className="iz-outlet-report">
-				<ReportTabs prefs={prefs} onChange={updatePrefs} />
-				{prefs.tab === "custom" && (
-					<CustomRangePanel
-						prefs={prefs}
-						onChange={updatePrefs}
-						reportableDateIsos={reportableDateIsos}
-					/>
-				)}
-				{prefs.tab !== "custom" && (
-					<ReportPeriodBadge prefs={prefs} className="mt-1" />
-				)}
+			<div className="iz-outlet-report iz-outlet-report-design">
+				<ReportFilters
+					prefs={prefs}
+					onChange={updatePrefs}
+					reportableDateIsos={reportableDateIsos}
+				/>
 				<p className="iz-sm iz-muted mt-4 rounded-2xl border border-dashed border-[var(--iz-line)] px-4 py-8 text-center">
 					{t.reports.noPrAttributed}
 				</p>
@@ -646,8 +662,10 @@ export function OutletSalesDashboard() {
 		weekLabel,
 		shifts: shiftCount,
 	} = report;
-	const marginPct =
-		totalSales > 0 ? Math.round((margin / totalSales) * 100) : 0;
+	// Shares of floor sales — null when there were none, and then no
+	// percentage is printed rather than "0%" beside real PR spend.
+	const marginPct = pctOfSales(margin, totalSales);
+	const prSpendPct = pctOfSales(totalCost, totalSales);
 	const avgEarnedPerNight =
 		shiftCount > 0 ? Math.round(margin / shiftCount) : 0;
 	const topEarnedMax = Math.max(...topPrs.map((p) => p.earned), 1);
@@ -673,290 +691,300 @@ export function OutletSalesDashboard() {
 	};
 
 	return (
-		<div className="iz-outlet-report">
-			<ReportTabs prefs={prefs} onChange={updatePrefs} />
+		<div className="iz-outlet-report iz-outlet-report-design">
+			<ReportFilters
+				prefs={prefs}
+				onChange={updatePrefs}
+				reportableDateIsos={reportableDateIsos}
+			/>
 
-			{prefs.tab === "custom" ? (
-				<CustomRangePanel
-					prefs={prefs}
-					onChange={updatePrefs}
-					reportableDateIsos={reportableDateIsos}
-				/>
-			) : (
-				<ReportPeriodBadge prefs={prefs} />
-			)}
-
-			<div className="iz-outlet-report-layout">
-				<div className="iz-outlet-report-main">
-					<div className="iz-outlet-report-hero">
-						<div className="iz-outlet-report-hero__head">
-							<div className="min-w-0">
-								<p className="iz-outlet-report-hero__label">
-									{isCurrentWeek
-										? t.reports.netSalesSoFar
-										: t.reports.netSalesThisPeriod}
-								</p>
-								<p className="iz-outlet-report-hero__value">
-									{formatRM(margin)}
-								</p>
-								<p className="iz-outlet-report-hero__formula">
-									{fill(t.reports.formula, {
-										sales: formatRM(totalSales),
-										cost: formatRM(totalCost),
-									})}
-								</p>
-							</div>
-							<div className="iz-outlet-report-hero__badges">
-								<span
-									className={cn(
-										"iz-outlet-report-badge",
-										!hasGrowth
-											? "iz-outlet-report-badge--margin"
-											: growthUp
-												? "iz-outlet-report-badge--up"
-												: "iz-outlet-report-badge--down",
-									)}
-								>
-									{hasGrowth ? (
-										<>
-											{growthUp ? (
-												<TrendingUp className="h-3 w-3" />
-											) : (
-												<TrendingDown className="h-3 w-3" />
-											)}
-											{fill(t.reports.vsPrior, {
-												pct: (growthUp ? "+" : "") + wowGrowthPct,
-											})}
-										</>
-									) : (
-										t.reports.noPriorData
-									)}
-								</span>
-								<span className="iz-outlet-report-badge iz-outlet-report-badge--margin">
-									{fill(t.reports.marginPct, { pct: marginPct })}
-								</span>
-							</div>
-						</div>
-
-						<div className="iz-outlet-report-metrics">
-							<MetricCard
-								label={t.reports.floorSales}
-								value={formatRM(totalSales)}
-								icon={<Trophy className="h-3.5 w-3.5" />}
-								variant="floor"
-								selected={expandedMetric === "floor"}
-								onClick={() => toggleMetric("floor")}
-							/>
-							<MetricCard
-								label={t.reports.prSpend}
-								value={formatRM(totalCost)}
-								icon={<Users className="h-3.5 w-3.5" />}
-								variant="pr"
-								selected={expandedMetric === "pr"}
-								onClick={() => toggleMetric("pr")}
-							/>
-							<MetricCard
-								label={t.reports.avgPerNight}
-								value={formatRM(avgEarnedPerNight)}
-								icon={<Clock className="h-3.5 w-3.5" />}
-								variant="avg"
-								highlight
-							/>
-						</div>
-
-						{expandedMetric === "floor" && (
-							<div className="iz-outlet-report-expand">
-								<div className="grid grid-cols-3 gap-2">
-									<div className="iz-outlet-report-expand__tile">
-										<p className="iz-outlet-report-expand__tile-label">
-											{t.reports.drinkSales}
-										</p>
-										<p className="iz-outlet-report-expand__tile-value">
-											{formatRM(floorBreakdown.drinkSales)}
-										</p>
-									</div>
-									<div className="iz-outlet-report-expand__tile">
-										<p className="iz-outlet-report-expand__tile-label">
-											{t.reports.tipsSales}
-										</p>
-										<p className="iz-outlet-report-expand__tile-value">
-											{formatRM(floorBreakdown.tipsSales)}
-										</p>
-									</div>
-									{/* Its own tile, never merged into tips: services are the
+			<div className="iz-outlet-report-hero">
+				<div className="iz-outlet-report-metrics">
+					<MetricCard
+						label={t.reports.floorSales}
+						value={formatRM(totalSales)}
+						description={t.approvedDesign.salesDescription}
+						variant="floor"
+						controls={`${breakdownId}-floor`}
+						selected={expandedMetric === "floor"}
+						onClick={() => toggleMetric("floor")}
+					/>
+					{expandedMetric === "floor" && (
+						<section
+							id={`${breakdownId}-floor`}
+							className="iz-outlet-report-expand"
+							aria-label={t.reports.floorSales}
+						>
+							<div className="iz-outlet-report-sales-tiles">
+								<div className="iz-outlet-report-expand__tile">
+									<p className="iz-outlet-report-expand__tile-label">
+										{t.reports.drinkSales}
+									</p>
+									<p className="iz-outlet-report-expand__tile-value">
+										{formatRM(floorBreakdown.drinkSales)}
+									</p>
+								</div>
+								<div className="iz-outlet-report-expand__tile">
+									<p className="iz-outlet-report-expand__tile-label">
+										{t.reports.tipsSales}
+									</p>
+									<p className="iz-outlet-report-expand__tile-value">
+										{formatRM(floorBreakdown.tipsSales)}
+									</p>
+								</div>
+								{/* Its own tile, never merged into tips: services are the
 									    bulk of what PRs log, and calling them "tips" would
 									    misstate the split on a money screen. */}
-									<div className="iz-outlet-report-expand__tile">
-										<p className="iz-outlet-report-expand__tile-label">
-											{t.reports.serviceSales}
-										</p>
-										<p className="iz-outlet-report-expand__tile-value">
-											{formatRM(floorBreakdown.serviceSales)}
-										</p>
-									</div>
+								<div className="iz-outlet-report-expand__tile">
+									<p className="iz-outlet-report-expand__tile-label">
+										{t.reports.serviceSales}
+									</p>
+									<p className="iz-outlet-report-expand__tile-value">
+										{formatRM(floorBreakdown.serviceSales)}
+									</p>
 								</div>
-								<p className="iz-tiny iz-muted2 mt-2">
-									{fill(t.reports.floorFormulaHint, { perDrink: perDrinkRm })}
-								</p>
-								{floorTableDays.length > 0 ? (
-									<div className="mt-3 overflow-x-auto">
-										<div className="min-w-[28rem]">
-											<div className="grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] gap-2 px-1 pb-1 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)]">
-												<span>{t.reports.colDay}</span>
-												<span>{t.reports.colDate}</span>
-												<span className="text-right">
-													{t.reports.colDrinks}
-												</span>
-												<span className="text-right">{t.reports.colTips}</span>
-												<span className="text-right">
-													{t.reports.colServices}
-												</span>
-												<span className="text-right">{t.reports.colTotal}</span>
-											</div>
-											<div className="space-y-1">
-												{floorTableDays.map((row) => (
-													<div
-														key={row.dateIso}
-														className="grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] items-center gap-2 rounded-lg border border-[var(--iz-line)] bg-black/15 px-2 py-1.5"
-													>
-														<span className="iz-heading text-xs font-bold text-[var(--iz-txt)]">
-															{row.dayLabel}
-														</span>
-														<span className="truncate text-[10px] text-[var(--iz-muted2)]">
-															{row.dateDisplay}
-														</span>
-														<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
-															{formatRM(row.drinkSales)}
-														</span>
-														<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
-															{formatRM(row.tipsSales)}
-														</span>
-														<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
-															{formatRM(row.serviceSales)}
-														</span>
-														<span className="text-right iz-nums text-[10px] font-semibold tabular-nums text-[var(--iz-gold-l)]">
-															{formatRM(row.total)}
-														</span>
-													</div>
-												))}
-											</div>
+							</div>
+							<p className="iz-tiny iz-muted2 mt-2">
+								{fill(t.reports.floorFormulaHint, { perDrink: perDrinkRm })}
+							</p>
+							{floorTableDays.length > 0 ? (
+								<div className="mt-3 overflow-x-auto">
+									<div className="iz-outlet-report-floor-table min-w-[28rem]">
+										<div className="iz-outlet-report-floor-head grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] gap-2 px-1 pb-1 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)]">
+											<span>{t.reports.colDay}</span>
+											<span>{t.reports.colDate}</span>
+											<span className="text-right">{t.reports.colDrinks}</span>
+											<span className="text-right">{t.reports.colTips}</span>
+											<span className="text-right">
+												{t.reports.colServices}
+											</span>
+											<span className="text-right">{t.reports.colTotal}</span>
+										</div>
+										<div className="space-y-1">
+											{floorTableDays.map((row) => (
+												<div
+													key={row.dateIso}
+													className="iz-outlet-report-floor-row grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] items-center gap-2 rounded-lg border border-[var(--iz-line)] bg-black/15 px-2 py-1.5"
+												>
+													<span className="iz-heading text-xs font-bold text-[var(--iz-txt)]">
+														{row.dayLabel}
+													</span>
+													<span className="truncate text-[10px] text-[var(--iz-muted2)]">
+														{row.dateDisplay}
+													</span>
+													<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
+														{formatRM(row.drinkSales)}
+													</span>
+													<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
+														{formatRM(row.tipsSales)}
+													</span>
+													<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
+														{formatRM(row.serviceSales)}
+													</span>
+													<span className="text-right iz-nums text-[10px] font-semibold tabular-nums text-[var(--iz-gold-l)]">
+														{formatRM(row.total)}
+													</span>
+												</div>
+											))}
 										</div>
 									</div>
-								) : (
-									<p className="iz-tiny iz-muted mt-3 text-center">
-										{t.reports.noDrinkOrTips}
-									</p>
-								)}
-							</div>
-						)}
-
-						{expandedMetric === "pr" && (
-							<div className="iz-outlet-report-expand">
-								<div className="flex flex-wrap items-center justify-between gap-2">
-									<p className="iz-outlet-report-expand__tile-label">
-										{t.reports.prSpendByPerson}
-									</p>
-									<button
-										type="button"
-										className="iz-btn iz-btn-sm iz-btn-ghost !py-1 !text-[10px]"
-										onClick={scrollToTopPrs}
-									>
-										{t.reports.viewInTopPrs}
-									</button>
 								</div>
-								{prSpendRows.length > 0 ? (
-									<div className="mt-2 space-y-1.5">
-										{prSpendRows.map((row) => (
-											<div
-												key={row.prId}
-												className="flex items-center gap-2 rounded-lg border border-[var(--iz-line)] bg-black/15 px-3 py-2"
-											>
-												<div className="min-w-0 flex-1">
-													<p className="truncate text-sm font-semibold text-[var(--iz-txt)]">
-														{row.name}
-													</p>
-													<p className="iz-tiny iz-muted2 truncate">
-														{row.agency}
-													</p>
-												</div>
-												<span className="shrink-0 iz-nums text-xs font-semibold tabular-nums text-amber-400/90">
-													{formatRM(row.spend)}
-												</span>
+							) : (
+								<p className="iz-tiny iz-muted mt-3 text-center">
+									{t.reports.noDrinkOrTips}
+								</p>
+							)}
+						</section>
+					)}
+					<MetricCard
+						label={t.reports.prSpend}
+						value={formatRM(totalCost)}
+						description={t.approvedDesign.prSpendDescription}
+						variant="pr"
+						controls={`${breakdownId}-pr`}
+						selected={expandedMetric === "pr"}
+						onClick={() => toggleMetric("pr")}
+					/>
+					{expandedMetric === "pr" && (
+						<section
+							id={`${breakdownId}-pr`}
+							className="iz-outlet-report-expand"
+							aria-label={t.reports.prSpendByPerson}
+						>
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<p className="iz-outlet-report-expand__tile-label">
+									{t.reports.prSpendByPerson}
+								</p>
+								<button
+									type="button"
+									className="iz-btn iz-btn-sm iz-btn-ghost"
+									onClick={scrollToTopPrs}
+								>
+									{t.reports.viewInTopPrs}
+								</button>
+							</div>
+							{prSpendRows.length > 0 ? (
+								<div className="mt-2 space-y-1.5">
+									{prSpendRows.map((row) => (
+										<div
+											key={row.prId}
+											className="iz-outlet-report-spend-row flex items-center gap-2 rounded-lg border border-[var(--iz-line)] bg-black/15 px-3 py-2"
+										>
+											<div className="min-w-0 flex-1">
+												<p className="truncate text-sm font-semibold text-[var(--iz-txt)]">
+													{row.name}
+												</p>
+												<p className="iz-tiny iz-muted2 truncate">
+													{row.agency}
+												</p>
 											</div>
-										))}
-									</div>
-								) : (
-									<p className="iz-tiny iz-muted mt-3 text-center">
-										{t.reports.noPrSpend}
-									</p>
-								)}
-							</div>
+											<span className="shrink-0 iz-nums text-xs font-semibold tabular-nums text-amber-400/90">
+												{formatRM(row.spend)}
+											</span>
+										</div>
+									))}
+								</div>
+							) : (
+								<p className="iz-tiny iz-muted mt-3 text-center">
+									{t.reports.noPrSpend}
+								</p>
+							)}
+						</section>
+					)}
+					<MetricCard
+						label={t.approvedDesign.venueShare}
+						value={formatRM(margin)}
+						description={t.approvedDesign.venueShareDescription}
+						variant="avg"
+						highlight
+					/>
+				</div>
+
+				<div className="iz-outlet-report-hero__badges">
+					<span
+						className={cn(
+							"iz-outlet-report-badge",
+							!hasGrowth
+								? "iz-outlet-report-badge--margin"
+								: growthUp
+									? "iz-outlet-report-badge--up"
+									: "iz-outlet-report-badge--down",
 						)}
+					>
+						{hasGrowth ? (
+							<>
+								{growthUp ? (
+									<TrendingUp className="h-3 w-3" />
+								) : (
+									<TrendingDown className="h-3 w-3" />
+								)}
+								{fill(t.reports.vsPrior, {
+									pct: (growthUp ? "+" : "") + wowGrowthPct,
+								})}
+							</>
+						) : (
+							t.reports.noPriorData
+						)}
+					</span>
+					{marginPct !== null && (
+						<span className="iz-outlet-report-badge iz-outlet-report-badge--margin">
+							{fill(t.reports.marginPct, { pct: marginPct })}
+						</span>
+					)}
+					<span>
+						{t.reports.avgPerNight}{" "}
+						<strong>{formatRM(avgEarnedPerNight)}</strong>
+					</span>
+				</div>
+			</div>
 
-						<div className="iz-outlet-report-pnl">
-							<p className="iz-outlet-report-pnl__label">
-								{t.reports.pnlSplit}
+			<div className="iz-outlet-report-layout">
+				<div className="iz-outlet-report-pnl">
+					<p className="iz-outlet-report-pnl__label">{t.reports.pnlSplit}</p>
+					<dl className="iz-report-pnl-values">
+						{[
+							[t.reports.floorSales, totalSales],
+							[t.approvedDesign.wages, backed ? -costParts.wages : null],
+							[
+								t.approvedDesign.commission,
+								backed ? -costParts.commission : null,
+							],
+							[
+								t.approvedDesign.approvedOvertime,
+								backed ? -costParts.overtime : null,
+							],
+							[t.approvedDesign.venueShare, margin],
+						].map(([label, value]) => (
+							<div key={String(label)}>
+								<dt>{label}</dt>
+								<dd>{value === null ? "—" : formatRM(Number(value))}</dd>
+							</div>
+						))}
+					</dl>
+					{/* Widths held to 0–100%: a loss week has a negative keep share
+					    and a spend share over 100, and neither is a width. */}
+					<div className="iz-outlet-report-pnl__bar">
+						<div
+							className="iz-outlet-report-pnl__keep"
+							style={{ width: `${pnlBarPct(margin, totalSales)}%` }}
+						/>
+						<div
+							className="iz-outlet-report-pnl__spend"
+							style={{ width: `${pnlBarPct(totalCost, totalSales)}%` }}
+						/>
+					</div>
+					<div className="iz-outlet-report-pnl__legend">
+						<span>
+							<i className="iz-outlet-report-pnl__dot iz-outlet-report-pnl__dot--keep" />
+							{marginPct === null
+								? t.approvedDesign.venueShare
+								: fill(t.reports.youKeep, { pct: marginPct })}
+						</span>
+						<span>
+							<i className="iz-outlet-report-pnl__dot iz-outlet-report-pnl__dot--spend" />
+							{prSpendPct === null
+								? t.reports.prSpend
+								: fill(t.reports.prSpendPct, { pct: prSpendPct })}
+						</span>
+					</div>
+				</div>
+				<div className="iz-outlet-report-main">
+					<div className="iz-outlet-report-chart">
+						<div className="iz-outlet-report-chart__head">
+							<p className="iz-outlet-report-chart__title">
+								{t.reports.netEarnedByNight}
 							</p>
-							<div className="iz-outlet-report-pnl__bar">
-								<div
-									className="iz-outlet-report-pnl__keep"
-									style={{
-										width: `${totalSales > 0 ? (margin / totalSales) * 100 : 0}%`,
-									}}
-								/>
-								<div
-									className="iz-outlet-report-pnl__spend"
-									style={{
-										width: `${totalSales > 0 ? (totalCost / totalSales) * 100 : 0}%`,
-									}}
-								/>
-							</div>
-							<div className="iz-outlet-report-pnl__legend">
-								<span>
-									<i className="iz-outlet-report-pnl__dot iz-outlet-report-pnl__dot--keep" />
-									{fill(t.reports.youKeep, { pct: marginPct })}
-								</span>
-								<span>
-									<i className="iz-outlet-report-pnl__dot iz-outlet-report-pnl__dot--spend" />
-									{fill(t.reports.prSpendPct, {
-										pct:
-											totalSales > 0
-												? Math.round((totalCost / totalSales) * 100)
-												: 0,
-									})}
-								</span>
-							</div>
+							<p className="iz-outlet-report-chart__hint">
+								{t.reports.barHeightHint}
+								{isCurrentWeek
+									? fill(
+											sealedDayCount === 1
+												? t.reports.nightsSealedOne
+												: t.reports.nightsSealedMany,
+											{ n: sealedDayCount },
+										)
+									: fill(
+											dayRows.length === 1
+												? t.reports.daysInPeriodOne
+												: t.reports.daysInPeriodMany,
+											{ n: dayRows.length },
+										)}
+							</p>
 						</div>
-
-						<div className="iz-outlet-report-chart">
-							<div className="iz-outlet-report-chart__head">
-								<p className="iz-outlet-report-chart__title">
-									{t.reports.netEarnedByNight}
-								</p>
-								<p className="iz-outlet-report-chart__hint">
-									{t.reports.barHeightHint}
-									{isCurrentWeek
-										? fill(
-												sealedDayCount === 1
-													? t.reports.nightsSealedOne
-													: t.reports.nightsSealedMany,
-												{ n: sealedDayCount },
-											)
-										: fill(
-												dayRows.length === 1
-													? t.reports.daysInPeriodOne
-													: t.reports.daysInPeriodMany,
-												{ n: dayRows.length },
-											)}
-								</p>
-							</div>
+						<section
+							className="iz-outlet-report-chart__scroll"
+							// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users must be able to scroll the chart when its date labels exceed the panel width.
+							tabIndex={0}
+							aria-label={t.reports.netEarnedByNight}
+						>
 							<ChartContainer
 								config={chartConfig}
-								className="h-[148px] w-full [&_.recharts-cartesian-grid_horizontal]:stroke-[var(--iz-line)]"
+								style={{ minWidth: Math.max(320, dayRows.length * 80) }}
+								className="iz-outlet-report-chart__plot h-[240px] w-full [&_.recharts-cartesian-grid_horizontal]:stroke-[var(--iz-line)]"
 							>
 								<BarChart
 									data={dayRows}
-									margin={{ top: 18, right: 4, left: 0, bottom: 0 }}
+									margin={{ top: 24, right: 16, left: 16, bottom: 0 }}
 									barCategoryGap="20%"
 								>
 									<CartesianGrid
@@ -968,10 +996,18 @@ export function OutletSalesDashboard() {
 										dataKey="chartTick"
 										tickLine={false}
 										axisLine={false}
-										tick={{ fill: "var(--iz-muted2)", fontSize: 11 }}
+										tick={{ fill: "var(--iz-muted2)", fontSize: 14 }}
 										interval={0}
 									/>
-									<YAxis hide domain={[0, "auto"]} />
+									{/* Zero stays on the axis at both ends, so a loss night
+									    draws DOWN from it instead of vanishing below a 0 floor. */}
+									<YAxis
+										hide
+										domain={[
+											(dataMin: number) => Math.min(0, dataMin),
+											(dataMax: number) => Math.max(0, dataMax),
+										]}
+									/>
 									<ChartTooltip
 										cursor={{ fill: "rgba(217, 185, 122, 0.08)" }}
 										content={<EarningsTooltip />}
@@ -989,13 +1025,13 @@ export function OutletSalesDashboard() {
 												formatCompactRm(Number(value))
 											}
 											fill="var(--iz-gold-l)"
-											fontSize={11}
+											fontSize={14}
 											fontWeight={700}
 										/>
 									</Bar>
 								</BarChart>
 							</ChartContainer>
-						</div>
+						</section>
 					</div>
 
 					<div className="iz-outlet-report-breakdown">
@@ -1012,61 +1048,69 @@ export function OutletSalesDashboard() {
 							defaultOpen={false}
 							className="!mt-0"
 						>
-							<div className="hidden gap-2 px-3 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)] sm:grid sm:grid-cols-[3rem_1fr_6.5rem_6.5rem_6.5rem]">
-								<span>{t.reports.colDay}</span>
-								<span />
-								<span className="text-right">{t.reports.colSales}</span>
-								<span className="text-right">{t.reports.colPrSpend}</span>
-								<span className="text-right">{t.reports.colNet}</span>
-							</div>
-							<div className="space-y-1.5">
-								{(isCurrentWeek
-									? dayRows.filter((row) => row.dateIso <= todayIso)
-									: dayRows
-								).map((row) => (
-									<div
-										key={row.dateIso}
-										className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-2 rounded-xl border border-[var(--iz-line)] bg-black/15 px-3 py-2 sm:grid-cols-[3rem_1fr_6.5rem_6.5rem_6.5rem]"
-									>
-										<div className="min-w-0">
-											<span className="block iz-heading text-xs font-bold text-[var(--iz-txt)]">
-												{row.dayFull}
-											</span>
-											<span className="iz-tiny iz-muted2">
-												{row.dateDisplay}
-											</span>
-										</div>
-										<div className="min-w-0">
-											<div className="h-1.5 overflow-hidden rounded-full bg-[var(--iz-bg2)]">
-												<div
-													className="iz-outlet-report-pr-bar__fill iz-outlet-report-pr-bar__fill--top"
-													style={{
-														width: `${(row.earned / Math.max(...dayRows.map((d) => d.earned), 1)) * 100}%`,
-													}}
-												/>
+							<div className="iz-outlet-report-daily-rows">
+								<div className="iz-outlet-report-day-head hidden gap-2 px-3 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)] sm:grid sm:grid-cols-[3rem_1fr_6.5rem_6.5rem_6.5rem]">
+									<span>{t.reports.colDay}</span>
+									<span />
+									<span className="text-right">{t.reports.colSales}</span>
+									<span className="text-right">{t.reports.colPrSpend}</span>
+									<span className="text-right">{t.reports.colNet}</span>
+								</div>
+								<div className="space-y-1.5">
+									{(isCurrentWeek
+										? dayRows.filter((row) => row.dateIso <= todayIso)
+										: dayRows
+									).map((row) => (
+										<div
+											key={row.dateIso}
+											className="iz-outlet-report-day-row grid grid-cols-[2.5rem_1fr_auto] items-center gap-2 rounded-xl border border-[var(--iz-line)] bg-black/15 px-3 py-2 sm:grid-cols-[3rem_1fr_6.5rem_6.5rem_6.5rem]"
+										>
+											<div className="min-w-0">
+												<span className="block iz-heading text-xs font-bold text-[var(--iz-txt)]">
+													{row.dayFull}
+												</span>
+												<span className="iz-tiny iz-muted2">
+													{row.dateDisplay}
+												</span>
 											</div>
-											<p className="iz-tiny iz-muted2 mt-1 truncate sm:hidden">
-												{formatRM(row.sales)} − {formatRM(row.prCost)}
-											</p>
+											<div className="min-w-0">
+												<div className="h-1.5 overflow-hidden rounded-full bg-[var(--iz-bg2)]">
+													<div
+														className="iz-outlet-report-pr-bar__fill iz-outlet-report-pr-bar__fill--top"
+														style={{
+															// A loss night has no bar to fill.
+															width: `${(Math.max(0, row.earned) / Math.max(...dayRows.map((d) => d.earned), 1)) * 100}%`,
+														}}
+													/>
+												</div>
+												<p className="iz-tiny iz-muted2 mt-1 truncate sm:hidden">
+													{formatRM(row.sales)} − {formatRM(row.prCost)}
+												</p>
+											</div>
+											<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)] sm:block">
+												{formatRM(row.sales)}
+											</span>
+											<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-amber-400/80 sm:block">
+												{formatRM(-row.prCost)}
+											</span>
+											<span className="whitespace-nowrap text-right iz-nums text-xs font-semibold tabular-nums text-[var(--iz-gold-l)]">
+												{formatRM(row.earned)}
+											</span>
+											<span className="col-span-full text-[10px] text-[var(--iz-muted2)] sm:hidden">
+												{fill(
+													row.marginPct === null
+														? t.reports.rowMobileSummaryNoSales
+														: t.reports.rowMobileSummary,
+													{
+														sales: formatRM(row.sales),
+														cost: formatRM(row.prCost),
+														pct: row.marginPct ?? "",
+													},
+												)}
+											</span>
 										</div>
-										<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)] sm:block">
-											{formatRM(row.sales)}
-										</span>
-										<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-amber-400/80 sm:block">
-											{formatRM(-row.prCost)}
-										</span>
-										<span className="whitespace-nowrap text-right iz-nums text-xs font-semibold tabular-nums text-[var(--iz-gold-l)]">
-											{formatRM(row.earned)}
-										</span>
-										<span className="col-span-full text-[10px] text-[var(--iz-muted2)] sm:hidden">
-											{fill(t.reports.rowMobileSummary, {
-												sales: formatRM(row.sales),
-												cost: formatRM(row.prCost),
-												pct: row.marginPct,
-											})}
-										</span>
-									</div>
-								))}
+									))}
+								</div>
 							</div>
 						</OutletSection>
 					</div>
@@ -1085,23 +1129,59 @@ export function OutletSalesDashboard() {
 							{fill(t.reports.rankedCount, { n: topPrs.length })}
 						</span>
 					</div>
-					<div className="iz-outlet-report-sidebar__list">
-						{topPrs.length === 0 ? (
-							<p className="iz-tiny iz-muted py-6 text-center">
-								{t.reports.noPrShifts}
-							</p>
-						) : (
-							topPrs.map((p, i) => (
-								<OutletReportTopPrCard
-									key={p.prId}
-									rank={i + 1}
-									name={p.name}
-									agency={p.agency}
-									earned={p.earned}
-									topEarned={topEarnedMax}
-								/>
-							))
-						)}
+					<div className="iz-approved-table-scroll">
+						<table className="iz-approved-table">
+							<thead>
+								<tr>
+									{[
+										t.approvedDesign.rank,
+										t.approvedDesign.prAgency,
+										t.approvedDesign.wages,
+										t.approvedDesign.commission,
+										t.approvedDesign.approvedOvertime,
+										t.approvedDesign.totalPayout,
+										t.approvedDesign.comparedWithTop,
+									].map((label) => (
+										<th key={label}>{label}</th>
+									))}
+								</tr>
+							</thead>
+							<tbody>
+								{topPrs.map((p, i) => {
+									const parts = costByPr.get(p.prId);
+									return (
+										<tr key={p.prId}>
+											<td>{i + 1}</td>
+											<td>
+												<strong>{p.name}</strong>
+												<p>{p.agency}</p>
+											</td>
+											<td>{parts ? formatRM(parts.wages) : "—"}</td>
+											<td>{parts ? formatRM(parts.commission) : "—"}</td>
+											<td>{parts ? formatRM(parts.overtime) : "—"}</td>
+											<td>{formatRM(p.earned)}</td>
+											<td>
+												<progress
+													max={Math.max(topEarnedMax, 1)}
+													value={p.earned}
+												/>
+												<span>
+													{Math.round(
+														(p.earned / Math.max(topEarnedMax, 1)) * 100,
+													)}
+													%
+												</span>
+											</td>
+										</tr>
+									);
+								})}
+								{topPrs.length === 0 && (
+									<tr>
+										<td colSpan={7}>{t.reports.noPrShifts}</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
 					</div>
 					{totalPrEarned > 0 && (
 						<p className="iz-outlet-report-sidebar__foot">
@@ -1114,6 +1194,64 @@ export function OutletSalesDashboard() {
 				</aside>
 			</div>
 		</div>
+	);
+}
+
+function ReportFilters({
+	prefs,
+	onChange,
+	reportableDateIsos,
+}: {
+	prefs: OutletReportPrefs;
+	onChange: (patch: Partial<OutletReportPrefs>) => void;
+	reportableDateIsos: string[];
+}) {
+	const { t } = usePortalLocale();
+	const isMobile = useIsMobile();
+	const [open, setOpen] = useState(false);
+	const contentId = useId();
+	const activeLabel = REPORT_TABS.find((tab) => tab.id === prefs.tab)?.label(t);
+
+	return (
+		<section
+			className="iz-outlet-report-filters"
+			aria-label={t.filters.filters}
+		>
+			{isMobile && (
+				<button
+					type="button"
+					className="iz-outlet-report-filters__toggle"
+					aria-expanded={open}
+					aria-controls={contentId}
+					onClick={() => setOpen((value) => !value)}
+				>
+					<span>{t.filters.filters}</span>
+					<span className="iz-outlet-report-filters__selection">
+						{activeLabel}
+					</span>
+					<ChevronDown
+						className={cn("h-4 w-4 shrink-0", open && "rotate-180")}
+						aria-hidden="true"
+					/>
+				</button>
+			)}
+			<div
+				id={contentId}
+				className="iz-outlet-report-filters__body"
+				hidden={isMobile && !open}
+			>
+				<ReportTabs prefs={prefs} onChange={onChange} />
+				{prefs.tab === "custom" ? (
+					<CustomRangePanel
+						prefs={prefs}
+						onChange={onChange}
+						reportableDateIsos={reportableDateIsos}
+					/>
+				) : (
+					<ReportPeriodBadge prefs={prefs} />
+				)}
+			</div>
+		</section>
 	);
 }
 
@@ -1131,6 +1269,7 @@ function ReportTabs({
 				<button
 					key={tab.id}
 					type="button"
+					aria-pressed={prefs.tab === tab.id}
 					onClick={() => {
 						const patch: Partial<OutletReportPrefs> = { tab: tab.id };
 						if (tab.id === "this_week") {
@@ -1265,28 +1404,35 @@ function CustomRangePanel({
 }
 
 function MetricCard({
+	description,
 	label,
 	value,
 	icon,
 	variant,
 	highlight,
 	selected,
+	controls,
 	onClick,
 }: {
+	description?: string;
 	label: string;
 	value: string;
 	icon?: ReactNode;
 	variant?: "floor" | "pr" | "avg";
 	highlight?: boolean;
 	selected?: boolean;
+	controls?: string;
 	onClick?: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const Tag = onClick ? "button" : "div";
 
 	return (
 		<Tag
 			type={onClick ? "button" : undefined}
 			onClick={onClick}
+			aria-expanded={onClick ? selected : undefined}
+			aria-controls={selected ? controls : undefined}
 			className={cn(
 				"iz-outlet-report-metric",
 				variant === "floor" && "iz-outlet-report-metric--floor",
@@ -1318,6 +1464,16 @@ function MetricCard({
 			>
 				{value}
 			</p>
+			{description && (
+				<p className="iz-report-metric-description">{description}</p>
+			)}
+			{onClick && (
+				<span className="iz-outlet-report-metric__action">
+					{selected
+						? t.approvedDesign.hideBreakdown
+						: t.approvedDesign.viewBreakdown}
+				</span>
+			)}
 		</Tag>
 	);
 }

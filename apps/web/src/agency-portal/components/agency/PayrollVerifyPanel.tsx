@@ -5,8 +5,14 @@ import {
 	IzCard,
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
+import { useAgencyMemberName } from "@agency-portal/hooks/use-agency-member-name";
 import { useAgencyPvReceiptReview } from "@agency-portal/hooks/use-agency-pv-receipt-review";
 import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
+import {
+	formatPayrollDay,
+	formatPayrollStampDay,
+	receiptDayIso,
+} from "@agency-portal/lib/payroll-display";
 import {
 	RECEIPT_STATUS_LABEL,
 	RECEIPT_STATUS_VARIANT,
@@ -123,6 +129,7 @@ function ReceiptRow({
 }) {
 	const { t } = usePortalLocale();
 	const [editing, setEditing] = useState(false);
+	const reviewerName = useAgencyMemberName()(receipt.reviewedBy);
 
 	const proofPhotos = receipt.proofPhotos ?? [];
 	/*
@@ -168,7 +175,10 @@ function ReceiptRow({
 			</div>
 
 			<p className="iz-tiny iz-muted2 mt-0.5">
-				{receipt.receiptDate ?? "—"}
+				{/* The working day, as the Receipts feed reads it — a line's own date
+				    first. `receipt_date` alone left RCP-000036 (none stored, lines on
+				    14 Sep) printing "—". */}
+				{formatPayrollDay(receiptDayIso(receipt.receiptDate, lines), t)}
 				{receipt.orderNo
 					? ` · ${fill(t.agencyPvReview.orderNoValue, { no: receipt.orderNo })}`
 					: ""}{" "}
@@ -188,15 +198,18 @@ function ReceiptRow({
 							{ n: proofPhotos.length },
 						)
 					: t.receipts.noProofAttached}
+				{/* `reviewedBy` is a USER id — printed raw it read "Reviewed by
+				    9616d5be-…". Named through the agency's member list; anyone not
+				    on it (an admin, a sweep) is "Reviewed", never the id. The day is
+				    the portal's "14 Sep 2026", not the browser's "9/14/2026". */}
 				{receipt.status !== "pending" &&
 					` · ${
-						receipt.reviewedBy
-							? `${t.receipts.reviewedBy} ${receipt.reviewedBy}`
+						reviewerName
+							? `${t.receipts.reviewedBy} ${reviewerName}`
 							: t.receipts.reviewed
 					} ${
-						receipt.reviewedAt
-							? new Date(receipt.reviewedAt).toLocaleDateString()
-							: t.agencyPvReview.beforeReviewExisted
+						formatPayrollStampDay(receipt.reviewedAt, t) ??
+						t.agencyPvReview.beforeReviewExisted
 					}`}
 			</p>
 
@@ -397,7 +410,7 @@ export function PayrollVerifyPanel({
 							<ul className="mt-2 space-y-1">
 								{unbacked.map((line) => (
 									<li key={line.id} className="iz-tiny iz-muted2">
-										{line.lineDate ?? "—"} · {line.description} ·{" "}
+										{formatPayrollDay(line.lineDate, t)} · {line.description} ·{" "}
 										{formatRM(Number(line.amount || 0))}
 									</li>
 								))}

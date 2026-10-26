@@ -1,0 +1,647 @@
+/* Agency-only layout; the shared profile/team components retain their behavior. */
+.iz-agency-settings {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+
+.iz-agency-settings-header {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+}
+
+.iz-agency-settings-header > p {
+	flex-basis: 100%;
+}
+
+.iz-agency-settings .iz-agency-settings-header {
+	align-items: center;
+	gap: 20px;
+}
+
+.iz-agency-settings .iz-profile-edit-trigger {
+	width: auto;
+	max-width: 100%;
+	margin-top: 0;
+	flex-shrink: 0;
+}
+
+.iz-agency-settings-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	align-self: flex-start;
+	gap: 4px;
+	max-width: 100%;
+	padding: 5px;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+	background: var(--iz-bg2);
+}
+
+.iz-agency-settings-tabs > button {
+	min-height: 44px;
+	padding: 10px 20px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--iz-muted);
+	font: inherit;
+	cursor: pointer;
+}
+
+.iz-agency-settings-tabs > button[aria-selected="true"] {
+	background: var(--iz-panel);
+	color: var(--iz-txt);
+	box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+}
+
+.iz-agency-settings-tabs > button:focus-visible {
+	outline: 2px solid var(--iz-accent, #baa4d6);
+	outline-offset: 2px;
+}
+
+.iz-agency-settings-panel {
+	min-width: 0;
+}
+
+.iz-agency-settings-panel[hidden] {
+	display: none !important;
+}
+
+.iz-agency-settings-panel > .iz-sect-label {
+	margin: 24px 0 12px;
+	font-size: var(--iz-fs-title);
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.iz-agency-settings-panel > .iz-sect-label:first-child {
+	margin-top: 0;
+}
+
+.iz-agency-settings .iz-agency-settings-identity {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 20px;
+	padding: 24px;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+
+.iz-agency-settings-identity-copy {
+	flex: 1 1 180px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.iz-agency-settings-identity-copy > div:last-child {
+	line-height: 1.5;
+}
+
+.iz-agency-settings-identity-copy > div:last-child > svg {
+	flex-shrink: 0;
+}
+
+.iz-agency-settings .iz-profile-photo-actions {
+	justify-content: flex-start;
+	width: 100%;
+	margin-top: 0;
+}
+
+.iz-agency-settings .iz-profile-photo-actions > button {
+	width: auto;
+	min-height: 44px;
+}
+
+.iz-agency-settings .iz-profile-section {
+	padding: 8px 24px;
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+
+.iz-agency-settings .iz-profile-section > .grid {
+	column-gap: 24px;
+}
+
+.iz-agency-settings-organization-fields .iz-profile-section {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	column-gap: 24px;
+}
+
+.iz-agency-settings-organization-fields .iz-profile-section > .grid {
+	grid-column: 1 / -1;
+}
+
+.iz-agency-settings .iz-profile-field {
+	min-width: 0;
+	padding-block: 16px;
+}
+
+[data-portal="agency"] .iz-agency-settings .iz-profile-field__label {
+	font-size: var(--iz-fs-tiny);
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+[data-portal="agency"] .iz-agency-settings .iz-profile-field__value,
+[data-portal="agency"] .iz-agency-settings .iz-profile-field__input {
+	min-width: 0;
+	max-width: 100%;
+	font-size: var(--iz-fs-body);
+	font-weight: 400;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="agency"] .iz-agency-settings .iz-profile-field__hint {
+	font-size: var(--iz-fs-tiny);
+	line-height: 1.5;
+}
+
+.iz-agency-settings-account {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 24px;
+	margin-bottom: 20px;
+}
+
+.iz-agency-settings-team .truncate {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.iz-agency-settings-team .iz-card > .border-b {
+	gap: 16px;
+	padding-block: 16px;
+}
+
+/* Management keeps the original cards, detail panels and action handlers. */
+.iz-portal[data-portal="agency"]
+:is(
+	.iz-agency-pr-management,
+	.iz-outlet-manage-page,
+	.iz-outlet-detail-page,
+	.iz-agency-subscription
+) {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+
+.iz-portal[data-portal="agency"] .iz-pr-manage-header {
+	align-items: flex-start;
+	gap: 20px;
+	flex-wrap: wrap;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(
+		.iz-pr-manage-header__actions,
+		.iz-pr-manage-stats,
+		.iz-outlet-detail-head,
+		.iz-outlet-detail-section__head,
+		.iz-outlet-detail-group-head,
+		.iz-outlet-detail-group-head__stats
+	) {
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.iz-portal[data-portal="agency"] .iz-pr-manage-header__btn {
+	min-height: 46px;
+	padding: 10px 15px;
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+	border-radius: 8px;
+	background: var(--iz-panel);
+	border: 1px solid var(--iz-line);
+	white-space: normal;
+}
+
+.iz-portal[data-portal="agency"] .iz-pr-manage-header__btn--primary {
+	background: var(--iz-gold-d);
+	border-color: var(--iz-gold);
+	color: white;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+	.iz-roster-filterbar {
+	margin: 0;
+	padding: 20px;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+	.iz-roster-filterbar__row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	gap: 16px;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+	.iz-roster-filterbar__field {
+	min-width: 0;
+	width: 100%;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+	.iz-roster-filterbar__field
+	> :is(select, input, button) {
+	width: 100%;
+	max-width: none;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+	.iz-roster-filterbar__head {
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+	.iz-roster-filterbar__label {
+	font-size: var(--iz-fs-body);
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-pr-manage-grid, .iz-outlet-manage-grid) {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	align-items: start;
+	gap: 20px;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-pr-manage-card, .iz-outlet-manage-card) {
+	min-width: 0;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+	box-shadow: none;
+	overflow: hidden;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-pr-manage-card--picked, .iz-outlet-manage-card--picked) {
+	border-color: var(--iz-gold);
+	box-shadow: 0 0 0 2px var(--iz-gold);
+}
+
+.iz-portal[data-portal="agency"] .iz-pr-manage-card__body {
+	padding: 20px;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(
+		.iz-pr-manage-card__name-row,
+		.iz-pr-manage-card__tier-row,
+		.iz-outlet-manage-card__head,
+		.iz-outlet-manage-card__foot
+	) {
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-pr-manage-card__name, .iz-outlet-manage-card__name) {
+	font-size: var(--iz-fs-title);
+	white-space: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.4;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(
+		.iz-pr-manage-card__metric-label,
+		.iz-pr-manage-card__meta,
+		.iz-outlet-manage-card__rate,
+		.iz-outlet-manage-card__meta,
+		.iz-outlet-manage-card__legend,
+		.iz-outlet-manage-card__kpi-label
+	) {
+	font-size: var(--iz-fs-tiny);
+	line-height: 1.5;
+	letter-spacing: 0;
+	text-transform: none;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.iz-portal[data-portal="agency"] .iz-pr-manage-card__metric-value {
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.iz-portal[data-portal="agency"] .iz-pr-manage-card__metrics {
+	gap: 12px;
+	margin-top: 20px;
+	padding-top: 16px;
+	border-top: 1px solid var(--iz-line);
+}
+
+.iz-portal[data-portal="agency"] .iz-pr-manage-card__status {
+	max-width: calc(100% - 24px);
+	white-space: normal;
+}
+
+.iz-portal[data-portal="agency"] .iz-outlet-manage-card {
+	padding: 20px;
+}
+
+.iz-portal[data-portal="agency"] .iz-outlet-manage-card__identity {
+	min-width: 0;
+	flex: 1 1 200px;
+}
+
+.iz-portal[data-portal="agency"] .iz-outlet-manage-card__kpi {
+	gap: 12px;
+	margin-block: 20px;
+}
+
+.iz-portal[data-portal="agency"] .iz-outlet-manage-card__kpi-value {
+	font-size: var(--iz-fs-head);
+}
+
+.iz-portal[data-portal="agency"] .iz-agency-card-open {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 12px 14px;
+	margin-top: 20px;
+	border: 1px solid var(--iz-line);
+	border-radius: 8px;
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+	color: var(--iz-txt);
+}
+
+.iz-portal[data-portal="agency"]
+	:is(
+		.iz-outlet-detail-kpi,
+		.iz-outlet-detail-section,
+		.iz-outlet-detail-shift-card
+	) {
+	min-width: 0;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+	box-shadow: none;
+}
+
+.iz-portal[data-portal="agency"] .iz-outlet-detail-kpi-row {
+	gap: 20px;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-outlet-detail-head__title, .iz-outlet-detail-section__title) {
+	font-size: var(--iz-fs-title);
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+
+.iz-portal[data-portal="agency"] .iz-outlet-detail-head__title {
+	font-size: var(--iz-fs-head);
+}
+
+.iz-portal[data-portal="agency"]
+	:is(
+		.iz-outlet-detail-head__meta,
+		.iz-outlet-detail-head__addr,
+		.iz-outlet-detail-section__hint,
+		.iz-outlet-detail-kpi__label,
+		.iz-outlet-detail-metric__label
+	) {
+	font-size: var(--iz-fs-tiny);
+	line-height: 1.5;
+	white-space: normal;
+}
+
+.iz-portal[data-portal="agency"] .iz-approvals-layout {
+	grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-approvals-sidebar, .iz-approvals-detail) {
+	min-width: 0;
+	padding: 20px;
+	background: transparent;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(
+		.iz-approvals-groups,
+		.iz-approvals-tabs,
+		.iz-approvals-subfilter,
+		.iz-approvals-detail-actions
+	) {
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.iz-portal[data-portal="agency"]
+	:is(.iz-approvals-group, .iz-approvals-tab, .iz-approvals-add-btn) {
+	min-width: 0;
+	min-height: 46px;
+	font-size: var(--iz-fs-body);
+	line-height: 1.4;
+	white-space: normal;
+	border-radius: 8px;
+}
+
+.iz-portal[data-portal="agency"] .iz-approvals-list-item {
+	padding: 16px;
+	border-radius: 10px;
+	background: var(--iz-panel);
+}
+
+.iz-portal[data-portal="agency"] .iz-approvals-list-item :is(.name, .sub) {
+	white-space: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.5;
+}
+
+.iz-portal[data-portal="agency"] .iz-approvals-list-item .name {
+	font-size: var(--iz-fs-body);
+}
+
+.iz-portal[data-portal="agency"] .iz-approvals-list-item .sub {
+	font-size: var(--iz-fs-tiny);
+}
+
+.iz-portal[data-portal="agency"] .iz-agency-subscription > .iz-sect-label {
+	margin-block: 4px -12px;
+	font-size: var(--iz-fs-title);
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+.iz-portal[data-portal="agency"] .iz-agency-subscription > .iz-card {
+	padding: 24px;
+	margin: 0;
+}
+
+@media (max-width: 1280px) {
+	.iz-portal[data-portal="agency"]
+		:is(.iz-pr-manage-grid, .iz-outlet-manage-grid) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 1023px) {
+	.iz-portal[data-portal="agency"] .iz-approvals-layout,
+	.iz-portal[data-portal="agency"][data-collapsed="true"] .iz-approvals-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.iz-portal[data-portal="agency"] .iz-approvals-sidebar {
+		border-right: 0;
+		border-bottom: 1px solid var(--iz-line);
+		max-height: 52dvh;
+	}
+}
+
+@media (max-width: 640px) {
+	.iz-portal[data-portal="agency"]
+		:is(
+			.iz-pr-manage-grid,
+			.iz-outlet-manage-grid,
+			.iz-outlet-detail-kpi-row,
+			.iz-outlet-detail-shift-card__metrics
+		) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.iz-portal[data-portal="agency"]
+		:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+		.iz-roster-filterbar {
+		padding: 16px;
+	}
+
+	.iz-portal[data-portal="agency"]
+		:is(.iz-agency-pr-management, .iz-outlet-manage-page)
+		.iz-roster-filterbar__row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.iz-portal[data-portal="agency"]
+		:is(
+			.iz-pr-manage-header__actions,
+			.iz-outlet-detail-head,
+			.iz-outlet-detail-group-head
+		) {
+		width: 100%;
+	}
+
+	.iz-portal[data-portal="agency"] .iz-pr-manage-header__actions > button {
+		flex: 1 1 auto;
+	}
+
+	.iz-portal[data-portal="agency"]
+		:is(
+			.iz-approvals-sidebar,
+			.iz-approvals-detail,
+			.iz-agency-subscription > .iz-card
+		) {
+		padding: 16px;
+	}
+
+	.iz-portal[data-portal="agency"] .iz-approvals-info-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.iz-portal[data-portal="agency"] .iz-agency-subscription .shrink-0 {
+		min-width: 0;
+		max-width: 100%;
+		flex-shrink: 1;
+	}
+
+	.iz-portal[data-portal="agency"] .iz-agency-subscription .iz-between {
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+
+	.iz-agency-settings .iz-agency-settings-header {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.iz-agency-settings-tabs {
+		align-self: stretch;
+		width: 100%;
+	}
+
+	.iz-agency-settings-tabs > button {
+		flex: 1 1 auto;
+		padding-inline: 10px;
+		font-size: var(--iz-fs-body);
+	}
+
+	.iz-agency-settings .iz-agency-settings-identity {
+		gap: 16px;
+		padding: 20px 16px;
+	}
+
+	.iz-agency-settings .iz-agency-settings-identity .iz-avatar--xl {
+		width: 64px;
+		height: 64px;
+	}
+
+	.iz-agency-settings-identity-copy {
+		flex-basis: 140px;
+	}
+
+	.iz-agency-settings .iz-profile-section {
+		padding-inline: 16px;
+	}
+
+	.iz-agency-settings-account {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.iz-agency-settings-organization-fields .iz-profile-section {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.iz-agency-settings-team .iz-card > .border-b {
+		flex-wrap: wrap;
+	}
+
+	.iz-agency-settings-team .iz-card > .border-b > .min-w-0 {
+		flex-basis: 100%;
+	}
+
+	.iz-agency-settings-team .iz-card > .border-b > .shrink-0 {
+		max-width: 100%;
+		flex-wrap: wrap;
+	}
+
+	.iz-agency-settings-team select,
+	.iz-agency-settings-team input {
+		min-width: 0;
+		max-width: 100%;
+		font-size: var(--iz-fs-body) !important;
+	}
+}

@@ -1,3 +1,4 @@
+import "../agency/portal-subscription-design.css";
 import { isoKeyFromDate } from "@agency-portal/components/iz/HistDateCalendar";
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import { PaymentHistoryList } from "@agency-portal/components/iz/SubscriptionRecordList";
@@ -9,6 +10,7 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { subscriptionReadOnlyNote } from "@agency-portal/components/outlet/subscription-read-only-note";
 import { useOutletCollections } from "@agency-portal/hooks/use-outlet-collections";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
 import {
@@ -44,7 +46,7 @@ import {
 	useOutletIsOwner,
 } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
+import { Calendar, Check, Plug, Receipt, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
@@ -172,7 +174,7 @@ function PosIntegrationAddonCard({
 	const { t } = usePortalLocale();
 	const copy = addonCopy(addon.id, addon, t);
 	return (
-		<div className="iz-outlet-pos-addon col-span-2">
+		<div className="iz-outlet-pos-addon col-span-full">
 			<div className="iz-outlet-pos-addon__glow" aria-hidden />
 			<div className="iz-outlet-pos-addon__inner">
 				<div className="iz-outlet-pos-addon__head">
@@ -815,7 +817,10 @@ function OutletSubscriptionPage() {
 		);
 	}
 
-	const isFinanceReadOnly = outletSubRole === "outlet_finance";
+	const readOnlyNote = subscriptionReadOnlyNote(
+		{ canEdit, canPay, isFinance: outletSubRole === "outlet_finance" },
+		t,
+	);
 
 	return (
 		<div className="iz-screen">
@@ -823,20 +828,54 @@ function OutletSubscriptionPage() {
 				<IzPageTitle>{t.nav.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{outletOwner.orgName}</p>
 				{/*
-				 * `!canEdit`, not one named lane. Ops Head and Director also lose
-				 * the plan switch, the Pay button and the payment method, and used
-				 * to be given no reason for any of it — a page with its controls
-				 * quietly missing reads as broken rather than as a rule.
+				 * Every lane that cannot PAY, not one named lane. Ops Head and
+				 * Director also lose the plan switch, the Pay button and the payment
+				 * method, and used to be given no reason for any of it — a page with
+				 * its controls quietly missing reads as broken rather than as a rule.
+				 * The guarantor keeps the plan switch but not Pay, and is told so.
 				 */}
-				{!canEdit && (
+				{readOnlyNote && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						{isFinanceReadOnly
-							? t.outletSubscription.financeReadOnly
-							: t.outletSubscription.memberReadOnly}
+						{readOnlyNote}
 					</p>
 				)}
 			</header>
 
+			<section className="iz-approved-subscription-summary">
+				<div>
+					<p>{t.approvedDesign.currentPlan}</p>
+					<h2>
+						{backend.isLoading
+							? t.common.loading
+							: (backend.activePlanName ?? currentPlan?.label ?? "—")}
+					</h2>
+					<p>{billedLabel}</p>
+				</div>
+				<div>
+					<p>{t.approvedDesign.dailyCapacity}</p>
+					<strong>
+						{currentPlan
+							? planCapacityLabel(
+									"outlet",
+									currentPlan.id,
+									currentPlan.capacityLabel,
+									t,
+								)
+							: "—"}
+					</strong>
+					<p>
+						{fill(t.outletSubscription.prLimitHint, {
+							today: namedPrsToday,
+							peak: peakDailyNamedPrs,
+						})}
+					</p>
+				</div>
+				<div>
+					<p>{t.approvedDesign.nextBilling}</p>
+					<strong>{renewalLabel ?? "—"}</strong>
+					<p>{planWindowLabel}</p>
+				</div>
+			</section>
 			<IzSectionLabel>{t.outletSubscription.plansMonthly}</IzSectionLabel>
 			<p className="iz-tiny iz-muted2 -mt-1 mb-2">
 				{fill(t.outletSubscription.prLimitHint, {
@@ -844,142 +883,116 @@ function OutletSubscriptionPage() {
 					peak: peakDailyNamedPrs,
 				})}
 			</p>
-			<div className="grid grid-cols-2 gap-2">
+			<section className="iz-approved-plan-table">
+				<div className="iz-approved-plan-head">
+					<span>{t.approvedDesign.tierIncludes}</span>
+					<span>{t.approvedDesign.dailyCapacity}</span>
+					<span>{t.approvedDesign.monthlyPrice}</span>
+					<span>{t.approvedDesign.statusAction}</span>
+				</div>
 				{MONTHLY_PLANS.map((plan) => {
 					const isCurrent = plan.id === currentPlan?.id;
 					const atCapacity = namedPrsToday >= plan.prPerDayMax;
 					return (
-						<IzCard
-							key={plan.id}
-							className={
-								isCurrent
-									? "border-[rgba(57,217,138,.35)] bg-[rgba(57,217,138,.06)]"
-									: undefined
-							}
-						>
-							<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-								<div className="min-w-0">
-									<div className="flex flex-wrap items-center gap-2">
-										<p className="iz-heading text-sm font-bold">{plan.label}</p>
-										{isCurrent && (
-											<IzPill variant="green">
-												{t.outletSubscription.current}
-											</IzPill>
-										)}
-										{planChangeRequested === plan.label && !isCurrent && (
-											<IzPill variant="violet">
-												{t.outletSubscription.awaitingAdmin}
-											</IzPill>
-										)}
-										{atCapacity && !isCurrent && (
-											<IzPill variant="amber">
-												{t.outletSubscription.atDailyLimit}
-											</IzPill>
-										)}
-									</div>
-									<p className="mt-1 text-lg font-bold text-[var(--iz-gold-l)]">
-										{formatRM(plan.monthlyRm)}
-										<span className="iz-tiny iz-muted font-normal">
-											{" "}
-											{t.outletSubscription.perMonth}
-										</span>
-									</p>
-								</div>
-								<div className="shrink-0 sm:text-right">
-									<div className="flex items-center gap-1.5 text-[var(--iz-txt)] sm:justify-end">
-										<Users className="h-4 w-4 text-[var(--iz-gold)]" />
-										<span className="iz-heading text-sm font-bold">
-											{planCapacityLabel(
-												"outlet",
-												plan.id,
-												plan.capacityLabel,
-												t,
-											)}
-										</span>
-									</div>
-									<p className="iz-tiny iz-muted mt-0.5">
-										{outletPickerRule(plan, t)}
-									</p>
-								</div>
+						<div className="iz-approved-plan-row" key={plan.id}>
+							<div>
+								<strong>{plan.label}</strong>
+								<p>{planDescription("outlet", plan.id, plan.description, t)}</p>
 							</div>
-							{isCurrent ? (
-								<p className="iz-tiny iz-muted2 mt-2">
-									{planWindowLabel && renewalLabel
-										? fill(t.outletSubscription.windowRenewalPrefix, {
-												window: planWindowLabel,
-												date: renewalLabel,
-											})
-										: renewalLabel
-											? fill(t.outletSubscription.renewalPrefix, {
+							<div>
+								{planCapacityLabel("outlet", plan.id, plan.capacityLabel, t)}
+								<p>{outletPickerRule(plan, t)}</p>
+							</div>
+							<div>{formatRM(plan.monthlyRm)}</div>
+							<div>
+								{isCurrent && (
+									<IzPill variant="green">
+										{t.outletSubscription.current}
+									</IzPill>
+								)}
+								{atCapacity && !isCurrent && (
+									<IzPill variant="amber">
+										{t.outletSubscription.atDailyLimit}
+									</IzPill>
+								)}
+								{isCurrent ? (
+									<p className="iz-tiny iz-muted2 mt-2">
+										{planWindowLabel && renewalLabel
+											? fill(t.outletSubscription.windowRenewalPrefix, {
+													window: planWindowLabel,
 													date: renewalLabel,
 												})
-											: ""}
-									{fill(t.outletSubscription.requestedTodayPool, {
-										today: namedPrsToday,
-										max: plan.prPerDayMax,
-										pool: plan.prPoolSize,
-									})}
-								</p>
-							) : (
-								canEdit &&
-								(planChangeRequested === plan.label ? (
-									<p className="iz-tiny iz-muted2 mt-3">
-										{fill(t.outletSubscription.sentToAdmin, {
-											plan:
-												currentPlan?.label ??
-												t.outletSubscription.yourCurrentPlan,
+											: renewalLabel
+												? fill(t.outletSubscription.renewalPrefix, {
+														date: renewalLabel,
+													})
+												: ""}
+										{fill(t.outletSubscription.requestedTodayPool, {
+											today: namedPrsToday,
+											max: plan.prPerDayMax,
+											pool: plan.prPoolSize,
 										})}
 									</p>
 								) : (
-									<button
-										type="button"
-										className="iz-btn iz-btn-soft mt-3 w-full"
-										// Until the venue's real plan has loaded, the Current pill
-										// is a demo guess — offering a switch here let a venue ask
-										// for the plan it was already on, which the server then
-										// (rightly) refused.
-										disabled={
-											backend.isRequestingPlanChange || backend.isLoading
-										}
-										onClick={() => selectPlan(plan.id)}
-									>
-										{backend.isLoading
-											? t.common.loading
-											: fill(t.outletSubscription.switchTo, {
-													plan: plan.label,
-												})}
-									</button>
-								))
-							)}
-						</IzCard>
+									canEdit &&
+									(planChangeRequested === plan.label ? (
+										<p className="iz-tiny iz-muted2 mt-3">
+											{fill(t.outletSubscription.sentToAdmin, {
+												plan:
+													currentPlan?.label ??
+													t.outletSubscription.yourCurrentPlan,
+											})}
+										</p>
+									) : (
+										<button
+											type="button"
+											className="iz-btn iz-btn-soft mt-3 w-full"
+											// Until the venue's real plan has loaded, the Current pill
+											// is a demo guess — offering a switch here let a venue ask
+											// for the plan it was already on, which the server then
+											// (rightly) refused.
+											disabled={
+												backend.isRequestingPlanChange || backend.isLoading
+											}
+											onClick={() => selectPlan(plan.id)}
+										>
+											{backend.isLoading
+												? t.common.loading
+												: fill(t.outletSubscription.switchTo, {
+														plan: plan.label,
+													})}
+										</button>
+									))
+								)}
+							</div>
+						</div>
 					);
 				})}
-
-				{OUTLET_SUBSCRIPTION_ADDONS.map((addon) => (
-					<PosIntegrationAddonCard
-						key={addon.id}
-						addon={addon}
-						// `canEdit`, not `canPay`: asking for a POS quote is an ORG change,
-						// which the guarantor may make. Only spending is owner-only.
-						canEdit={canEdit}
-						// Real sessions can withdraw too now: PATCH
-						// /admin-request/mine/:id/withdraw exists, so the button no longer
-						// clears a badge the admin's queue disagrees with. Still false
-						// while the withdrawal is in flight, so it cannot be double-sent.
-						canCancel={!backend.isWithdrawingPos}
-						quotePending={quotePending}
-						pendingKind={pendingKind}
-						activeAddonPriceRm={backend.addonAmountRm}
-						windowLabel={addonWindowLabel}
-						renewsOn={addonRenewalLabel}
-						requoteBlockedNote={requoteBlockedNote}
-						contactLine={contactLine}
-						onRequestQuote={handleRequestQuote}
-						onCancelQuote={handleCancelQuote}
-						onRemoveAddon={handleRemoveAddon}
-					/>
-				))}
-			</div>
+			</section>
+			{OUTLET_SUBSCRIPTION_ADDONS.map((addon) => (
+				<PosIntegrationAddonCard
+					key={addon.id}
+					addon={addon}
+					// `canEdit`, not `canPay`: asking for a POS quote is an ORG change,
+					// which the guarantor may make. Only spending is owner-only.
+					canEdit={canEdit}
+					// Real sessions can withdraw too now: PATCH
+					// /admin-request/mine/:id/withdraw exists, so the button no longer
+					// clears a badge the admin's queue disagrees with. Still false
+					// while the withdrawal is in flight, so it cannot be double-sent.
+					canCancel={!backend.isWithdrawingPos}
+					quotePending={quotePending}
+					pendingKind={pendingKind}
+					activeAddonPriceRm={backend.addonAmountRm}
+					windowLabel={addonWindowLabel}
+					renewsOn={addonRenewalLabel}
+					requoteBlockedNote={requoteBlockedNote}
+					contactLine={contactLine}
+					onRequestQuote={handleRequestQuote}
+					onCancelQuote={handleCancelQuote}
+					onRemoveAddon={handleRemoveAddon}
+				/>
+			))}
 
 			{backend.backed && (
 				<>

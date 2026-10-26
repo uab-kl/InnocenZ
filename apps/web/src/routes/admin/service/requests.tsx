@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	keepPreviousData,
 	useMutation,
@@ -18,12 +19,17 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import {
 	DateMultiFilter,
 	datesToQueryParam,
 } from "@/components/admin/date-multi-filter";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { SourceToggle } from "@/components/admin/source-toggle";
+import {
+	currentOrgName,
+	useCurrentOrgNames,
+} from "@/components/admin/use-current-org-names";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -333,6 +339,9 @@ function canEditQuote(request: AdminRequest): boolean {
 
 function RequestsPage() {
 	const { t } = usePortalLocale();
+	// `subscriberName` is the copy stored when the request was filed; the org
+	// row holds the name it goes by today.
+	const orgNames = useCurrentOrgNames();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -504,7 +513,7 @@ function RequestsPage() {
 	];
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={Handshake}
 				title={t.admin.navPlanRequest}
@@ -542,71 +551,78 @@ function RequestsPage() {
 							<CardDescription>{t.adminRequests.cardHint}</CardDescription>
 						</div>
 
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-							<SourceToggle
-								className="sm:mr-auto"
-								value={roleFilter}
-								onChange={(value) => {
-									setRoleFilter(value);
-									setPage(1);
-								}}
-							/>
+						<AdminFilters className="admin-finance-filters">
+							<div className="admin-finance-filter-row flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+								<SourceToggle
+									className="sm:mr-auto"
+									value={roleFilter}
+									onChange={(value) => {
+										setRoleFilter(value);
+										setPage(1);
+									}}
+								/>
 
-							<div className="relative sm:w-56">
-								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-								<Input
-									value={searchInput}
-									onChange={(event) => setSearchInput(event.target.value)}
-									placeholder={t.adminRequests.searchPlaceholder}
-									className="pl-8"
-									aria-label={t.adminRequests.searchAria}
+								<div className="relative sm:w-56">
+									<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										value={searchInput}
+										onChange={(event) => setSearchInput(event.target.value)}
+										placeholder={t.adminRequests.searchPlaceholder}
+										className="pl-8"
+										aria-label={t.adminRequests.searchAria}
+									/>
+								</div>
+
+								<Select
+									value={statusFilter}
+									onValueChange={(value) => {
+										setStatusFilter(value as StatusFilter);
+										setPage(1);
+									}}
+								>
+									<SelectTrigger
+										className="sm:w-36"
+										aria-label={t.admin.filterByStatus}
+									>
+										<SelectValue placeholder={t.admin.allStatus} />
+									</SelectTrigger>
+									<SelectContent>
+										{/* Values are the stored status; only the labels move. */}
+										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+										<SelectItem value="pending">
+											{t.admin.statusPending}
+										</SelectItem>
+										<SelectItem value="contacted">
+											{t.adminRequests.statusContacted}
+										</SelectItem>
+										<SelectItem value="resolved">
+											{t.adminRequests.statusResolved}
+										</SelectItem>
+										{/* A request the admin declined is a stored status the
+										    rows already show — it has to be findable too. */}
+										<SelectItem value="declined">
+											{requestStatusLabels.declined(t)}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+
+								<DateMultiFilter
+									selectedDates={requestedDates}
+									onChange={(dates) => {
+										setRequestedDates(dates);
+										setPage(1);
+									}}
+									ariaLabel={t.adminRequests.filterByRequestedDate}
+									emptyLabel={t.adminRequests.requestedDate}
 								/>
 							</div>
-
-							<Select
-								value={statusFilter}
-								onValueChange={(value) => {
-									setStatusFilter(value as StatusFilter);
-									setPage(1);
-								}}
-							>
-								<SelectTrigger
-									className="sm:w-36"
-									aria-label={t.admin.filterByStatus}
-								>
-									<SelectValue placeholder={t.admin.allStatus} />
-								</SelectTrigger>
-								<SelectContent>
-									{/* Values are the stored status; only the labels move. */}
-									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-									<SelectItem value="pending">
-										{t.admin.statusPending}
-									</SelectItem>
-									<SelectItem value="contacted">
-										{t.adminRequests.statusContacted}
-									</SelectItem>
-									<SelectItem value="resolved">
-										{t.adminRequests.statusResolved}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-
-							<DateMultiFilter
-								selectedDates={requestedDates}
-								onChange={(dates) => {
-									setRequestedDates(dates);
-									setPage(1);
-								}}
-								ariaLabel={t.adminRequests.filterByRequestedDate}
-								emptyLabel={t.adminRequests.requestedDate}
-							/>
-						</div>
+						</AdminFilters>
 					</div>
 				</CardHeader>
 
 				<CardContent>
 					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
 									<TableHead>{t.adminRequests.colWho}</TableHead>
@@ -696,9 +712,14 @@ function RequestsPage() {
 												className="cursor-pointer hover:bg-muted/30"
 												onClick={() => setEditRequest(request)}
 											>
-												<TableCell>
+												<TableCell data-label={t.adminRequests.colWho}>
 													<div className="text-base font-medium">
-														{request.subscriberName}
+														{currentOrgName(
+															orgNames,
+															request.subscriberType,
+															request.subscriberId,
+															request.subscriberName,
+														)}
 													</div>
 													{request.contactName && (
 														<div className="text-sm text-muted-foreground">
@@ -706,7 +727,7 @@ function RequestsPage() {
 														</div>
 													)}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.adminRequests.colRole}>
 													{request.subscriberType ? (
 														<Badge
 															variant="outline"
@@ -718,7 +739,7 @@ function RequestsPage() {
 														<span className="text-muted-foreground">—</span>
 													)}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.admin.colType}>
 													<Badge
 														variant="outline"
 														className="w-fit text-muted-foreground"
@@ -726,7 +747,10 @@ function RequestsPage() {
 														{requestTypeLabels[request.type](t)}
 													</Badge>
 												</TableCell>
-												<TableCell className="max-w-[220px]">
+												<TableCell
+													data-label={t.adminRequests.colRemarks}
+													className="max-w-[220px]"
+												>
 													{request.remarks ? (
 														<span className="line-clamp-2 text-base">
 															{request.remarks}
@@ -737,10 +761,16 @@ function RequestsPage() {
 														</span>
 													)}
 												</TableCell>
-												<TableCell className="text-base font-medium">
+												<TableCell
+													data-label={t.adminRequests.colFromPlan}
+													className="text-base font-medium"
+												>
 													{fromPlan}
 												</TableCell>
-												<TableCell className="text-base font-medium">
+												<TableCell
+													data-label={t.adminRequests.colToPlan}
+													className="text-base font-medium"
+												>
 													{toPlan}
 													{negotiable && request.status !== "resolved" && (
 														<div className="text-sm text-muted-foreground">
@@ -748,7 +778,10 @@ function RequestsPage() {
 														</div>
 													)}
 												</TableCell>
-												<TableCell className="text-base">
+												<TableCell
+													data-label={t.adminRequests.colQuoted}
+													className="text-base"
+												>
 													{request.quotedAmount ? (
 														<div className="flex flex-col leading-tight">
 															<span>
@@ -781,7 +814,7 @@ function RequestsPage() {
 														<span className="text-muted-foreground">—</span>
 													)}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.admin.colStatus}>
 													<Badge
 														variant="outline"
 														className={`${statusBadgeColors[request.status]} w-fit`}
@@ -789,8 +822,23 @@ function RequestsPage() {
 														{requestStatusLabels[request.status](t)}
 													</Badge>
 												</TableCell>
-												<TableCell className="text-base text-muted-foreground">
+												<TableCell
+													data-label={t.adminRequests.colRequestedAt}
+													className="text-base text-muted-foreground"
+												>
 													{formatDate(request.createdAt)}
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="admin-finance-review"
+														onClick={(event) => {
+															event.stopPropagation();
+															(() => setEditRequest(request))();
+														}}
+													>
+														{t.rbac.review}
+													</Button>
 												</TableCell>
 											</TableRow>
 										);
@@ -851,7 +899,7 @@ function RequestsPage() {
 			>
 				<SheetContent
 					side="right"
-					className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+					className="admin-finance-sheet w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
 				>
 					{editRequest && (
 						<RequestEditForm
@@ -918,6 +966,9 @@ function RequestEditForm({
 	onDone,
 }: RequestEditFormProps) {
 	const { t } = usePortalLocale();
+	// `subscriberName` is the copy stored when the request was filed; the org
+	// row holds the name it goes by today.
+	const orgNames = useCurrentOrgNames();
 	const negotiable = isPriceNegotiable(request);
 	/**
 	 * A POS quote buys an ADD-ON, not a plan: resolving it leaves the venue on
@@ -1149,7 +1200,14 @@ function RequestEditForm({
 				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">{t.adminRequests.colWho}</dt>
-						<dd className="text-right font-medium">{request.subscriberName}</dd>
+						<dd className="text-right font-medium">
+							{currentOrgName(
+								orgNames,
+								request.subscriberType,
+								request.subscriberId,
+								request.subscriberName,
+							)}
+						</dd>
 					</div>
 					{request.contactName && (
 						<div className="flex items-center justify-between gap-2">
@@ -1604,7 +1662,7 @@ function RequestEditForm({
 				</div>
 			</div>
 
-			<SheetFooter className="flex-row justify-end gap-2">
+			<SheetFooter className="iz-admin-request-footer flex-row items-center justify-end gap-2">
 				<SheetClose asChild>
 					<Button type="button" variant="outline">
 						{t.common.cancel}

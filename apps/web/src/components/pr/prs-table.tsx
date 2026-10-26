@@ -6,11 +6,13 @@ import {
 	ChevronsUpDown,
 	Loader2,
 	Megaphone,
+	MoreHorizontal,
 	RefreshCw,
 	Search,
 	XCircle,
 } from "lucide-react";
 import { useState } from "react";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +22,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
 	Popover,
@@ -112,7 +120,7 @@ export function PrsTable({
 	const showLoading = isLoading && users.length === 0;
 
 	return (
-		<Card className="border-(--lavender-soft)/40 bg-card">
+		<Card className="iz-admin-management-card border-(--lavender-soft)/40 bg-card">
 			<CardHeader>
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
@@ -125,69 +133,68 @@ export function PrsTable({
 						<CardDescription>{t.adminPr.subtitle}</CardDescription>
 					</div>
 
-					<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-						<div className="relative sm:w-56">
-							<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-							<Input
-								value={search}
-								onChange={(e) => onSearchChange(e.target.value)}
-								placeholder={t.adminPr.searchPlaceholder}
-								className="pl-8"
-								aria-label={t.adminPr.searchAria}
+					<AdminFilters>
+						<div className="iz-admin-management-filters flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={search}
+									onChange={(e) => onSearchChange(e.target.value)}
+									placeholder={t.adminPr.searchPlaceholder}
+									className="pl-8"
+									aria-label={t.adminPr.searchAria}
+								/>
+							</div>
+							<AgencyFilterCombobox
+								agencies={agencies}
+								value={agencyFilter}
+								onChange={onAgencyFilterChange}
 							/>
-						</div>
-						<AgencyFilterCombobox
-							agencies={agencies}
-							value={agencyFilter}
-							onChange={onAgencyFilterChange}
-						/>
-						<Select
-							value={statusFilter}
-							onValueChange={(value) =>
-								onStatusFilterChange(value as PrStatusFilter)
-							}
-						>
-							<SelectTrigger
-								className="sm:w-40"
-								aria-label={t.admin.filterByStatus}
+							<Select
+								value={statusFilter}
+								onValueChange={(value) =>
+									onStatusFilterChange(value as PrStatusFilter)
+								}
 							>
-								<SelectValue placeholder={t.admin.filterByStatus} />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-								<SelectItem value="active">{t.admin.statusActive}</SelectItem>
-								<SelectItem value="inactive">
-									{t.admin.statusInactive}
-								</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
+								<SelectTrigger
+									className="sm:w-40"
+									aria-label={t.admin.filterByStatus}
+								>
+									<SelectValue placeholder={t.admin.filterByStatus} />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									<SelectItem value="active">{t.admin.statusActive}</SelectItem>
+									<SelectItem value="inactive">
+										{t.admin.statusInactive}
+									</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+					</AdminFilters>
 				</div>
 			</CardHeader>
 
 			<CardContent>
-				<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-					<Table>
+				<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
+					<Table className="iz-admin-management-table">
 						<TableHeader>
 							<TableRow>
-								<TableHead>{t.admin.colDisplayName}</TableHead>
-								<TableHead>{t.adminPr.legalName}</TableHead>
-								<TableHead>{t.admin.colEmail}</TableHead>
-								<TableHead>{t.adminPr.phone}</TableHead>
+								<TableHead>
+									{t.admin.colDisplayName} / {t.adminPr.legalName}
+								</TableHead>
+								<TableHead>{t.adminUsers.colContact}</TableHead>
 								<TableHead>{t.adminPr.agencies}</TableHead>
-								<TableHead className="w-[120px]">{t.admin.colStatus}</TableHead>
-								<TableHead className="w-[180px]">
-									{t.admin.colCreated}
+								<TableHead>
+									{t.admin.colStatus} / {t.admin.colCreated}
 								</TableHead>
-								<TableHead className="w-[220px] text-right">
-									{t.admin.colActions}
-								</TableHead>
+								<TableHead>{t.admin.colActions}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={9} className="h-32">
+									<TableCell colSpan={5} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>{t.adminPr.loadingPrs}</span>
@@ -196,7 +203,7 @@ export function PrsTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={9} className="h-32">
+									<TableCell colSpan={5} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -214,7 +221,7 @@ export function PrsTable({
 								</TableRow>
 							) : users.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={9} className="h-32">
+									<TableCell colSpan={5} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Megaphone className="h-6 w-6" />
 											<span>{t.adminPr.noPrsFound}</span>
@@ -228,40 +235,49 @@ export function PrsTable({
 										className="cursor-pointer"
 										onClick={() => onSelect(user)}
 									>
-										<TableCell className="text-base font-medium">
-											{user.displayName}
-										</TableCell>
 										<TableCell>
-											{user.legalName ? (
-												<div className="text-base font-medium">
-													{user.legalName}
-												</div>
-											) : (
-												<span className="text-base text-muted-foreground">
-													—
-												</span>
-											)}
-											{user.idNo && (
-												<div className="font-mono text-sm text-muted-foreground">
-													{user.idType ? `${user.idType} · ` : ""}
-													{user.idNo}
-												</div>
-											)}
+											<button
+												type="button"
+												className="iz-admin-record-name"
+												onClick={(event) => {
+													event.stopPropagation();
+													onSelect(user);
+												}}
+											>
+												{user.displayName}
+											</button>
+											<div className="iz-admin-record-secondary">
+												{user.legalName ? (
+													<div className="text-base font-medium">
+														{user.legalName}
+													</div>
+												) : (
+													<span className="text-base text-muted-foreground">
+														—
+													</span>
+												)}
+												{user.idNo && (
+													<div className="font-mono text-sm text-muted-foreground">
+														{user.idType ? `${user.idType} · ` : ""}
+														{user.idNo}
+													</div>
+												)}
+											</div>
 										</TableCell>
-										<TableCell className="text-base">
+										<TableCell data-label={t.adminUsers.colContact}>
 											{user.email || "—"}
+											<div className="iz-admin-record-secondary">
+												{user.phoneNum || "—"}
+											</div>
 										</TableCell>
-										<TableCell className="text-base">
-											{user.phoneNum || "—"}
-										</TableCell>
-										<TableCell>
+										<TableCell data-label={t.adminPr.agencies}>
 											{/* The agencies she works for NOW — a departure is history,
 											    shown on the detail sheet with its own badge. */}
 											<PrAgenciesCell
 												agencies={currentAgencyLinks(user.agencies)}
 											/>
 										</TableCell>
-										<TableCell>
+										<TableCell data-label={t.admin.colStatus}>
 											<Badge
 												variant="outline"
 												className={`${statusColors[user.status] ?? statusColors.inactive} flex w-fit items-center gap-1 text-sm capitalize`}
@@ -273,42 +289,50 @@ export function PrsTable({
 												)}
 												{recordStatusLabel(user.status, t)}
 											</Badge>
-										</TableCell>
-										<TableCell className="text-base text-muted-foreground">
-											{formatDate(user.createdAt)}
-										</TableCell>
-										{/* The row itself opens the details sheet, so a button
-										    press here must not also open it. */}
-										<TableCell
-											className="text-right"
-											onClick={(e) => e.stopPropagation()}
-										>
-											<div className="flex justify-end gap-2">
-												<Button
-													variant="outline"
-													size="sm"
-													disabled={busyUserId === user.id}
-													onClick={() =>
-														onSetStatus?.(
-															user,
-															user.status === "active" ? "inactive" : "active",
-														)
-													}
-												>
-													{user.status === "active"
-														? t.admin.disable
-														: t.admin.enable}
-												</Button>
-												<Button
-													variant="outline"
-													size="sm"
-													className="text-destructive"
-													disabled={busyUserId === user.id}
-													onClick={() => onRevokeRole?.(user)}
-												>
-													{t.adminPr.removePr}
-												</Button>
+											<div className="iz-admin-record-secondary">
+												{formatDate(user.createdAt)}
 											</div>
+										</TableCell>
+										<TableCell onClick={(event) => event.stopPropagation()}>
+											<DropdownMenu>
+												<DropdownMenuTrigger asChild>
+													<Button
+														variant="outline"
+														size="icon"
+														aria-label={`${t.admin.colActions} · ${user.displayName}`}
+														disabled={busyUserId === user.id}
+													>
+														<MoreHorizontal aria-hidden className="h-4 w-4" />
+													</Button>
+												</DropdownMenuTrigger>
+												<DropdownMenuContent align="end">
+													<DropdownMenuItem onSelect={() => onSelect(user)}>
+														{t.adminUsers.view}
+													</DropdownMenuItem>
+													<DropdownMenuItem
+														disabled={busyUserId === user.id}
+														onSelect={() =>
+															onSetStatus?.(
+																user,
+																user.status === "active"
+																	? "inactive"
+																	: "active",
+															)
+														}
+													>
+														{user.status === "active"
+															? t.admin.disable
+															: t.admin.enable}
+													</DropdownMenuItem>
+													<DropdownMenuItem
+														className="text-destructive"
+														disabled={busyUserId === user.id}
+														onSelect={() => onRevokeRole?.(user)}
+													>
+														{t.adminPr.removePr}
+													</DropdownMenuItem>
+												</DropdownMenuContent>
+											</DropdownMenu>
 										</TableCell>
 									</TableRow>
 								))
@@ -318,7 +342,7 @@ export function PrsTable({
 				</div>
 
 				{pagination && pagination.totalCount > 0 && (
-					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+					<div className="iz-admin-management-pagination text-muted-foreground">
 						<div>
 							{fill(t.adminPr.showingPrs, {
 								from: (pagination.page - 1) * pageSize + 1,

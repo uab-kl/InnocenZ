@@ -312,6 +312,7 @@ export function OutletBookings({
 					variant={variant}
 					hideLogSales={hideLogSales}
 					hideCutlost={variant === "home"}
+					hideSummary={variant === "home"}
 					roster={rosterOverride}
 					agencyPrs={agencyPrs}
 				/>
@@ -320,9 +321,28 @@ export function OutletBookings({
 	};
 
 	return (
-		<div className="space-y-2">
+		<div className="iz-approved-outlet-today">
 			{/* Every shift tonight, in time order, as ONE section. */}
-			{variant === "home" && todayShifts.map((s) => renderShiftCard(s, true))}
+			{variant === "home" && (
+				<section className="iz-approved-today-shifts">
+					<h2>{t.approvedDesign.todayShifts}</h2>
+					<p className="iz-muted">{t.approvedDesign.shiftSelectionHint}</p>
+					{todayShifts.map((s) => renderShiftCard(s, true))}
+				</section>
+			)}
+			{variant === "home" && panelShift && (
+				<section className="iz-approved-today-summary">
+					<h2>{panelShift.event}</h2>
+					<OutletShiftDetailPanel
+						shift={panelShift}
+						variant="home"
+						hideCutlost
+						summaryOnly
+						roster={rosterOverride}
+						agencyPrs={agencyPrs}
+					/>
+				</section>
+			)}
 			{/*
 			 * WHICH shift the panels below describe — the one tapped, or the live
 			 * one until something is tapped. Said out loud because the cards now

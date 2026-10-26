@@ -29,7 +29,8 @@ export const shiftAssignmentStatusValues = [
   'leave_pending',
   'leave_approved',
 ] as const;
-export type ShiftAssignmentStatus = (typeof shiftAssignmentStatusValues)[number];
+export type ShiftAssignmentStatus =
+  (typeof shiftAssignmentStatusValues)[number];
 
 /**
  * The agency's decision on overtime worked past the scheduled end (0077).
@@ -39,7 +40,11 @@ export type ShiftAssignmentStatus = (typeof shiftAssignmentStatusValues)[number]
  * and a defaulted enum would turn every ordinary shift into a pending decision
  * somebody has to clear.
  */
-export const overtimeStatusValues = ['pending', 'approved', 'rejected'] as const;
+export const overtimeStatusValues = [
+  'pending',
+  'approved',
+  'rejected',
+] as const;
 export type OvertimeStatus = (typeof overtimeStatusValues)[number];
 
 /** The MC / leave decision (migration 0112) — same three states as overtime. */
@@ -78,9 +83,13 @@ export const ShiftAssignmentTable = MainSchema.table(
      */
     prId: uuid('pr_id').notNull(),
     /** Preferred ops key (0087/0089) — equals pr_id after remap. */
-    userId: uuid('user_id').references(() => UserTable.id, { onDelete: 'set null' }),
+    userId: uuid('user_id').references(() => UserTable.id, {
+      onDelete: 'set null',
+    }),
     status: shiftAssignmentStatusEnum('status').notNull().default('assigned'),
-    payAmount: numeric('pay_amount', { precision: 12, scale: 2 }).notNull().default('0'),
+    payAmount: numeric('pay_amount', { precision: 12, scale: 2 })
+      .notNull()
+      .default('0'),
     checkInAt: timestamp('check_in_at', { withTimezone: true }),
     checkOutAt: timestamp('check_out_at', { withTimezone: true }),
     // Where the PR physically stood when they stamped attendance. Written only
@@ -138,7 +147,9 @@ export const ShiftAssignmentTable = MainSchema.table(
      * the same rule as `payment_voucher_day_review.approved_total_cents`.
      */
     overtimeMinutes: integer('overtime_minutes'),
-    overtimeStatus: varchar('overtime_status', { length: 20 }).$type<OvertimeStatus>(),
+    overtimeStatus: varchar('overtime_status', {
+      length: 20,
+    }).$type<OvertimeStatus>(),
     overtimeAmount: numeric('overtime_amount', { precision: 12, scale: 2 }),
     overtimeDecidedAt: timestamp('overtime_decided_at', { withTimezone: true }),
     overtimeDecidedBy: varchar('overtime_decided_by'),
@@ -192,7 +203,10 @@ export const ShiftAssignmentTable = MainSchema.table(
      */
     cancelFeeRm: numeric('cancel_fee_rm', { precision: 12, scale: 2 }),
     cancelFeePct: integer('cancel_fee_pct'),
-    cancelNoticeHours: numeric('cancel_notice_hours', { precision: 6, scale: 2 }),
+    cancelNoticeHours: numeric('cancel_notice_hours', {
+      precision: 6,
+      scale: 2,
+    }),
     /**
      * NULL = sealed but NOT YET on a voucher.
      *
@@ -213,7 +227,9 @@ export const ShiftAssignmentTable = MainSchema.table(
      * The human is not removed, only moved: the agency now WAIVES rather than
      * charges, and sending the PV is the signature.
      */
-    cancelFeeChargedAt: timestamp('cancel_fee_charged_at', { withTimezone: true }),
+    cancelFeeChargedAt: timestamp('cancel_fee_charged_at', {
+      withTimezone: true,
+    }),
     /**
      * The voucher the deduction landed on. Also how a retried waive FINDS the
      * line to remove — never cleared, not even by a waive. See 0130.
@@ -231,17 +247,26 @@ export const ShiftAssignmentTable = MainSchema.table(
      * `_by` and `_reason` are the audit trail. Money taken off a worker's pay
      * and then given back is exactly the event that needs to say who and why.
      */
-    cancelFeeWaivedAt: timestamp('cancel_fee_waived_at', { withTimezone: true }),
+    cancelFeeWaivedAt: timestamp('cancel_fee_waived_at', {
+      withTimezone: true,
+    }),
     cancelFeeWaivedBy: varchar('cancel_fee_waived_by'),
     cancelFeeWaiveReason: varchar('cancel_fee_waive_reason', { length: 500 }),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     createdBy: varchar('created_by').notNull(),
     updatedBy: varchar('updated_by').notNull(),
   },
   (table) => ({
     // A PR can only be assigned to a given shift once.
-    uniqShiftPr: unique('shift_assignment_shift_pr_unique').on(table.shiftId, table.prId),
+    uniqShiftPr: unique('shift_assignment_shift_pr_unique').on(
+      table.shiftId,
+      table.prId,
+    ),
   }),
 );
 
@@ -254,10 +279,15 @@ export const ShiftAssignmentTable = MainSchema.table(
  * an import cycle once already. The repository re-exports it, so every existing
  * importer keeps working.
  */
-export const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
+export const NON_STAFFING_STATUSES = [
+  'cancelled',
+  'no_show',
+  'leave_approved',
+] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
 
 export type ShiftAssignmentType = typeof ShiftAssignmentTable.$inferSelect;
-export type ShiftAssignmentInsertType = typeof ShiftAssignmentTable.$inferInsert;
+export type ShiftAssignmentInsertType =
+  typeof ShiftAssignmentTable.$inferInsert;
 
 /**
  * An assignment plus the shift/PR context a caller would otherwise fetch
@@ -322,6 +352,20 @@ export type ShiftCostPrDayTotals = {
   prId: string;
   prName: string | null;
   soldOn: string;
+  /**
+   * The agency that SUPPLIED this PR that day — `shift_assignment.agency_id`,
+   * part of the row's grain (PR × agency × day).
+   *
+   * Exists for the outlet's reconciliation banner. A `collection_invoice` is
+   * one agency's bill (`weeklyOutletTotals` groups by `sa.agency_id`), so the
+   * banner must check each statement against THAT agency's wages. Without the
+   * id it could only sum every agency's wages, and a venue supplied by two
+   * agencies read the other agency's wages as a billing difference.
+   *
+   * Adding it to the grain moves no money: every client sum keys on PR or day
+   * and adds the split rows back together.
+   */
+  agencyId: string;
   /**
    * WAGES ONLY — `shift_assignment.pay_amount`. Deliberately NOT the whole PR
    * spend: `collection_invoice.amount` is summed from this same column, and the

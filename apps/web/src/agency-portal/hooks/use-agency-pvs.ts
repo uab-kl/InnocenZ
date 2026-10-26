@@ -3,8 +3,13 @@ import {
 	managedPvFromBackendDetail,
 	pvLineInputsFromRows,
 } from "@agency-portal/lib/payment-voucher-map";
+import {
+	type PvLinesState,
+	pvLinesStateOf,
+} from "@agency-portal/lib/payroll-display";
 import type { PrPaymentVoucher, PrPvRow } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -89,14 +94,17 @@ export function useAgencyPvRows(params: { enabled?: boolean } = {}) {
  * should be asked for by the one surface that needs it and no other.
  *
  * `isBackedVoucherId` guards it — a demo voucher id like "pv1" would be a
- * guaranteed failed request on every open.
+ * guaranteed failed request on every open. So does the lane: the route is
+ * `payment_voucher:update` (`overrideSignedPv`), and a Director opening any
+ * voucher collected four 403s (one plus retries) for a field it may not see.
  */
 export function useVoucherPayeeBank(voucherId: string | null) {
 	const { logout } = useAuth();
+	const can = useAgencyCan();
 	return useQuery({
 		queryKey: ["agency", "payment-voucher", "payee-bank", voucherId],
 		queryFn: () => fetchVoucherPayeeBank(voucherId as string, logout),
-		enabled: isBackedVoucherId(voucherId),
+		enabled: isBackedVoucherId(voucherId) && can("overrideSignedPv"),
 	});
 }
 
@@ -311,7 +319,7 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 /**
  * The raw backend voucher — lines AND receipts — for the verify surface.
  *
- * Separate from useAgencyPvDetail because that one maps into the demo
+ * Separate from useAgencyPvDetailState because that one maps into the demo
  * PrPaymentVoucher shape, which has nowhere to put a receipt or a line's
  * component. Verification needs the unmapped rows: what was claimed, and what
  * evidence backs it.
@@ -331,34 +339,51 @@ export function useAgencyPvEvidence(id: string | null) {
 		voucher: query.data ?? null,
 		isBacked,
 		isLoading: isBacked && query.isLoading,
+		/** The detail request FAILED — not the same thing as "no lines". */
+		isError: isBacked && query.isError,
+		refetch: query.refetch,
 	};
 }
 
 /**
- * Fetch a single voucher WITH its line items (the list endpoint omits them).
- * Falls back to the list-mapped voucher until the detail resolves.
+ * Fetch a single voucher WITH its line items (the list endpoint omits them),
+ * and say WHERE THE LINES STAND. Falls back to the list-mapped voucher until
+ * the detail resolves; `lines` tells the screen which of the two it holds, so
+ * the list row's stand-in is never shown as if it were the voucher. The Payroll
+ * detail and History's paid voucher both read through here — History used to
+ * render the LIST row only, so its breakdown was one summary row and its
+ * four-part split read everything as "Other".
  *
  * ⚠️ SHARES `useAgencyPvEvidence`'s query — same endpoint, same key, one request.
  *
- * It used to hold its own `["agency","payment-voucher", id]`, which is NOT a
- * prefix of `["agency","payment-voucher","evidence", id]` and was therefore
- * missed by every invalidation the receipt and day-review writes fire. Both are
- * on the Payroll detail at once: the voucher document rendered from this hook
- * kept quoting pre-edit money while the evidence panel beside it, reading the
- * same voucher, had already refreshed. One key, and the whole class goes away.
+ * Its predecessor (`useAgencyPvDetail`) once held its own
+ * `["agency","payment-voucher", id]`, which is NOT a prefix of
+ * `["agency","payment-voucher","evidence", id]` and was therefore missed by
+ * every invalidation the receipt and day-review writes fire: the voucher
+ * document kept quoting pre-edit money while the evidence panel beside it had
+ * already refreshed. One key, and the whole class goes away.
  *
  * Gating on `isBackedVoucherId` rather than `Boolean(id)` also stops the doomed
- * request a demo id like "pv1" used to fire on every open; the caller still gets
- * `fallback`, exactly as it did when that request failed.
+ * request a demo id like "pv1" used to fire on every open; the caller gets
+ * `fallback` and `lines: "demo"`.
  */
-export function useAgencyPvDetail(
+export function useAgencyPvDetailState(
 	id: string | null,
-	fallback?: PrPaymentVoucher,
-) {
-	const { voucher } = useAgencyPvEvidence(id);
-
-	return useMemo<PrPaymentVoucher | undefined>(
+	fallback: PrPaymentVoucher,
+): {
+	pv: PrPaymentVoucher;
+	lines: PvLinesState;
+	retry: () => void;
+} {
+	const { voucher, isBacked, isError, refetch } = useAgencyPvEvidence(id);
+	const pv = useMemo(
 		() => (voucher ? managedPvFromBackendDetail(voucher) : fallback),
 		[voucher, fallback],
 	);
+	const lines = pvLinesStateOf({
+		isBacked,
+		hasDetail: Boolean(voucher),
+		isError,
+	});
+	return { pv, lines, retry: () => void refetch() };
 }

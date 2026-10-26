@@ -1,4 +1,3 @@
-import { IconGuide } from "@agency-portal/components/iz/IconGuide";
 import { UnpaidBillingBanner } from "@agency-portal/components/iz/UnpaidBillingBanner";
 import { OutletBookings } from "@agency-portal/components/outlet/OutletBookings";
 import { OutletPriceSetupBanner } from "@agency-portal/components/outlet/OutletPriceSetupBanner";
@@ -74,6 +73,18 @@ function OutletHome() {
 			<OutletPageHeader
 				title={t.common.today}
 				iconKey="Today"
+				trailing={
+					<div className="iz-approved-header-actions">
+						<Link to="/outlet/calendar" className="iz-btn iz-btn-ghost">
+							{t.nav.calendarPage} →
+						</Link>
+						{can("postJob") && (
+							<Link to="/outlet/bookings" className="iz-btn iz-btn-primary">
+								+ {t.nav.postJob}
+							</Link>
+						)}
+					</div>
+				}
 				hint={`${date} · ${time} · ${t.outletHome.liveShiftHint}`}
 			/>
 
@@ -148,8 +159,6 @@ function OutletHome() {
 			/>
 
 			<OutletReconciliationBanner />
-
-			<IconGuide className="iz-icon-guide--portal mt-6" />
 		</OutletPage>
 	);
 }

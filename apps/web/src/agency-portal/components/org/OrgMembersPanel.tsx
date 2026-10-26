@@ -1,4 +1,5 @@
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import { isLastActiveOwner } from "@agency-portal/components/org/PendingMemberDetail";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -114,9 +115,17 @@ export function OrgMembersPanel({
 	const { members, isLoading, addMember, changeMember, removeMember } =
 		useOrgMembers(kind, orgId);
 
+	/*
+	 * ⚠️ ONLY FOR A LANE THAT MAY MANAGE. `GET /:id/invite-roles` sits behind the
+	 * same owner-of-param gate as the invite itself (owner, or a guarantor
+	 * standing in), so for a Director, Finance or Ops head this was a request
+	 * that could only 403 — and react-query retried it. They lose nothing: the
+	 * invite box is not drawn for them, and the role LABELS on each member row
+	 * fall back to `FALLBACK_SUB_ROLES`, the same words the portal roles carry.
+	 */
 	const rolesQuery = useQuery({
 		queryKey: ["portal-invite-roles", kind, orgId ?? "none"],
-		enabled: Boolean(orgId),
+		enabled: Boolean(orgId) && canManage,
 		queryFn: async () => {
 			const id = orgId as string;
 			const res =
@@ -390,21 +399,25 @@ export function OrgMembersPanel({
 									</span>
 								)}
 
-								{canManage && !isSelf && (
-									<button
-										type="button"
-										className="iz-btn iz-btn-sm iz-btn-soft !inline-flex !h-8 !w-8 !items-center !justify-center !p-0"
-										aria-label={fill(t.profile.removeMemberAria, {
-											name:
-												member.username ||
-												member.email ||
-												t.profile.memberFallback,
-										})}
-										onClick={() => setMemberToRemove(member)}
-									>
-										<Trash2 className="h-3.5 w-3.5" />
-									</button>
-								)}
+								{/* Not on the last active owner: the server refuses that
+								    removal (409), so the bin could only collect the refusal. */}
+								{canManage &&
+									!isSelf &&
+									!isLastActiveOwner(members, member) && (
+										<button
+											type="button"
+											className="iz-btn iz-btn-sm iz-btn-soft !inline-flex !h-8 !w-8 !items-center !justify-center !p-0"
+											aria-label={fill(t.profile.removeMemberAria, {
+												name:
+													member.username ||
+													member.email ||
+													t.profile.memberFallback,
+											})}
+											onClick={() => setMemberToRemove(member)}
+										>
+											<Trash2 className="h-3.5 w-3.5" />
+										</button>
+									)}
 							</div>
 						</div>
 					);

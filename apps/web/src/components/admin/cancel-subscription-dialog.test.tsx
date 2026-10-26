@@ -56,6 +56,7 @@ vi.mock("@/components/admin/date-multi-filter", () => ({
 	DateMultiFilter: () => null,
 	datesToQueryParam: () => undefined,
 }));
+vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 vi.mock("@/lib/portal-i18n/context", () => ({
 	usePortalLocale: () => ({
 		// Echo the key back so an assertion cannot pass on a missing string.

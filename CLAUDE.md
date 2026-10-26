@@ -298,4 +298,14 @@ and `TEST_SCRIPT.md` **§11 What's new** — into
   numerals). `font-sora`, `font-manrope` and portal `font-mono` are GONE — they named
   fonts that were not loaded. `font-mono`/`font-display` outside the portals are real.
 
+- **The approved redesign changes the token VALUES, not the rule (SL, 22 Oct 2026 —
+  "keep the design to the new one").** `approved-portal-design.css` redefines the tokens
+  for the agency and outlet portals (`[data-portal]` / `body[data-*-design]`): `--iz-font`
+  is **Arial**, the ladder collapses to three sizes — `micro`…`body` 16px, `title` 20px,
+  `head`/`display` 24px — and `--iz-title` is near-white. That look is DELIBERATE: do not
+  "restore" Manrope, the 11–34px steps or lavender titles. What still holds is everything
+  above: pages name a `--iz-fs-*` token and `var(--iz-font)`, never a raw value, and
+  `pnpm check:type` enforces it. The brand wordmark (`.iz-wordmark`, Georgia) is the one
+  extra exception, listed in the check's `EXCEPT[]`.
+
 <!-- nx configuration end-->

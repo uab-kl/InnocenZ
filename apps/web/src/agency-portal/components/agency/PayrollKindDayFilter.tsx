@@ -7,7 +7,7 @@ import {
 } from "@agency-portal/lib/payroll-kind-day";
 import { type ReactNode, useMemo } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { weekdayShortLabel } from "@/lib/portal-i18n/date-label";
+import { dayMonthLabel, weekdayShortLabel } from "@/lib/portal-i18n/date-label";
 
 /**
  * WHICH MONEY, ON WHICH NIGHT — the Payroll page's second filter, drawn once and
@@ -42,6 +42,13 @@ import { weekdayShortLabel } from "@/lib/portal-i18n/date-label";
 export interface PayrollKindDayFilterProps {
 	weekStartIso: string;
 	weekEndIso: string;
+	/**
+	 * Days BEFORE the week that the caller's list still holds — the payment
+	 * week's catch-all. Drawn as their own "Earlier" rows under the week's, so an
+	 * aged row is selectable instead of sitting under seven greyed chips that
+	 * name a week it is not in. Empty / omitted on every other week.
+	 */
+	olderDays?: readonly string[];
 	kinds: KindSelection;
 	/** `null` = every day of the week. */
 	day: string | null;
@@ -74,17 +81,19 @@ export interface PayrollKindDayFilterProps {
 	children?: ReactNode;
 }
 
-/* `.iz-filter-chip` is 16px with 9/14 padding at base; this strip deliberately
-   ran it smaller. Owner, 8 Sep 2026: "these filters can increase in size a
-   little bit" — so ONE ladder step, tiny to caption, with padding to match
-   rather than a chip that grew its text and kept its old box. Still under the
-   16px "Show" / "Day" labels beside it, which is the reading order: the label
-   names the question, the chips answer it. */
-const CHIP = "iz-filter-chip !gap-1.5 !px-3 !py-1.5 !text-xs";
+/* Shared money/day controls keep selection behavior independent of presentation. */
+const CHIP = "iz-payroll-facet-chip";
+
+/**
+ * Chips per "Earlier" row — the width of the week row's chip area (All days +
+ * seven nights), so the design's day grid lays every row out alike.
+ */
+const EARLIER_ROW_SIZE = 8;
 
 export function PayrollKindDayFilter({
 	weekStartIso,
 	weekEndIso,
+	olderDays = [],
 	kinds,
 	day,
 	onKindsChange,
@@ -101,13 +110,50 @@ export function PayrollKindDayFilter({
 		[weekStartIso, weekEndIso],
 	);
 	const dirty = kinds.length > 0 || day !== null;
+	const earlierRows = useMemo(() => {
+		const rows: string[][] = [];
+		for (let i = 0; i < olderDays.length; i += EARLIER_ROW_SIZE) {
+			rows.push(olderDays.slice(i, i + EARLIER_ROW_SIZE));
+		}
+		return rows;
+	}, [olderDays]);
+
+	const dayChip = (iso: string, withMonth: boolean) => {
+		const count = dayCounts[iso] ?? 0;
+		const on = day === iso;
+		// UTC, matching `weekDays`. `new Date("2026-09-03")` is parsed as
+		// midnight UTC and read back in LOCAL time, which lands on the
+		// previous day everywhere west of Greenwich and would label the whole
+		// strip one night early.
+		const at = new Date(`${iso}T00:00:00Z`);
+		return (
+			<button
+				key={iso}
+				type="button"
+				// Empty nights stay on the row, greyed. Dropping them would
+				// re-flow the strip on every toggle, and "nothing happened on
+				// Tuesday" is an answer worth being able to read.
+				className={`${CHIP}${on ? " on" : ""}${
+					count === 0 ? " opacity-40" : ""
+				}`}
+				aria-pressed={on}
+				disabled={count === 0}
+				title={count === 0 ? t.payroll.nothingLoggedThatDay : undefined}
+				onClick={() => onDayChange(on ? null : iso)}
+			>
+				{weekdayShortLabel(at.getUTCDay(), t)}{" "}
+				{withMonth ? dayMonthLabel(at, t, true) : at.getUTCDate()}
+				<span className="iz-filter-chip__count">
+					{count === 0 ? "–" : `(${count})`}
+				</span>
+			</button>
+		);
+	};
 
 	return (
-		<div className="mt-2 rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)]/60 p-2">
-			<div className="flex flex-wrap items-center gap-1.5">
-				<span className="iz-tiny iz-muted w-9 shrink-0">
-					{t.payroll.showMoney}
-				</span>
+		<div className="iz-payroll-facets">
+			<div className="iz-payroll-facets-money">
+				<span className="iz-payroll-facet-label">{t.payroll.showMoney}</span>
 				{MONEY_KINDS.map((kind) => {
 					const on = kinds.includes(kind);
 					return (
@@ -157,14 +203,12 @@ export function PayrollKindDayFilter({
 				    fill the gap and land at a sane width; on a narrow screen the flex
 				    wrap drops them onto their own line as before. */}
 				{children ? (
-					<div className="ml-auto flex w-full min-w-0 flex-wrap items-center justify-end gap-2 [&>*]:min-w-0 [&>*]:flex-1 sm:w-auto sm:flex-nowrap lg:max-w-[560px] lg:flex-1">
-						{children}
-					</div>
+					<div className="iz-payroll-facets-selects">{children}</div>
 				) : null}
 			</div>
 
-			<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-				<span className="iz-tiny iz-muted w-9 shrink-0">{t.table.day}</span>
+			<div className="iz-payroll-facets-days">
+				<span className="iz-payroll-facet-label">{t.table.day}</span>
 				<button
 					type="button"
 					className={`${CHIP}${day === null ? " on" : ""}`}
@@ -174,37 +218,20 @@ export function PayrollKindDayFilter({
 					{t.payroll.allDays}
 					<span className="iz-filter-chip__count">({allDaysCount})</span>
 				</button>
-				{days.map((iso) => {
-					const count = dayCounts[iso] ?? 0;
-					const on = day === iso;
-					// UTC, matching `weekDays`. `new Date("2026-09-03")` is parsed as
-					// midnight UTC and read back in LOCAL time, which lands on the
-					// previous day everywhere west of Greenwich and would label the whole
-					// strip one night early.
-					const at = new Date(`${iso}T00:00:00Z`);
-					return (
-						<button
-							key={iso}
-							type="button"
-							// Empty nights stay on the row, greyed. Dropping them would
-							// re-flow the strip on every toggle, and "nothing happened on
-							// Tuesday" is an answer worth being able to read.
-							className={`${CHIP}${on ? " on" : ""}${
-								count === 0 ? " opacity-40" : ""
-							}`}
-							aria-pressed={on}
-							disabled={count === 0}
-							title={count === 0 ? t.payroll.nothingLoggedThatDay : undefined}
-							onClick={() => onDayChange(on ? null : iso)}
-						>
-							{weekdayShortLabel(at.getUTCDay(), t)} {at.getUTCDate()}
-							<span className="iz-filter-chip__count">
-								{count === 0 ? "–" : `(${count})`}
-							</span>
-						</button>
-					);
-				})}
+				{days.map((iso) => dayChip(iso, false))}
 			</div>
+
+			{/* THE PAYMENT WEEK'S OLDER NIGHTS, in rows of their own under the week.
+			    Same grid class as the row above, so each lays out like it on every
+			    width; the month is in the label because these span several. */}
+			{earlierRows.map((row, i) => (
+				<div key={row[0]} className="iz-payroll-facets-days">
+					<span className="iz-payroll-facet-label">
+						{i === 0 ? t.payroll.earlierDays : ""}
+					</span>
+					{row.map((iso) => dayChip(iso, true))}
+				</div>
+			))}
 
 			{/* caller-supplied filter row — same box, one question in one place.
 			    Divided rather than merely spaced: the two rows above are CHIPS that

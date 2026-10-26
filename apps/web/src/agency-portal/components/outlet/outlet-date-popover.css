@@ -1,0 +1,47 @@
+/* Fit all seven days inside the mobile popover, including its scroll gutter. */
+@media (max-width: 767px) {
+	body[data-outlet-design] .iz-outlet-report-cal-popover {
+		box-sizing: border-box;
+		min-width: 0;
+	}
+	body[data-outlet-design]
+		.iz-outlet-report-cal-popover
+		:is(.rdp-root, .rdp-months, .rdp-month, .rdp-month_grid) {
+		/* biome-ignore lint/complexity/noImportantStyles: The legacy compact calendar sets width:auto!important. */
+		width: 100% !important;
+		min-width: 0;
+		max-width: 100%;
+	}
+	body[data-outlet-design] .iz-outlet-report-cal-popover .rdp-month_grid {
+		table-layout: fixed;
+	}
+	body[data-outlet-design]
+		.iz-outlet-report-cal-popover
+		:is(.rdp-weekdays, .rdp-week) {
+		display: grid;
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+		width: 100%;
+	}
+	body[data-outlet-design]
+		.iz-outlet-report-cal-popover
+		:is(.rdp-weekday, td.rdp-day) {
+		width: auto;
+		min-width: 0;
+		padding: 0;
+	}
+	body[data-outlet-design] .iz-outlet-report-cal-popover td.rdp-day {
+		height: auto;
+		max-height: none;
+		aspect-ratio: 1;
+	}
+	body[data-outlet-design] .iz-outlet-report-cal-popover .iz-multi-cal-header {
+		min-width: 0;
+	}
+	body[data-outlet-design]
+		.iz-outlet-report-cal-popover
+		.iz-multi-cal-header
+		.flex {
+		min-width: 0;
+		flex-wrap: wrap;
+	}
+}

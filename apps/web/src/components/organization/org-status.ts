@@ -55,6 +55,41 @@ export const orgStatusBadgeColors: Record<OrgStatus, string> = {
 	inactive: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
+/**
+ * The label for a MEMBERSHIP's stored status (`agency_user` / `outlet_user`:
+ * active · inactive · pending · rejected), or an ACCOUNT's (`user.status`:
+ * active · inactive · blocked).
+ *
+ * `recordStatusLabel` knows only active / inactive and handed the rest back
+ * raw, so the member page printed lowercase "pending" and "rejected" (22 Oct
+ * 2026). The three kinds of status do not share a value with a different
+ * meaning, so one resolver serves all of them; an unknown value still falls
+ * through to itself rather than blanking a badge.
+ */
+export function memberStatusLabel(
+	status: string,
+	t: PortalTranslations,
+): string {
+	if (status === "pending") return t.adminOrg.membershipStatusPending;
+	if (status === "rejected") return t.adminOrg.membershipStatusDeclined;
+	if (status === "blocked") return t.adminUsers.statusBlockedAccount;
+	return orgStatusLabel(status, t);
+}
+
+/**
+ * Its colour, by the owner's code: green settled, amber waiting, red refused,
+ * grey switched off. Same tones as `orgStatusBadgeColors`.
+ */
+export function memberStatusBadgeClass(status: string): string {
+	if (status === "pending") return orgStatusBadgeColors.pending_review;
+	if (status === "rejected" || status === "blocked") {
+		return orgStatusBadgeColors.suspended;
+	}
+	return (
+		orgStatusBadgeColors[status as OrgStatus] ?? orgStatusBadgeColors.inactive
+	);
+}
+
 /** True when the organisation is awaiting admin approval (login OK, portal limited). */
 export function isOrgPendingReview(status: string | null | undefined): boolean {
 	return (status ?? "").toLowerCase() === "pending_review";

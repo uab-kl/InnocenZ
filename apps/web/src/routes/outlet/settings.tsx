@@ -60,6 +60,9 @@ import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fetchOutletLogoSource } from "@/services/outlet/outlet";
+import "./outlet-settings-design.css";
+
+type SettingsSection = "organization" | "team" | "personal";
 
 export const Route = createFileRoute("/outlet/settings")({
 	component: OutletSettingsPage,
@@ -79,6 +82,8 @@ function ToggleRow({
 	return (
 		<button
 			type="button"
+			role="switch"
+			aria-checked={on}
 			onClick={() => onChange(!on)}
 			className="flex w-full items-center justify-between gap-3 border-b border-[var(--iz-line)] py-3 last:border-0 text-left"
 		>
@@ -98,7 +103,16 @@ function ToggleRow({
 }
 
 function OutletSettingsPage() {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
+	const [section, setSection] = useState<SettingsSection>("organization");
+	const sections: { id: SettingsSection; label: string }[] = [
+		{
+			id: "organization",
+			label: locale === "zh" ? "机构资料" : "Organization",
+		},
+		{ id: "team", label: locale === "zh" ? "团队" : "Team" },
+		{ id: "personal", label: locale === "zh" ? "个人" : "Personal" },
+	];
 	const outletOwner = useStore((s) => s.outletOwner);
 	const outletFinanceHead = useStore((s) => s.outletFinanceHead);
 	const outletOpsHead = useStore((s) => s.outletOpsHead);
@@ -171,10 +185,18 @@ function OutletSettingsPage() {
 	 * reading `photoSource` here to check that would make it a dependency, so the
 	 * effect would re-run the moment a pick set it. Keeping whatever is already
 	 * there answers both, and needs no lint suppression to do it.
+	 *
+	 * ⚠️ Asked ONLY by a lane that may edit. The route is `outletOwnerOfParam`
+	 * (owner, or a guarantor standing in) — exactly the lanes holding
+	 * `settings:update`, which is what `editSettings` reads. Finance, Ops head
+	 * and Director got a 403 on every visit, for a source only the edit mode's
+	 * Adjust button uses.
 	 */
+	const can = useOutletCan();
+	const canEdit = can("editSettings");
 	useEffect(() => {
 		const outletId = profile.outletId;
-		if (!outletId) return;
+		if (!outletId || !canEdit) return;
 		let cancelled = false;
 		void fetchOutletLogoSource(outletId, logout).then((source) => {
 			if (cancelled || !source) return;
@@ -195,12 +217,14 @@ function OutletSettingsPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [profile.outletId, logout]);
+	}, [profile.outletId, logout, canEdit]);
 	const avatarFileRef = useRef<HTMLInputElement>(null);
-	const can = useOutletCan();
-	const canEdit = can("editSettings");
 	/** Whoever is signed in — used for Login & security, which is personal. */
 	const { user: currentUser } = useCurrentUser();
+	const personalEmail =
+		currentUser?.email ?? (profile.backed ? "" : outletOwner.email);
+	const personalMobile =
+		currentUser?.contactNo ?? (profile.backed ? "" : outletOwner.mobile);
 
 	// Real login → never merge onto Velvet demo defaults (empty API fields used
 	// to leave Chen Wei Jie / Michelle Lim / Bukit Bintang on screen). Demo
@@ -484,11 +508,25 @@ function OutletSettingsPage() {
 	const orgStatus = getOutletIdentity()?.outletStatus;
 
 	return (
-		<OutletPage>
+		<OutletPage className="iz-outlet-settings">
 			<OutletPageHeader
 				title={t.nav.settings}
 				iconKey="Settings"
-				hint={owner.orgName}
+				hint={
+					locale === "zh"
+						? "机构资料、团队权限和您的个人账户。"
+						: "Organization, team access, and your personal account."
+				}
+				trailing={
+					section === "organization" && canEdit && !editing ? (
+						<ProfileEditTrigger
+							onClick={startEdit}
+							label={
+								locale === "zh" ? "编辑机构资料" : "Edit organization profile"
+							}
+						/>
+					) : undefined
+				}
 			/>
 			<PendingReviewBanner orgStatus={orgStatus} kind="outlet" />
 			{profile.backed && profile.isLoading && (
@@ -518,150 +556,382 @@ function OutletSettingsPage() {
 			)}
 
 			<div
-				className={`iz-settings-profile flex flex-col items-center py-5${editing ? " iz-settings-profile--editing" : ""}`}
+				className="iz-outlet-settings-tabs"
+				role="tablist"
+				aria-label={t.nav.settings}
 			>
-				<input
-					ref={avatarFileRef}
-					type="file"
-					accept="image/*"
-					className="sr-only"
-					onChange={onAvatarFilePick}
-				/>
-				<AvatarCropSheet
-					open={Boolean(pendingPhoto)}
-					pick={pendingPhoto}
-					onCancel={() => setPendingPhoto(null)}
-					onConfirm={applyCroppedPhoto}
-				/>
-				<div className="relative">
-					{/*
-					 * No `iz-avatar-photo--logo` here on purpose. That modifier adds
-					 * `scale(1.28) translateY(-4%)` — a blanket zoom that existed to
-					 * rescue logos with whitespace around them, and it would now crop
-					 * the crop, showing the owner something other than what they
-					 * framed and other than what every OTHER surface renders (they
-					 * all use plain `iz-avatar-photo`).
-					 */}
-					<div
-						className={`iz-avatar iz-avatar--xl${owner.avatarPhoto ? " iz-avatar-photo" : ""}`}
-						style={
-							owner.avatarPhoto
-								? undefined
-								: { background: "var(--iz-grad-outlet, var(--iz-grad))" }
-						}
+				{sections.map((item, index) => (
+					<button
+						key={item.id}
+						type="button"
+						role="tab"
+						id={`outlet-settings-tab-${item.id}`}
+						aria-controls={`outlet-settings-panel-${item.id}`}
+						aria-selected={section === item.id}
+						tabIndex={section === item.id ? 0 : -1}
+						onClick={() => setSection(item.id)}
+						onKeyDown={(event) => {
+							const nextIndex =
+								event.key === "ArrowRight"
+									? (index + 1) % sections.length
+									: event.key === "ArrowLeft"
+										? (index + sections.length - 1) % sections.length
+										: event.key === "Home"
+											? 0
+											: event.key === "End"
+												? sections.length - 1
+												: -1;
+							if (nextIndex < 0) return;
+							event.preventDefault();
+							setSection(sections[nextIndex].id);
+							event.currentTarget.parentElement
+								?.querySelectorAll<HTMLButtonElement>("[role=tab]")
+								[nextIndex]?.focus();
+						}}
 					>
-						{owner.avatarPhoto ? (
-							<img src={publicAssetPath(owner.avatarPhoto)} alt="" />
-						) : (
-							avatarLetter
-						)}
-					</div>
-				</div>
-				<div className="mt-3 iz-heading text-lg font-bold">{owner.orgName}</div>
-				{/*
-				 * The owner's name directly under the venue's own name reads as
-				 * "this is you" — true for the owner, and for everybody else it
-				 * put ANOTHER person's name beneath the signed-in operator's
-				 * logo (owner's call, 11 Sep 2026).
-				 *
-				 * NOT a privacy gate. A member still reads the owner's name and
-				 * mobile in OWNER INFORMATION below, which is the one place that
-				 * fact belongs; this line was only ever a duplicate of it.
-				 */}
-				{isOrgOwner ? (
-					<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
-				) : null}
-				<div
-					className={`mt-1 flex items-center gap-1 iz-tiny ${
-						isOrgSuspended(orgStatus)
-							? "text-[var(--iz-red)]"
-							: owner.accountActivated
-								? "text-[var(--iz-green)]"
-								: "text-[var(--iz-amber)]"
-					}`}
-				>
-					<Shield className="h-3 w-3" />
-					{isOrgSuspended(orgStatus)
-						? t.profile.suspendedProfileOnly
-						: owner.accountActivated
-							? t.outletSettings.verifiedOutletActive
-							: profile.backed || isOrgPendingReview(orgStatus)
-								? t.profile.pendingAdminApproval
-								: t.profile.pendingOtpActivation}
-				</div>
-				{editing && canEdit ? (
-					<ProfilePhotoActions
-						hasPhoto={Boolean(draft.avatarPhoto)}
-						onChangePhoto={openAvatarUpload}
-						// Both, deliberately: a source can outlive the photo it came
-						// from — remove the logo, save, then edit again, and the
-						// restored source would otherwise offer Adjust on nothing.
-						onAdjustPhoto={
-							draft.avatarPhoto && photoSource ? adjustCrop : undefined
-						}
-						onRemovePhoto={
-							draft.avatarPhoto
-								? () => {
-										update({ avatarPhoto: null });
-										setLogoMeta(null);
-										setLogoCleared(true);
-										setPhotoSource(null);
-									}
-								: undefined
-						}
-					/>
-				) : (
-					canEdit && <ProfileEditTrigger onClick={startEdit} />
-				)}
+						{item.label}
+					</button>
+				))}
 			</div>
 
-			<IzSectionLabel>{t.outletSettings.ownerInformation}</IzSectionLabel>
-			<ProfileSectionCard editing={editing && canEdit}>
-				<ProfileSettingsField
-					icon={Building2}
-					label={t.outletSettings.outletName}
-					value={owner.orgName}
-					onChange={(v) => update({ orgName: v })}
-					mode={fieldMode}
-					placeholder={t.outletSettings.venueOutletName}
-				/>
-				<ProfileSettingsField
-					icon={User}
-					label={t.outletSettings.ownerName}
-					value={owner.ownerName}
-					onChange={(v) => update({ ownerName: v })}
-					mode={fieldMode}
-					placeholder={t.outletSettings.displayName}
-				/>
-				<ProfileSettingsField
-					icon={Phone}
-					label={t.outletSettings.mobile}
-					value={owner.mobile}
-					mode="locked"
-					hint={t.outletSettings.changeInLoginSecurity}
-				/>
-				<ProfileSettingsField
-					icon={Mail}
-					label={t.outletSettings.email}
-					value={owner.email}
-					mode="locked"
-					hint={t.outletSettings.changeInLoginSecurity}
-				/>
+			{/* Keep panels mounted: changing section must not discard an edit or upload. */}
+			<section
+				className="iz-outlet-settings-panel"
+				role="tabpanel"
+				id="outlet-settings-panel-organization"
+				aria-labelledby="outlet-settings-tab-organization"
+				hidden={section !== "organization"}
+			>
+				<section className="iz-approved-org-profile">
+					<h2>{t.approvedDesign.organizationProfile}</h2>
+					<p className="iz-muted">{t.approvedDesign.identityContact}</p>
+					<div
+						className={`iz-settings-profile iz-outlet-settings-identity${editing ? " iz-settings-profile--editing" : ""}`}
+					>
+						<input
+							ref={avatarFileRef}
+							type="file"
+							accept="image/*"
+							className="sr-only"
+							onChange={onAvatarFilePick}
+						/>
+						<AvatarCropSheet
+							open={Boolean(pendingPhoto)}
+							pick={pendingPhoto}
+							onCancel={() => setPendingPhoto(null)}
+							onConfirm={applyCroppedPhoto}
+						/>
+						<div className="relative">
+							{/*
+							 * No `iz-avatar-photo--logo` here on purpose. That modifier adds
+							 * `scale(1.28) translateY(-4%)` — a blanket zoom that existed to
+							 * rescue logos with whitespace around them, and it would now crop
+							 * the crop, showing the owner something other than what they
+							 * framed and other than what every OTHER surface renders (they
+							 * all use plain `iz-avatar-photo`).
+							 */}
+							<div
+								className={`iz-avatar iz-avatar--xl${owner.avatarPhoto ? " iz-avatar-photo" : ""}`}
+								style={
+									owner.avatarPhoto
+										? undefined
+										: { background: "var(--iz-grad-outlet, var(--iz-grad))" }
+								}
+							>
+								{owner.avatarPhoto ? (
+									<img src={publicAssetPath(owner.avatarPhoto)} alt="" />
+								) : (
+									avatarLetter
+								)}
+							</div>
+						</div>
+						<div className="iz-outlet-settings-identity-copy">
+							<div className="iz-heading text-lg font-bold">
+								{owner.orgName}
+							</div>
+							{/*
+							 * The owner's name directly under the venue's own name reads as
+							 * "this is you" — true for the owner, and for everybody else it
+							 * put ANOTHER person's name beneath the signed-in operator's
+							 * logo (owner's call, 11 Sep 2026).
+							 *
+							 * NOT a privacy gate. A member still reads the owner's name and
+							 * mobile in OWNER INFORMATION below, which is the one place that
+							 * fact belongs; this line was only ever a duplicate of it.
+							 */}
+							{isOrgOwner ? (
+								<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
+							) : null}
+							<div
+								className={`mt-1 flex items-center gap-1 iz-tiny ${
+									isOrgSuspended(orgStatus)
+										? "text-[var(--iz-red)]"
+										: owner.accountActivated
+											? "text-[var(--iz-green)]"
+											: "text-[var(--iz-amber)]"
+								}`}
+							>
+								<Shield className="h-3 w-3" />
+								{isOrgSuspended(orgStatus)
+									? t.profile.suspendedProfileOnly
+									: owner.accountActivated
+										? t.outletSettings.verifiedOutletActive
+										: profile.backed || isOrgPendingReview(orgStatus)
+											? t.profile.pendingAdminApproval
+											: t.profile.pendingOtpActivation}
+							</div>
+						</div>
+						{editing && canEdit ? (
+							<ProfilePhotoActions
+								hasPhoto={Boolean(draft.avatarPhoto)}
+								onChangePhoto={openAvatarUpload}
+								// Both, deliberately: a source can outlive the photo it came
+								// from — remove the logo, save, then edit again, and the
+								// restored source would otherwise offer Adjust on nothing.
+								onAdjustPhoto={
+									draft.avatarPhoto && photoSource ? adjustCrop : undefined
+								}
+								onRemovePhoto={
+									draft.avatarPhoto
+										? () => {
+												update({ avatarPhoto: null });
+												setLogoMeta(null);
+												setLogoCleared(true);
+												setPhotoSource(null);
+											}
+										: undefined
+								}
+							/>
+						) : null}
+					</div>
+
+					<div className="iz-outlet-settings-organization-fields">
+						<ProfileSectionCard editing={editing && canEdit}>
+							<ProfileSettingsField
+								icon={Building2}
+								label={t.outletSettings.outletName}
+								value={owner.orgName}
+								onChange={(v) => update({ orgName: v })}
+								mode={fieldMode}
+								placeholder={t.outletSettings.venueOutletName}
+							/>
+							<ProfileSettingsField
+								icon={User}
+								label={t.outletSettings.ownerName}
+								value={owner.ownerName}
+								onChange={(v) => update({ ownerName: v })}
+								mode={fieldMode}
+								placeholder={t.outletSettings.displayName}
+							/>
+							<ProfileSettingsField
+								icon={Phone}
+								label={t.outletSettings.mobile}
+								value={owner.mobile}
+								mode="locked"
+								hint={t.outletSettings.changeInLoginSecurity}
+							/>
+							<ProfileSettingsField
+								icon={Mail}
+								label={t.outletSettings.email}
+								value={owner.email}
+								mode="locked"
+								hint={t.outletSettings.changeInLoginSecurity}
+							/>
+							{!profile.backed && (
+								<ProfileSettingsField
+									icon={Shield}
+									label={t.outletSettings.icForPv}
+									value={owner.ic}
+									onChange={(v) => update({ ic: v })}
+									mode={fieldMode}
+								/>
+							)}
+						</ProfileSectionCard>
+					</div>
+					<section className="iz-approved-org-address">
+						<h2>{t.approvedDesign.address}</h2>
+						<ProfileAddressFields
+							value={address}
+							onChange={updateAddress}
+							mode={fieldMode}
+						/>
+					</section>
+				</section>
+
+				{/* Renders its own section label, and nothing at all on a demo session. */}
+				<GeoFenceCard canEdit={canEdit} />
+
+				{/* Demo-only Finance/Ops cards — real staff live in OrgMembersPanel. */}
 				{!profile.backed && (
-					<ProfileSettingsField
-						icon={Shield}
-						label={t.outletSettings.icForPv}
-						value={owner.ic}
-						onChange={(v) => update({ ic: v })}
-						mode={fieldMode}
+					<>
+						<IzSectionLabel>{t.outletSettings.financeHead}</IzSectionLabel>
+						<ProfileSectionCard editing={editing && canEdit}>
+							<p className="iz-tiny iz-muted mb-1 pt-2">
+								{t.outletSettings.financeHeadHint}
+							</p>
+							<ProfileSettingsField
+								icon={User}
+								label={t.outletSettings.name}
+								value={finance.name}
+								onChange={(v) => updateFinance({ name: v })}
+								mode={fieldMode}
+							/>
+							<ProfileSettingsField
+								icon={Shield}
+								label={t.outletSettings.ic}
+								value={finance.ic}
+								onChange={(v) => updateFinance({ ic: v })}
+								mode={fieldMode}
+							/>
+							<ProfileSettingsField
+								icon={Mail}
+								label={t.outletSettings.email}
+								value={finance.email}
+								onChange={(v) => updateFinance({ email: v })}
+								mode={fieldMode}
+							/>
+						</ProfileSectionCard>
+
+						<IzSectionLabel>{t.outletSettings.opsHead}</IzSectionLabel>
+						<ProfileSectionCard editing={editing && canEdit}>
+							<p className="iz-tiny iz-muted mb-1 pt-2">
+								{t.outletSettings.opsHeadHint}
+							</p>
+							<ProfileSettingsField
+								icon={Wrench}
+								label={t.outletSettings.name}
+								value={ops.name}
+								onChange={(v) => updateOps({ name: v })}
+								mode={fieldMode}
+							/>
+							<ProfileSettingsField
+								icon={Shield}
+								label={t.outletSettings.ic}
+								value={ops.ic}
+								onChange={(v) => updateOps({ ic: v })}
+								mode={fieldMode}
+							/>
+							<ProfileSettingsField
+								icon={Mail}
+								label={t.outletSettings.email}
+								value={ops.email}
+								onChange={(v) => updateOps({ email: v })}
+								mode={fieldMode}
+							/>
+						</ProfileSectionCard>
+					</>
+				)}
+
+				{/* External staffing relationships belong to the organization. */}
+				{!editing && (
+					<div className="iz-outlet-settings-partnerships">
+						<AgencyLinksPanel outletId={profile.outletId} canManage={canEdit} />
+					</div>
+				)}
+			</section>
+
+			<section
+				className="iz-outlet-settings-panel iz-outlet-settings-team"
+				role="tabpanel"
+				id="outlet-settings-panel-team"
+				aria-labelledby="outlet-settings-tab-team"
+				hidden={section !== "team"}
+			>
+				{/*
+				 * ⚠️ THE JOIN QUEUE IS NO LONGER HERE — it is `/outlet/approvals`, a
+				 * page of its own with the agency layout, carrying a rail badge.
+				 *
+				 * It lived here, below the profile and the notification toggles, and the
+				 * owner went looking for it twice without finding it. What stays behind
+				 * is a POINTER, not a second copy: two places to approve the same person
+				 * is two places for the role grant to be got right or wrong.
+				 */}
+
+				{/* Real staff from `outlet_user` (owner / finance / ops). */}
+				{!editing && !profile.outletId && (
+					<IzCard>
+						<p className="iz-muted">{t.profile.noTeamMembers}</p>
+					</IzCard>
+				)}
+				{!editing && (
+					<OrgMembersPanel
+						kind="outlet"
+						orgId={profile.outletId}
+						canManage={canEdit}
 					/>
 				)}
-				<ProfileAddressFields
-					value={address}
-					onChange={updateAddress}
-					mode={fieldMode}
-				/>
-			</ProfileSectionCard>
+				{editing && (
+					<IzCard>
+						<p className="iz-muted">
+							{locale === "zh"
+								? "请先保存或取消机构资料的更改，再管理团队。"
+								: "Save or cancel your organization changes before managing the team."}
+						</p>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !w-auto mt-3"
+							onClick={() => setSection("organization")}
+						>
+							{locale === "zh" ? "返回机构资料" : "Back to organization"}
+						</button>
+					</IzCard>
+				)}
+			</section>
+
+			<section
+				className="iz-outlet-settings-panel"
+				role="tabpanel"
+				id="outlet-settings-panel-personal"
+				aria-labelledby="outlet-settings-tab-personal"
+				hidden={section !== "personal"}
+			>
+				{/* No signature-on-file card here on purpose. It exists so an agency
+			    owner/finance head can sign a stack of vouchers with one tap, and a
+			    voucher carries exactly two signatures — the agency's and the PR
+			    payee's. An outlet signs nothing: the payment-voucher router refuses
+			    outlet callers outright, so ink stored here is a forgeable scribble
+			    that nothing in this portal can ever use. */}
+
+				<IzSectionLabel>{t.outletSettings.loginSecurity}</IzSectionLabel>
+				<IzCard>
+					<AccountAvatarCard />
+					<div className="iz-outlet-settings-account">
+						<ProfileSettingsField
+							icon={Mail}
+							label={t.outletSettings.email}
+							value={personalEmail}
+							mode="view"
+						/>
+						<ProfileSettingsField
+							icon={Phone}
+							label={t.outletSettings.mobile}
+							value={personalMobile}
+							mode="view"
+						/>
+					</div>
+					<p className="iz-tiny iz-muted mb-3">{t.profile.passwordOtpHint}</p>
+					<button
+						type="button"
+						className="iz-btn iz-btn-primary w-full"
+						onClick={() => setSecurityOpen(true)}
+					>
+						{t.profile.securitySettings}
+					</button>
+				</IzCard>
+				{!profile.backed && (
+					<>
+						<IzSectionLabel>{t.outletSettings.notifications}</IzSectionLabel>
+						<IzCard className="mt-2 !py-0 px-4">
+							<ToggleRow
+								label={t.outletSettings.shiftUpdates}
+								desc={t.outletSettings.shiftUpdatesHint}
+								on={outletSettings.notifyShiftUpdates}
+								onChange={(v) => saveOutletSettings({ notifyShiftUpdates: v })}
+							/>
+						</IzCard>
+					</>
+				)}
+			</section>
 
 			{canEdit && editing && (
 				<ProfileEditDock
@@ -669,130 +939,6 @@ function OutletSettingsPage() {
 					onCancel={cancelEdit}
 					saving={saving}
 				/>
-			)}
-
-			{/* Renders its own section label, and nothing at all on a demo session. */}
-			<GeoFenceCard canEdit={canEdit} />
-
-			{/* Demo-only Finance/Ops cards — real staff live in OrgMembersPanel. */}
-			{!profile.backed && (
-				<>
-					<IzSectionLabel>{t.outletSettings.financeHead}</IzSectionLabel>
-					<ProfileSectionCard editing={editing && canEdit}>
-						<p className="iz-tiny iz-muted mb-1 pt-2">
-							{t.outletSettings.financeHeadHint}
-						</p>
-						<ProfileSettingsField
-							icon={User}
-							label={t.outletSettings.name}
-							value={finance.name}
-							onChange={(v) => updateFinance({ name: v })}
-							mode={fieldMode}
-						/>
-						<ProfileSettingsField
-							icon={Shield}
-							label={t.outletSettings.ic}
-							value={finance.ic}
-							onChange={(v) => updateFinance({ ic: v })}
-							mode={fieldMode}
-						/>
-						<ProfileSettingsField
-							icon={Mail}
-							label={t.outletSettings.email}
-							value={finance.email}
-							onChange={(v) => updateFinance({ email: v })}
-							mode={fieldMode}
-						/>
-					</ProfileSectionCard>
-
-					<IzSectionLabel>{t.outletSettings.opsHead}</IzSectionLabel>
-					<ProfileSectionCard editing={editing && canEdit}>
-						<p className="iz-tiny iz-muted mb-1 pt-2">
-							{t.outletSettings.opsHeadHint}
-						</p>
-						<ProfileSettingsField
-							icon={Wrench}
-							label={t.outletSettings.name}
-							value={ops.name}
-							onChange={(v) => updateOps({ name: v })}
-							mode={fieldMode}
-						/>
-						<ProfileSettingsField
-							icon={Shield}
-							label={t.outletSettings.ic}
-							value={ops.ic}
-							onChange={(v) => updateOps({ ic: v })}
-							mode={fieldMode}
-						/>
-						<ProfileSettingsField
-							icon={Mail}
-							label={t.outletSettings.email}
-							value={ops.email}
-							onChange={(v) => updateOps({ email: v })}
-							mode={fieldMode}
-						/>
-					</ProfileSectionCard>
-
-					<IzSectionLabel>{t.outletSettings.notifications}</IzSectionLabel>
-					<IzCard className="mt-2 !py-0 px-4">
-						<ToggleRow
-							label={t.outletSettings.shiftUpdates}
-							desc={t.outletSettings.shiftUpdatesHint}
-							on={outletSettings.notifyShiftUpdates}
-							onChange={(v) => saveOutletSettings({ notifyShiftUpdates: v })}
-						/>
-					</IzCard>
-				</>
-			)}
-
-			{/*
-			 * ⚠️ THE JOIN QUEUE IS NO LONGER HERE — it is `/outlet/approvals`, a
-			 * page of its own with the agency layout, carrying a rail badge.
-			 *
-			 * It lived here, below the profile and the notification toggles, and the
-			 * owner went looking for it twice without finding it. What stays behind
-			 * is a POINTER, not a second copy: two places to approve the same person
-			 * is two places for the role grant to be got right or wrong.
-			 */}
-
-			{/* Real staff from `outlet_user` (owner / finance / ops). */}
-			{!editing && (
-				<OrgMembersPanel
-					kind="outlet"
-					orgId={profile.outletId}
-					canManage={canEdit}
-				/>
-			)}
-
-			{/* Which agencies may staff this venue (0123). Sits after the team
-			    panel because it is the other half of "who works here": staff
-			    inside, agencies outside. */}
-			{!editing && (
-				<AgencyLinksPanel outletId={profile.outletId} canManage={canEdit} />
-			)}
-
-			{/* No signature-on-file card here on purpose. It exists so an agency
-			    owner/finance head can sign a stack of vouchers with one tap, and a
-			    voucher carries exactly two signatures — the agency's and the PR
-			    payee's. An outlet signs nothing: the payment-voucher router refuses
-			    outlet callers outright, so ink stored here is a forgeable scribble
-			    that nothing in this portal can ever use. */}
-
-			{!editing && (
-				<>
-					<IzSectionLabel>{t.outletSettings.loginSecurity}</IzSectionLabel>
-					<IzCard>
-						<AccountAvatarCard />
-						<p className="iz-tiny iz-muted mb-3">{t.profile.passwordOtpHint}</p>
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary w-full"
-							onClick={() => setSecurityOpen(true)}
-						>
-							{t.profile.securitySettings}
-						</button>
-					</IzCard>
-				</>
 			)}
 
 			<SecuritySettingsSheets
@@ -808,8 +954,8 @@ function OutletSettingsPage() {
 				 * account, so the screen named one address and would have changed
 				 * another.
 				 */
-				email={currentUser?.email ?? owner.email}
-				mobile={currentUser?.contactNo ?? owner.mobile}
+				email={personalEmail}
+				mobile={personalMobile}
 				/*
 				 * No `canEdit` — that is `settings:update` on the ORGANISATION, and
 				 * this sheet is the signed-in person's own account: change password,

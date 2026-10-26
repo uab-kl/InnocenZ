@@ -5,7 +5,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	Archive,
@@ -19,12 +19,15 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { actorText } from "@/components/admin/actor-name";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import {
 	AgencyDetailsSheet,
 	OutletDetailsSheet,
 	orgStatusBadgeColors,
 } from "@/components/organization";
+import { memberPageTarget } from "@/components/organization/member-page-target";
 import { PrDetailsSheet } from "@/components/pr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -151,9 +154,24 @@ type LegacyRow = {
 	 * if the answer is "—".
 	 */
 	deactivatedBy: string;
+	/**
+	 * The words in front of `deactivatedBy` — what that person DID. A declined
+	 * applicant was never on the team, so "Deactivated by" over the owner who
+	 * turned the request down described an event that never happened. Required
+	 * for the same reason as `deactivatedBy`.
+	 */
+	actorHeading: string;
 	/** `member` rows only — where to send an admin who wants to restore them. */
 	orgKind?: "agency" | "outlet";
 	orgId?: string;
+	/** `member` rows only — the person, so View can open their member page. */
+	userId?: string;
+	/**
+	 * False for a row that was never switched off — a membership still WAITING
+	 * for an answer. "Deactivated by" on it named the applicant herself (the
+	 * last account to touch the row), describing an event that never happened.
+	 */
+	isDeactivated: boolean;
 };
 
 /**
@@ -327,28 +345,17 @@ async function fetchAllDisabledAccounts(
  * Printing a raw uuid was the alternative and is refused: this screen is read
  * by an admin deciding whether a removal was legitimate, and a 36-character
  * hex string answers that question no better than a blank does.
+ *
+ * ONE rule with every other admin screen — `actorText`. This page used to keep
+ * its own copy, which printed service tokens (`seed-why-we-met`) as written
+ * while the member page said the same thing differently; a seed tag is a
+ * developer's name for a script, and "System" is what an admin can read.
  */
-/** A `updated_by` that is a real account id, rather than a service token. */
-const ACTOR_UUID =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function actorLabel(
 	row: { updatedBy?: string | null; updatedByName?: string | null },
 	t: PortalTranslations,
 ): string {
-	if (row.updatedByName) return row.updatedByName;
-	const raw = row.updatedBy?.trim();
-	if (!raw) return "—";
-	if (raw === "system") return t.adminUsers.actorSystem;
-	/*
-	 * An id-SHAPED value with no name behind it means the account was deleted:
-	 * there was a person and we can no longer say who. Anything else is a
-	 * service token, and those are deliberately descriptive — the live data
-	 * holds `seed-atlas-agency-role-accounts`, `seed-why-we-met` and the like.
-	 * Printing the token beats both alternatives: "Unknown" throws away a true
-	 * answer, and "System" invents a single actor where there were several.
-	 */
-	return ACTOR_UUID.test(raw) ? t.adminUsers.actorUnknown : raw;
+	return actorText(row.updatedBy, row.updatedByName, t);
 }
 
 /*
@@ -377,6 +384,8 @@ function mapAgencyRow(agency: Agency, t: PortalTranslations): LegacyRow {
 		createdAt: agency.createdAt,
 		updatedAt: agency.updatedAt,
 		deactivatedBy: actorLabel(agency, t),
+		actorHeading: t.adminUsers.colDeactivatedBy,
+		isDeactivated: true,
 	};
 }
 
@@ -394,6 +403,8 @@ function mapOutletRow(outlet: Outlet, t: PortalTranslations): LegacyRow {
 		createdAt: outlet.createdAt,
 		updatedAt: outlet.updatedAt,
 		deactivatedBy: actorLabel(outlet, t),
+		actorHeading: t.adminUsers.colDeactivatedBy,
+		isDeactivated: true,
 	};
 }
 
@@ -410,6 +421,8 @@ function mapPrRow(user: PrUser, t: PortalTranslations): LegacyRow {
 		createdAt: user.createdAt,
 		updatedAt: user.updatedAt,
 		deactivatedBy: actorLabel(user, t),
+		actorHeading: t.adminUsers.colDeactivatedBy,
+		isDeactivated: true,
 	};
 }
 
@@ -490,8 +503,16 @@ function mapRemovedMemberRow(
 		// The owner or admin who took them out of THIS organisation — not
 		// whoever last edited their account.
 		deactivatedBy: actorLabel(member, t),
+		// Declined is an answer to a request, not a removal: "Declined by".
+		actorHeading:
+			member.status === "rejected"
+				? t.adminUsers.declinedBy
+				: t.adminUsers.colDeactivatedBy,
+		// Waiting is not switched off — nobody deactivated anything yet.
+		isDeactivated: member.status !== "pending",
 		orgKind,
 		orgId,
+		userId: member.userId,
 	};
 }
 
@@ -517,11 +538,21 @@ function mapDisabledAccountRow(
 		createdAt: account.createdAt,
 		updatedAt: account.updatedAt,
 		deactivatedBy: actorLabel(account, t),
+		actorHeading: t.adminUsers.colDeactivatedBy,
+		isDeactivated: true,
 	};
+}
+
+/** A `member` row's View target; null for every other kind of row. */
+function legacyMemberTarget(row: LegacyRow) {
+	return row.role === "member"
+		? memberPageTarget(row.orgKind, row.orgId, row.userId)
+		: null;
 }
 
 function LegacyMemberPage() {
 	const { t } = usePortalLocale();
+	const navigate = useNavigate();
 	const type = getUserTypeByKey("legacy-member")!;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
@@ -909,12 +940,12 @@ function LegacyMemberPage() {
 	 * place an account could arrive and never leave.
 	 */
 	/**
-	 * Open the detail sheet, for the kinds that HAVE one.
+	 * Open the detail sheet, for the kinds that HAVE one; a team-member row opens
+	 * that person's member page instead.
 	 *
-	 * A removed membership and a switched-off account are not records with a
-	 * profile behind them — they are states of a person described elsewhere.
-	 * Clicking one does nothing rather than opening a sheet built to describe
-	 * a different thing.
+	 * A switched-off account is not a record with a profile behind it — it is a
+	 * state of a person described elsewhere. Clicking one does nothing rather
+	 * than opening a sheet built to describe a different thing.
 	 */
 	const openDetail = (row: LegacyRow) => {
 		if (row.role === "agency" || row.role === "outlet" || row.role === "pr") {
@@ -930,7 +961,16 @@ function LegacyMemberPage() {
 			 * `selectedAgencyFromList` and its twins look up.
 			 */
 			setSelected({ role: row.role, id: row.id });
+			return;
 		}
+		/*
+		 * A team member has no sheet here, but it does have a page: the person
+		 * inside the organisation they were removed from (or are waiting on).
+		 * View used to do nothing on these rows while the page said "Click a row
+		 * or View to open details".
+		 */
+		const memberPage = legacyMemberTarget(row);
+		if (memberPage) navigate(memberPage);
 	};
 
 	const accountActions = useAccountActions({
@@ -949,7 +989,7 @@ function LegacyMemberPage() {
 	}
 
 	return (
-		<PageShell>
+		<PageShell className="iz-admin-management">
 			<PageHeader
 				icon={type.icon}
 				title={adminNavLabel(`sidebar-user-${type.key}`, type.title, t)}
@@ -970,7 +1010,7 @@ function LegacyMemberPage() {
 				</div>
 			</div>
 
-			<Card className="border-(--lavender-soft)/40 bg-card">
+			<Card className="iz-admin-management-card border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
 					<CardTitle className="flex items-center gap-2">
 						{t.adminUsers.searchFilters}
@@ -981,124 +1021,130 @@ function LegacyMemberPage() {
 					<CardDescription>{t.adminUsers.searchFiltersHint}</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-						<div className="space-y-1.5">
-							<Label htmlFor="legacy-name">{t.admin.colName}</Label>
-							<div className="relative">
-								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+					<AdminFilters>
+						<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+							<div className="space-y-1.5">
+								<Label htmlFor="legacy-name">{t.admin.colName}</Label>
+								<div className="relative">
+									<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										id="legacy-name"
+										value={nameFilter}
+										onChange={(e) => setNameFilter(e.target.value)}
+										placeholder={t.adminUsers.placeholderName}
+										className="pl-8"
+									/>
+								</div>
+							</div>
+							<div className="space-y-1.5">
+								<Label htmlFor="legacy-code">{t.adminUsers.colCodeId}</Label>
 								<Input
-									id="legacy-name"
-									value={nameFilter}
-									onChange={(e) => setNameFilter(e.target.value)}
-									placeholder={t.adminUsers.placeholderName}
-									className="pl-8"
+									id="legacy-code"
+									value={codeFilter}
+									onChange={(e) => setCodeFilter(e.target.value)}
+									placeholder={t.adminUsers.placeholderCode}
 								/>
 							</div>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="legacy-code">{t.adminUsers.colCodeId}</Label>
-							<Input
-								id="legacy-code"
-								value={codeFilter}
-								onChange={(e) => setCodeFilter(e.target.value)}
-								placeholder={t.adminUsers.placeholderCode}
-							/>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="legacy-contact">{t.adminUsers.colContact}</Label>
-							<Input
-								id="legacy-contact"
-								value={contactFilter}
-								onChange={(e) => setContactFilter(e.target.value)}
-								placeholder={t.adminUsers.placeholderContact}
-							/>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="legacy-role">{t.adminUsers.role}</Label>
-							<Select
-								value={roleFilter}
-								onValueChange={(value) =>
-									setRoleFilter(value as LegacyRoleFilter)
-								}
-							>
-								<SelectTrigger
-									id="legacy-role"
-									aria-label={t.adminUsers.filterByRole}
+							<div className="space-y-1.5">
+								<Label htmlFor="legacy-contact">
+									{t.adminUsers.colContact}
+								</Label>
+								<Input
+									id="legacy-contact"
+									value={contactFilter}
+									onChange={(e) => setContactFilter(e.target.value)}
+									placeholder={t.adminUsers.placeholderContact}
+								/>
+							</div>
+							<div className="space-y-1.5">
+								<Label htmlFor="legacy-role">{t.adminUsers.role}</Label>
+								<Select
+									value={roleFilter}
+									onValueChange={(value) =>
+										setRoleFilter(value as LegacyRoleFilter)
+									}
 								>
-									<SelectValue placeholder={t.adminUsers.role} />
-								</SelectTrigger>
-								{/* Every `value` here is the stored role the filter compares
+									<SelectTrigger
+										id="legacy-role"
+										aria-label={t.adminUsers.filterByRole}
+									>
+										<SelectValue placeholder={t.adminUsers.role} />
+									</SelectTrigger>
+									{/* Every `value` here is the stored role the filter compares
 								    against — only the labels move. */}
-								<SelectContent>
-									<SelectItem value="all">{t.adminUsers.allRoles}</SelectItem>
-									<SelectItem value="agency">
-										{t.adminUsers.roleAgency}
-									</SelectItem>
-									<SelectItem value="outlet">
-										{t.adminUsers.roleOutlet}
-									</SelectItem>
-									<SelectItem value="pr">{t.adminUsers.rolePr}</SelectItem>
-									<SelectItem value="member">
-										{t.adminUsers.roleRemovedMember}
-									</SelectItem>
-									<SelectItem value="account">
-										{t.adminUsers.roleDisabledAccount}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="legacy-sort-by">{t.adminUsers.sortBy}</Label>
-							<Select
-								value={sortBy}
-								onValueChange={(value) => setSortBy(value as SortBy)}
-							>
-								<SelectTrigger
-									id="legacy-sort-by"
-									aria-label={t.adminUsers.sortBy}
+									<SelectContent>
+										<SelectItem value="all">{t.adminUsers.allRoles}</SelectItem>
+										<SelectItem value="agency">
+											{t.adminUsers.roleAgency}
+										</SelectItem>
+										<SelectItem value="outlet">
+											{t.adminUsers.roleOutlet}
+										</SelectItem>
+										<SelectItem value="pr">{t.adminUsers.rolePr}</SelectItem>
+										<SelectItem value="member">
+											{t.adminUsers.roleRemovedMember}
+										</SelectItem>
+										<SelectItem value="account">
+											{t.adminUsers.roleDisabledAccount}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							<div className="space-y-1.5">
+								<Label htmlFor="legacy-sort-by">{t.adminUsers.sortBy}</Label>
+								<Select
+									value={sortBy}
+									onValueChange={(value) => setSortBy(value as SortBy)}
 								>
-									<SelectValue />
-								</SelectTrigger>
-								{/* `name` / `createdAt` / `updatedAt` are the sort keys the
+									<SelectTrigger
+										id="legacy-sort-by"
+										aria-label={t.adminUsers.sortBy}
+									>
+										<SelectValue />
+									</SelectTrigger>
+									{/* `name` / `createdAt` / `updatedAt` are the sort keys the
 								    comparator switches on — labels only. */}
-								<SelectContent>
-									<SelectItem value="name">{t.admin.colName}</SelectItem>
-									<SelectItem value="createdAt">
-										{t.admin.colCreated}
-									</SelectItem>
-									<SelectItem value="updatedAt">
-										{t.adminUsers.colUpdated}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="space-y-1.5">
-							<Label htmlFor="legacy-sort-order">
-								{t.adminUsers.sortOrder}
-							</Label>
-							<Select
-								value={sortOrder}
-								onValueChange={(value) => setSortOrder(value as SortOrder)}
-							>
-								<SelectTrigger
-									id="legacy-sort-order"
-									aria-label={t.adminUsers.sortOrder}
+									<SelectContent>
+										<SelectItem value="name">{t.admin.colName}</SelectItem>
+										<SelectItem value="createdAt">
+											{t.admin.colCreated}
+										</SelectItem>
+										<SelectItem value="updatedAt">
+											{t.adminUsers.colUpdated}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							<div className="space-y-1.5">
+								<Label htmlFor="legacy-sort-order">
+									{t.adminUsers.sortOrder}
+								</Label>
+								<Select
+									value={sortOrder}
+									onValueChange={(value) => setSortOrder(value as SortOrder)}
 								>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="asc">{t.adminUsers.ascending}</SelectItem>
-									<SelectItem value="desc">
-										{t.adminUsers.descending}
-									</SelectItem>
-								</SelectContent>
-							</Select>
+									<SelectTrigger
+										id="legacy-sort-order"
+										aria-label={t.adminUsers.sortOrder}
+									>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="asc">
+											{t.adminUsers.ascending}
+										</SelectItem>
+										<SelectItem value="desc">
+											{t.adminUsers.descending}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
 						</div>
-					</div>
+					</AdminFilters>
 				</CardContent>
 			</Card>
 
-			<Card className="border-(--lavender-soft)/40 bg-card">
+			<Card className="iz-admin-management-card border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 						<div>
@@ -1126,33 +1172,23 @@ function LegacyMemberPage() {
 					</div>
 				</CardHeader>
 				<CardContent>
-					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+					<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
+						<Table className="iz-admin-management-table">
 							<TableHeader>
 								<TableRow>
-									<TableHead className="w-10" />
-									<TableHead>{t.admin.colName}</TableHead>
-									<TableHead>{t.adminUsers.colCodeId}</TableHead>
-									<TableHead>{t.adminUsers.role}</TableHead>
+									<TableHead>
+										{t.admin.colName} / {t.adminUsers.colCodeId}
+									</TableHead>
 									<TableHead>{t.adminUsers.colContact}</TableHead>
-									<TableHead className="w-[120px]">
-										{t.admin.colStatus}
-									</TableHead>
-									<TableHead className="w-[150px]">
-										{t.adminUsers.colUpdated}
-									</TableHead>
-									<TableHead className="w-[150px]">
-										{t.adminUsers.colDeactivatedBy}
-									</TableHead>
-									<TableHead className="w-[220px]">
-										{t.admin.colActions}
-									</TableHead>
+									<TableHead>{t.admin.colStatus}</TableHead>
+									<TableHead>{t.adminUsers.colUpdated}</TableHead>
+									<TableHead>{t.admin.colActions}</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
 								{showLoading && (
 									<TableRow>
-										<TableCell colSpan={9} className="h-40 text-center">
+										<TableCell colSpan={5} className="h-40 text-center">
 											<Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
 										</TableCell>
 									</TableRow>
@@ -1160,7 +1196,7 @@ function LegacyMemberPage() {
 
 								{!showLoading && isError && (
 									<TableRow>
-										<TableCell colSpan={9} className="h-40 text-center">
+										<TableCell colSpan={5} className="h-40 text-center">
 											<div className="flex flex-col items-center gap-2">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="text-sm text-muted-foreground">
@@ -1181,7 +1217,7 @@ function LegacyMemberPage() {
 
 								{!showLoading && !isError && pageRows.length === 0 && (
 									<TableRow>
-										<TableCell colSpan={9} className="h-40 text-center">
+										<TableCell colSpan={5} className="h-40 text-center">
 											<div className="flex flex-col items-center gap-2 text-muted-foreground">
 												<Archive className="h-8 w-8 opacity-50" />
 												<p className="text-sm">
@@ -1196,65 +1232,64 @@ function LegacyMemberPage() {
 									!isError &&
 									pageRows.map((row) => {
 										const busy = actionId === row.id;
+										// Only a disabled account has nothing to open.
+										const hasDetail =
+											row.role !== "account" &&
+											(row.role !== "member" ||
+												legacyMemberTarget(row) !== null);
 										return (
 											<TableRow
 												key={`${row.role}-${row.id}`}
-												className={
-													row.role === "member" || row.role === "account"
-														? undefined
-														: "cursor-pointer"
-												}
+												className={hasDetail ? "cursor-pointer" : undefined}
 												onClick={() => openDetail(row)}
 											>
 												<TableCell>
-													<Button
-														variant="ghost"
-														size="icon"
-														disabled={
-															row.role === "member" || row.role === "account"
-														}
-														className="h-8 w-8"
-														onClick={(e) => {
-															e.stopPropagation();
-															openDetail(row);
-														}}
-														aria-label={fill(t.adminUsers.viewNamed, {
-															name: row.name,
-														})}
-													>
-														<Eye className="h-4 w-4" />
-													</Button>
+													{!hasDetail ? (
+														<span className="font-medium">{row.name}</span>
+													) : (
+														<button
+															type="button"
+															className="iz-admin-record-name"
+															onClick={(event) => {
+																event.stopPropagation();
+																openDetail(row);
+															}}
+														>
+															{row.name}
+														</button>
+													)}
+													<div className="iz-admin-record-secondary">
+														{row.code}
+													</div>
+													<div className="mt-2">
+														<Badge
+															variant="outline"
+															className={roleBadgeColors[row.role]}
+														>
+															{roleLabels[row.role](t)}
+														</Badge>
+													</div>
 												</TableCell>
-												<TableCell>
-													<div className="font-medium">{row.name}</div>
-													{row.detail && (
-														<div className="text-sm text-muted-foreground">
+												<TableCell data-label={t.adminUsers.colContact}>
+													{row.contact}
+													{row.detail && row.detail !== row.contact && (
+														<div className="iz-admin-record-secondary">
 															{row.detail}
 														</div>
 													)}
 												</TableCell>
-												<TableCell className="font-mono text-sm">
-													{row.code}
-												</TableCell>
-												<TableCell>
-													<Badge
-														variant="outline"
-														className={roleBadgeColors[row.role]}
-													>
-														{roleLabels[row.role](t)}
-													</Badge>
-												</TableCell>
-												<TableCell>{row.contact}</TableCell>
-												<TableCell>
+												<TableCell data-label={t.admin.colStatus}>
 													<Badge variant="outline" className={row.statusClass}>
 														{row.statusLabel}
 													</Badge>
 												</TableCell>
-												<TableCell className="text-base text-muted-foreground">
+												<TableCell data-label={t.adminUsers.colUpdated}>
 													{formatDate(row.updatedAt)}
-												</TableCell>
-												<TableCell className="text-base text-muted-foreground">
-													{row.deactivatedBy}
+													{row.isDeactivated && (
+														<div className="iz-admin-record-secondary">
+															{`${row.actorHeading}: ${row.deactivatedBy}`}
+														</div>
+													)}
 												</TableCell>
 												<TableCell>
 													{/* Layout-only wrapper: role="none" because the click
@@ -1344,9 +1379,7 @@ function LegacyMemberPage() {
 														<Button
 															size="sm"
 															variant="ghost"
-															disabled={
-																row.role === "member" || row.role === "account"
-															}
+															disabled={!hasDetail}
 															onClick={() => openDetail(row)}
 														>
 															<Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -1362,7 +1395,7 @@ function LegacyMemberPage() {
 					</div>
 
 					{totalCount > 0 && (
-						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+						<div className="iz-admin-management-pagination text-muted-foreground">
 							{/* One whole-sentence template, the same shape the admins table
 							    and the roles grid already use. The three numbers were bold
 							    spans glued between English fragments, which is a sentence

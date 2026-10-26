@@ -14,6 +14,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
+import { OutletTable } from '@/features/outlet/outlet.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { UserTable } from '@/features/user/user.model';
 
@@ -36,124 +37,142 @@ export const paymentVoucherStatusEnum = MainSchema.enum(
  * persisted shape of the frontend `PrPaymentVoucher`; signature images,
  * dispute photos and escalation are follow-ups.
  */
-export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
-  id: uuid('id').defaultRandom().notNull().primaryKey(),
-  agencyId: uuid('agency_id')
-    .notNull()
-    .references(() => AgencyTable.id, { onDelete: 'cascade' }),
-  /**
-   * Legacy payee key. After 0089 this equals `user_id` when set (no FK — `main.pr` dropped).
-   * Prefer `userId` in new code.
-   */
-  prId: uuid('pr_id'),
-  /** Preferred payee key (0087/0089) — equals pr_id after remap. */
-  userId: uuid('user_id').references(() => UserTable.id, { onDelete: 'set null' }),
-  /**
-   * The voucher's own number — `PV-000001`, allocated once on insert (0075).
-   *
-   * Before this it was DERIVED as `PV-<weekEnd>` in five places, so every PR's
-   * voucher for a week shared one number and one download filename. Read this
-   * column; never re-derive a number from the week, or the fifth surface will
-   * disagree with the other four again.
-   *
-   * Nullable because the column is unique and a NULL never collides: a failed
-   * allocation must not block a real voucher, and reads as "unnumbered" rather
-   * than as somebody else's number.
-   */
-  /**
-   * Per-AGENCY sequence, 'PV-000001'. NOT globally unique since 0152: two
-   * agencies each having a PV-000001 is correct, and the uniqueness that
-   * matters lives on (agency_id, voucher_no) as an index. Dropping .unique()
-   * here keeps the model from re-asserting the old rule on a fresh push.
-   */
-  voucherNo: varchar('voucher_no', { length: 40 }),
-  prName: varchar('pr_name', { length: 255 }).notNull(),
-  prIc: varchar('pr_ic', { length: 100 }),
-  outlet: varchar('outlet', { length: 255 }),
-  cycle: varchar('cycle', { length: 100 }),
-  issuedDate: date('issued_date', { mode: 'string' }),
-  dueDate: date('due_date', { mode: 'string' }),
-  weekStart: date('week_start', { mode: 'string' }),
-  weekEnd: date('week_end', { mode: 'string' }),
-  subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull().default('0'),
-  deduction: numeric('deduction', { precision: 12, scale: 2 }).notNull().default('0'),
-  net: numeric('net', { precision: 12, scale: 2 }).notNull().default('0'),
-  status: paymentVoucherStatusEnum('status').notNull().default('pending_review'),
-  financeHeadName: varchar('finance_head_name', { length: 255 }),
-  /**
-   * The capacity the signer signed in — 'Owner', 'Finance', 'Director'…
-   *
-   * A SNAPSHOT, like the name beside it (0149). The UI used to print a
-   * hardcoded "Finance Head" next to whoever had signed, so an owner's
-   * signature was labelled as the finance head's. Resolving this live through
-   * `user_role` would rewrite the label the day that person changes role, which
-   * on a signed document is a lie about the past rather than an update.
-   *
-   * Null on every voucher signed before the column existed — those genuinely do
-   * not record a capacity, and readers must say nothing rather than guess.
-   */
-  financeHeadRole: varchar('finance_head_role', { length: 50 }),
-  financeHeadSignedAt: timestamp('finance_head_signed_at', { withTimezone: true }),
-  /**
-   * The agency's finger-drawn signature ({w,h,strokes}), mirroring `prSignature`.
-   *
-   * Until 3 Aug 2026 the voucher had a name and a timestamp for the finance head
-   * but nowhere to put the ink — and nothing ever set even those two. The
-   * "Finance sign" step on the agency's workflow rail was a label with no action
-   * behind it, while the PR's half was fully real. The dual in "dual-sign" now
-   * exists on both sides.
-   */
-  financeHeadSignature: text('finance_head_signature'),
-  prSignedAt: timestamp('pr_signed_at', { withTimezone: true }),
-  /** Finger-drawn signature strokes ({w,h,strokes}) — written only on PR sign. */
-  prSignature: text('pr_signature'),
-  paidAt: timestamp('paid_at', { withTimezone: true }),
-  bankRef: varchar('bank_ref', { length: 100 }),
-  disputeReason: varchar('dispute_reason', { length: 1000 }),
-  disputedAt: timestamp('disputed_at', { withTimezone: true }),
-  disputeNote: varchar('dispute_note', { length: 1000 }),
-  // NOTE: these three dispute_* columns are superseded by
-  // PaymentVoucherDisputeTable (migration 0051) and kept only so the current
-  // controller keeps working. Read new code against that table; a follow-up
-  // migration drops these once nothing reads them.
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdBy: varchar('created_by').notNull(),
-  updatedBy: varchar('updated_by').notNull(),
-}, (table) => [
-  /**
-   * ONE voucher per AGENCY per PR per week (migration 0129, re-keying 0078).
-   *
-   * Declared here as well as in SQL because of the drift class that runs the
-   * dangerous way round: a constraint the database HAS and the model does NOT is
-   * one `drizzle-kit generate` away from being silently dropped. The generate
-   * "fixes" the difference by deleting it, and nothing fails — the rule just
-   * stops existing.
-   *
-   * ⚠️ `agencyId` is in the key, and dropping it is not a simplification.
-   * 0078 keyed this on (prId, weekStart) alone, reasoning that "a PR belongs to
-   * one agency". A PR does not: membership lives on `agency_pr`, one row PER
-   * AGENCY, and four people on the live database hold two to four of them. The
-   * narrow key therefore never meant "no double payment" — it meant "only the
-   * first agency to reach the week may pay this person at all", which blocked
-   * the second agency outright and crashed whatever run hit the index.
-   *
-   * The key alone is not the whole fix. The lookups in the repository must
-   * carry an agency term too (`getCurrentWeekDraft` / `getWeekVoucher`), or the
-   * second agency is simply HANDED the first agency's open voucher and writes
-   * its money onto it — the silent half of the same bug. Index and queries move
-   * together; see the migration header.
-   *
-   * Partial because `pr_id` and `week_start` are both nullable. Postgres already
-   * treats NULLs as distinct, so this changes no behaviour; it states that an
-   * unassigned or weekless voucher is deliberately unconstrained, rather than
-   * leaving a reader to infer it from the NULL rule. `agency_id` is NOT NULL and
-   * so needs no term of its own.
-   */
-  uniqueIndex('payment_voucher_one_per_agency_pr_week')
-    .on(table.agencyId, table.prId, table.weekStart)
-    .where(sql`${table.prId} IS NOT NULL AND ${table.weekStart} IS NOT NULL`),
-]);
+export const PaymentVoucherTable = MainSchema.table(
+  'payment_voucher',
+  {
+    id: uuid('id').defaultRandom().notNull().primaryKey(),
+    agencyId: uuid('agency_id')
+      .notNull()
+      .references(() => AgencyTable.id, { onDelete: 'cascade' }),
+    /**
+     * Legacy payee key. After 0089 this equals `user_id` when set (no FK — `main.pr` dropped).
+     * Prefer `userId` in new code.
+     */
+    prId: uuid('pr_id'),
+    /** Preferred payee key (0087/0089) — equals pr_id after remap. */
+    userId: uuid('user_id').references(() => UserTable.id, {
+      onDelete: 'set null',
+    }),
+    /**
+     * The voucher's own number — `PV-000001`, allocated once on insert (0075).
+     *
+     * Before this it was DERIVED as `PV-<weekEnd>` in five places, so every PR's
+     * voucher for a week shared one number and one download filename. Read this
+     * column; never re-derive a number from the week, or the fifth surface will
+     * disagree with the other four again.
+     *
+     * Nullable because the column is unique and a NULL never collides: a failed
+     * allocation must not block a real voucher, and reads as "unnumbered" rather
+     * than as somebody else's number.
+     */
+    /**
+     * Per-AGENCY sequence, 'PV-000001'. NOT globally unique since 0152: two
+     * agencies each having a PV-000001 is correct, and the uniqueness that
+     * matters lives on (agency_id, voucher_no) as an index. Dropping .unique()
+     * here keeps the model from re-asserting the old rule on a fresh push.
+     */
+    voucherNo: varchar('voucher_no', { length: 40 }),
+    prName: varchar('pr_name', { length: 255 }).notNull(),
+    prIc: varchar('pr_ic', { length: 100 }),
+    outlet: varchar('outlet', { length: 255 }),
+    cycle: varchar('cycle', { length: 100 }),
+    issuedDate: date('issued_date', { mode: 'string' }),
+    dueDate: date('due_date', { mode: 'string' }),
+    weekStart: date('week_start', { mode: 'string' }),
+    weekEnd: date('week_end', { mode: 'string' }),
+    subtotal: numeric('subtotal', { precision: 12, scale: 2 })
+      .notNull()
+      .default('0'),
+    deduction: numeric('deduction', { precision: 12, scale: 2 })
+      .notNull()
+      .default('0'),
+    net: numeric('net', { precision: 12, scale: 2 }).notNull().default('0'),
+    status: paymentVoucherStatusEnum('status')
+      .notNull()
+      .default('pending_review'),
+    financeHeadName: varchar('finance_head_name', { length: 255 }),
+    /**
+     * The capacity the signer signed in — 'Owner', 'Finance', 'Director'…
+     *
+     * A SNAPSHOT, like the name beside it (0149). The UI used to print a
+     * hardcoded "Finance Head" next to whoever had signed, so an owner's
+     * signature was labelled as the finance head's. Resolving this live through
+     * `user_role` would rewrite the label the day that person changes role, which
+     * on a signed document is a lie about the past rather than an update.
+     *
+     * Null on every voucher signed before the column existed — those genuinely do
+     * not record a capacity, and readers must say nothing rather than guess.
+     */
+    financeHeadRole: varchar('finance_head_role', { length: 50 }),
+    financeHeadSignedAt: timestamp('finance_head_signed_at', {
+      withTimezone: true,
+    }),
+    /**
+     * The agency's finger-drawn signature ({w,h,strokes}), mirroring `prSignature`.
+     *
+     * Until 3 Aug 2026 the voucher had a name and a timestamp for the finance head
+     * but nowhere to put the ink — and nothing ever set even those two. The
+     * "Finance sign" step on the agency's workflow rail was a label with no action
+     * behind it, while the PR's half was fully real. The dual in "dual-sign" now
+     * exists on both sides.
+     */
+    financeHeadSignature: text('finance_head_signature'),
+    prSignedAt: timestamp('pr_signed_at', { withTimezone: true }),
+    /** Finger-drawn signature strokes ({w,h,strokes}) — written only on PR sign. */
+    prSignature: text('pr_signature'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    bankRef: varchar('bank_ref', { length: 100 }),
+    disputeReason: varchar('dispute_reason', { length: 1000 }),
+    disputedAt: timestamp('disputed_at', { withTimezone: true }),
+    disputeNote: varchar('dispute_note', { length: 1000 }),
+    // NOTE: these three dispute_* columns are superseded by
+    // PaymentVoucherDisputeTable (migration 0051) and kept only so the current
+    // controller keeps working. Read new code against that table; a follow-up
+    // migration drops these once nothing reads them.
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdBy: varchar('created_by').notNull(),
+    updatedBy: varchar('updated_by').notNull(),
+  },
+  (table) => [
+    /**
+     * ONE voucher per AGENCY per PR per week (migration 0129, re-keying 0078).
+     *
+     * Declared here as well as in SQL because of the drift class that runs the
+     * dangerous way round: a constraint the database HAS and the model does NOT is
+     * one `drizzle-kit generate` away from being silently dropped. The generate
+     * "fixes" the difference by deleting it, and nothing fails — the rule just
+     * stops existing.
+     *
+     * ⚠️ `agencyId` is in the key, and dropping it is not a simplification.
+     * 0078 keyed this on (prId, weekStart) alone, reasoning that "a PR belongs to
+     * one agency". A PR does not: membership lives on `agency_pr`, one row PER
+     * AGENCY, and four people on the live database hold two to four of them. The
+     * narrow key therefore never meant "no double payment" — it meant "only the
+     * first agency to reach the week may pay this person at all", which blocked
+     * the second agency outright and crashed whatever run hit the index.
+     *
+     * The key alone is not the whole fix. The lookups in the repository must
+     * carry an agency term too (`getCurrentWeekDraft` / `getWeekVoucher`), or the
+     * second agency is simply HANDED the first agency's open voucher and writes
+     * its money onto it — the silent half of the same bug. Index and queries move
+     * together; see the migration header.
+     *
+     * Partial because `pr_id` and `week_start` are both nullable. Postgres already
+     * treats NULLs as distinct, so this changes no behaviour; it states that an
+     * unassigned or weekless voucher is deliberately unconstrained, rather than
+     * leaving a reader to infer it from the NULL rule. `agency_id` is NOT NULL and
+     * so needs no term of its own.
+     */
+    uniqueIndex('payment_voucher_one_per_agency_pr_week')
+      .on(table.agencyId, table.prId, table.weekStart)
+      .where(sql`${table.prId} IS NOT NULL AND ${table.weekStart} IS NOT NULL`),
+  ],
+);
 
 /**
  * Where one receipt sits in the agency's review (migration 0074).
@@ -171,8 +190,13 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
  * figure they can contest. A rejected state would be a refusal with no number
  * attached and nothing to dispute.
  */
-export const paymentVoucherReceiptStatusValues = ['pending', 'approved', 'verified'] as const;
-export type PaymentVoucherReceiptStatus = (typeof paymentVoucherReceiptStatusValues)[number];
+export const paymentVoucherReceiptStatusValues = [
+  'pending',
+  'approved',
+  'verified',
+] as const;
+export type PaymentVoucherReceiptStatus =
+  (typeof paymentVoucherReceiptStatusValues)[number];
 export const paymentVoucherReceiptStatusEnum = MainSchema.enum(
   'payment_voucher_receipt_status',
   paymentVoucherReceiptStatusValues,
@@ -185,45 +209,57 @@ export const paymentVoucherReceiptStatusEnum = MainSchema.enum(
  * OCR read off the paper ("ORD0389"). Outlet/PR context comes via the FKs
  * (voucher, shift assignment) — never duplicated here.
  */
-export const PaymentVoucherReceiptTable = MainSchema.table('payment_voucher_receipt', {
-  id: uuid('id').defaultRandom().notNull().primaryKey(),
-  voucherId: uuid('voucher_id')
-    .notNull()
-    .references(() => PaymentVoucherTable.id, { onDelete: 'cascade' }),
-  // The shift this receipt was logged during (between Time-In and Time-Out).
-  shiftAssignmentId: uuid('shift_assignment_id').references(() => ShiftAssignmentTable.id, {
-    onDelete: 'set null',
-  }),
-  // Auto-generated unique running number: RCP-000001, RCP-000002, …
-  receiptNo: varchar('receipt_no', { length: 40 }).notNull().unique(),
-  // The order number OCR read off the receipt (e.g. ORD0389) — one paper
-  // receipt can only be logged once per voucher (checked in the controller).
-  orderNo: varchar('order_no', { length: 100 }),
-  // 'scan' (OCR, auto-verified) or 'manual' (self-log, agency verifies).
-  source: varchar('source', { length: 20 }).notNull().default('manual'),
-  // Date + time printed on the receipt, as OCR read them.
-  receiptDate: date('receipt_date', { mode: 'string' }),
-  receiptTime: varchar('receipt_time', { length: 10 }),
-  // PR's note to the agency (REQUIRED on self-logs: what was unclear on the
-  // paper — quantity / price / date — or confirmation everything matches).
-  note: varchar('note', { length: 1000 }),
-  proofPhotos: jsonb('proof_photos').$type<string[]>(),
-  /**
-   * The review state (migration 0074). Set on INSERT from `source`: a manual
-   * self-log starts 'pending', a scan or a check-in seal starts 'approved'.
-   */
-  status: paymentVoucherReceiptStatusEnum('status').notNull().default('pending'),
-  /**
-   * When a person decided. NULL beside status='approved' means the row predates
-   * the review flow (backfilled by 0074) — not that it was approved at epoch.
-   */
-  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
-  reviewedBy: varchar('reviewed_by'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdBy: varchar('created_by').notNull().default('system'),
-  updatedBy: varchar('updated_by').notNull().default('system'),
-});
+export const PaymentVoucherReceiptTable = MainSchema.table(
+  'payment_voucher_receipt',
+  {
+    id: uuid('id').defaultRandom().notNull().primaryKey(),
+    voucherId: uuid('voucher_id')
+      .notNull()
+      .references(() => PaymentVoucherTable.id, { onDelete: 'cascade' }),
+    // The shift this receipt was logged during (between Time-In and Time-Out).
+    shiftAssignmentId: uuid('shift_assignment_id').references(
+      () => ShiftAssignmentTable.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    // Auto-generated unique running number: RCP-000001, RCP-000002, …
+    receiptNo: varchar('receipt_no', { length: 40 }).notNull().unique(),
+    // The order number OCR read off the receipt (e.g. ORD0389) — one paper
+    // receipt can only be logged once per voucher (checked in the controller).
+    orderNo: varchar('order_no', { length: 100 }),
+    // 'scan' (OCR, auto-verified) or 'manual' (self-log, agency verifies).
+    source: varchar('source', { length: 20 }).notNull().default('manual'),
+    // Date + time printed on the receipt, as OCR read them.
+    receiptDate: date('receipt_date', { mode: 'string' }),
+    receiptTime: varchar('receipt_time', { length: 10 }),
+    // PR's note to the agency (REQUIRED on self-logs: what was unclear on the
+    // paper — quantity / price / date — or confirmation everything matches).
+    note: varchar('note', { length: 1000 }),
+    proofPhotos: jsonb('proof_photos').$type<string[]>(),
+    /**
+     * The review state (migration 0074). Set on INSERT from `source`: a manual
+     * self-log starts 'pending', a scan or a check-in seal starts 'approved'.
+     */
+    status: paymentVoucherReceiptStatusEnum('status')
+      .notNull()
+      .default('pending'),
+    /**
+     * When a person decided. NULL beside status='approved' means the row predates
+     * the review flow (backfilled by 0074) — not that it was approved at epoch.
+     */
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewedBy: varchar('reviewed_by'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdBy: varchar('created_by').notNull().default('system'),
+    updatedBy: varchar('updated_by').notNull().default('system'),
+  },
+);
 
 /** One earning line on a voucher (frontend `PrPvRow`). Replaced wholesale on update. */
 /**
@@ -239,47 +275,92 @@ export const paymentVoucherComponentValues = [
   'deduction',
   'other',
 ] as const;
-export type PaymentVoucherComponent = (typeof paymentVoucherComponentValues)[number];
+export type PaymentVoucherComponent =
+  (typeof paymentVoucherComponentValues)[number];
 export const paymentVoucherComponentEnum = MainSchema.enum(
   'payment_voucher_component',
   paymentVoucherComponentValues,
 );
 
-export const PaymentVoucherLineTable = MainSchema.table('payment_voucher_line', {
-  id: uuid('id').defaultRandom().notNull().primaryKey(),
-  voucherId: uuid('voucher_id')
-    .notNull()
-    .references(() => PaymentVoucherTable.id, { onDelete: 'cascade' }),
-  // The receipt this line came from (FK) — null for wage seals / legacy lines.
-  receiptId: uuid('receipt_id').references(() => PaymentVoucherReceiptTable.id, {
-    onDelete: 'set null',
-  }),
-  lineDate: date('line_date', { mode: 'string' }),
-  outlet: varchar('outlet', { length: 255 }),
-  description: varchar('description', { length: 500 }).notNull(),
-  quantity: integer('quantity').notNull().default(1),
-  amount: numeric('amount', { precision: 12, scale: 2 }).notNull().default('0'),
-  ref: varchar('ref', { length: 100 }),
-  /**
-   * Which bucket this line belongs to (migration 0051). NULL means the row
-   * predates classification — distinguishable from a genuine 'other'. New
-   * writes should always set it.
-   */
-  component: paymentVoucherComponentEnum('component'),
-  // Proof photo(s) the PR snaps when self-logging (one or many). Same jsonb
-  // array-of-paths pattern as user_profile.portfolio_photos; agency verifies
-  // against these. Null when the entry carries no proof (OCR scan, wages seal).
-  proofPhotos: jsonb('proof_photos').$type<string[]>(),
-  sortOrder: integer('sort_order').notNull().default(0),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdBy: varchar('created_by').notNull().default('system'),
-  updatedBy: varchar('updated_by').notNull().default('system'),
-});
+export const PaymentVoucherLineTable = MainSchema.table(
+  'payment_voucher_line',
+  {
+    id: uuid('id').defaultRandom().notNull().primaryKey(),
+    voucherId: uuid('voucher_id')
+      .notNull()
+      .references(() => PaymentVoucherTable.id, { onDelete: 'cascade' }),
+    // The receipt this line came from (FK) — null for wage seals / legacy lines.
+    receiptId: uuid('receipt_id').references(
+      () => PaymentVoucherReceiptTable.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    lineDate: date('line_date', { mode: 'string' }),
+    /**
+     * The venue's name AS ISSUED — the snapshot the printed and signed voucher
+     * carries. Screens do not read it directly any more: they read `outletName`,
+     * the venue's CURRENT name through `outletId`, and fall back to this text
+     * only when the id is NULL. Free text could never follow a rename — 60 lines
+     * kept saying "Emhub Testing" for the venue now called "UAB Emhub".
+     */
+    outlet: varchar('outlet', { length: 255 }),
+    /**
+     * The venue, by id (migration 0083 — FK → outlet ON DELETE SET NULL,
+     * indexed). The column existed in the database from 0083 on, but was never
+     * declared here, so nothing wrote it and every line after 4 Aug 2026 was
+     * NULL. Written on every insert from the line's own records — its receipt's
+     * shift, else the assignment its `ref` names (`resolveLineOutletIds` in the
+     * repository); older rows by `_backfill-voucher-line-outlet.ts`.
+     *
+     * SET NULL, never CASCADE: deleting a venue must not delete the lines that
+     * record what somebody was paid. NULL then reads as "venue no longer
+     * resolvable" and the screens fall back to the stored text.
+     */
+    outletId: uuid('outlet_id').references(() => OutletTable.id, {
+      onDelete: 'set null',
+    }),
+    description: varchar('description', { length: 500 }).notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    amount: numeric('amount', { precision: 12, scale: 2 })
+      .notNull()
+      .default('0'),
+    ref: varchar('ref', { length: 100 }),
+    /**
+     * Which bucket this line belongs to (migration 0051). NULL means the row
+     * predates classification — distinguishable from a genuine 'other'. New
+     * writes should always set it.
+     */
+    component: paymentVoucherComponentEnum('component'),
+    // Proof photo(s) the PR snaps when self-logging (one or many). Same jsonb
+    // array-of-paths pattern as user_profile.portfolio_photos; agency verifies
+    // against these. Null when the entry carries no proof (OCR scan, wages seal).
+    proofPhotos: jsonb('proof_photos').$type<string[]>(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdBy: varchar('created_by').notNull().default('system'),
+    updatedBy: varchar('updated_by').notNull().default('system'),
+  },
+  (table) => [
+    // Declared because the database HAS it (0083): an index the model does not
+    // name is one `drizzle-kit generate` away from being dropped.
+    index('payment_voucher_line_outlet_id_idx').on(table.outletId),
+  ],
+);
 
 /** How a dispute ended. NULL outcome = still awaiting agency review. */
-export const paymentVoucherDisputeOutcomeValues = ['accepted', 'rejected', 'withdrawn'] as const;
-export type PaymentVoucherDisputeOutcome = (typeof paymentVoucherDisputeOutcomeValues)[number];
+export const paymentVoucherDisputeOutcomeValues = [
+  'accepted',
+  'rejected',
+  'withdrawn',
+] as const;
+export type PaymentVoucherDisputeOutcome =
+  (typeof paymentVoucherDisputeOutcomeValues)[number];
 export const paymentVoucherDisputeOutcomeEnum = MainSchema.enum(
   'payment_voucher_dispute_outcome',
   paymentVoucherDisputeOutcomeValues,
@@ -320,69 +401,85 @@ export const paymentVoucherDisputeComponentEnum = MainSchema.enum(
  * that rewrite is exactly what happens when the agency accepts — a line-keyed
  * dispute would destroy the row it points at at the moment it succeeded.
  */
-export const PaymentVoucherDisputeTable = MainSchema.table('payment_voucher_dispute', {
-  id: uuid('id').defaultRandom().notNull().primaryKey(),
-  voucherId: uuid('voucher_id')
-    .notNull()
-    .references(() => PaymentVoucherTable.id, { onDelete: 'cascade' }),
-  /** The disputed shift day — pairs with PaymentVoucherLineTable.lineDate. */
-  disputeDate: date('dispute_date', { mode: 'string' }).notNull(),
-  component: paymentVoucherDisputeComponentEnum('component').notNull(),
-  reason: varchar('reason', { length: 1000 }),
-  note: varchar('note', { length: 1000 }),
-  raisedAt: timestamp('raised_at', { withTimezone: true }).defaultNow().notNull(),
-  /**
-   * What the voucher said when raised. Compute server-side from the lines —
-   * never accept it from the client, it is the baseline of a money claim.
-   */
-  disputedAmount: numeric('disputed_amount', { precision: 12, scale: 2 }),
-  /** What the PR says it should be. */
-  claimedAmount: numeric('claimed_amount', { precision: 12, scale: 2 }),
-  /**
-   * Evidence, required on new rows by a NOT VALID check constraint. Same
-   * array-of-paths shape as PaymentVoucherLineTable.proofPhotos. Treat as
-   * immutable once submitted, or the agency's decision stops referring to what
-   * they actually saw.
-   */
-  proofPhotos: jsonb('proof_photos').$type<string[]>(),
-  /**
-   * WHICH SHIFT this claim is about — the FK to the paper (migration 0088).
-   *
-   * The shift itself is read THROUGH it (receipt.shift_assignment_id), never
-   * copied here: the receipt already knows its shift, and two columns holding
-   * one fact is how they drift apart.
-   *
-   * Null for a claim about the whole day+bucket, and for every row raised before
-   * the shift picker existed. ON DELETE SET NULL — deleting a receipt's last
-   * line deletes the receipt, and losing the paper must not delete the argument.
-   */
-  receiptId: uuid('receipt_id').references(() => PaymentVoucherReceiptTable.id, {
-    onDelete: 'set null',
-  }),
-  /**
-   * SUPERSEDED by `receiptId` — receipt NUMBERS as jsonb text, which could not
-   * be joined or constrained. Kept only so the pre-0088 rows still read; nothing
-   * writes it now.
-   */
-  receiptRefs: jsonb('receipt_refs').$type<string[]>(),
-  /**
-   * WHICH ITEMS the claim names (migration 0087) — a SNAPSHOT, in the same
-   * spirit as `disputedAmount`: what the PR pointed at when they pointed at it.
-   *
-   * Not an FK to payment_voucher_line: `update()` deletes and re-inserts every
-   * line on a voucher, so a line id does not survive a rewrite. `lineId` is a
-   * best-effort pointer; description/quantity/amount are what keep the claim
-   * legible afterwards. NULL = the whole receipt, or a row predating the column.
-   */
-  disputedItems: jsonb('disputed_items').$type<
-    { lineId: string; description: string; quantity: number; amount: string }[]
-  >(),
-  outcome: paymentVoucherDisputeOutcomeEnum('outcome'),
-  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-  resolvedBy: varchar('resolved_by'),
-  resolutionNote: varchar('resolution_note', { length: 1000 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+export const PaymentVoucherDisputeTable = MainSchema.table(
+  'payment_voucher_dispute',
+  {
+    id: uuid('id').defaultRandom().notNull().primaryKey(),
+    voucherId: uuid('voucher_id')
+      .notNull()
+      .references(() => PaymentVoucherTable.id, { onDelete: 'cascade' }),
+    /** The disputed shift day — pairs with PaymentVoucherLineTable.lineDate. */
+    disputeDate: date('dispute_date', { mode: 'string' }).notNull(),
+    component: paymentVoucherDisputeComponentEnum('component').notNull(),
+    reason: varchar('reason', { length: 1000 }),
+    note: varchar('note', { length: 1000 }),
+    raisedAt: timestamp('raised_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    /**
+     * What the voucher said when raised. Compute server-side from the lines —
+     * never accept it from the client, it is the baseline of a money claim.
+     */
+    disputedAmount: numeric('disputed_amount', { precision: 12, scale: 2 }),
+    /** What the PR says it should be. */
+    claimedAmount: numeric('claimed_amount', { precision: 12, scale: 2 }),
+    /**
+     * Evidence, required on new rows by a NOT VALID check constraint. Same
+     * array-of-paths shape as PaymentVoucherLineTable.proofPhotos. Treat as
+     * immutable once submitted, or the agency's decision stops referring to what
+     * they actually saw.
+     */
+    proofPhotos: jsonb('proof_photos').$type<string[]>(),
+    /**
+     * WHICH SHIFT this claim is about — the FK to the paper (migration 0088).
+     *
+     * The shift itself is read THROUGH it (receipt.shift_assignment_id), never
+     * copied here: the receipt already knows its shift, and two columns holding
+     * one fact is how they drift apart.
+     *
+     * Null for a claim about the whole day+bucket, and for every row raised before
+     * the shift picker existed. ON DELETE SET NULL — deleting a receipt's last
+     * line deletes the receipt, and losing the paper must not delete the argument.
+     */
+    receiptId: uuid('receipt_id').references(
+      () => PaymentVoucherReceiptTable.id,
+      {
+        onDelete: 'set null',
+      },
+    ),
+    /**
+     * SUPERSEDED by `receiptId` — receipt NUMBERS as jsonb text, which could not
+     * be joined or constrained. Kept only so the pre-0088 rows still read; nothing
+     * writes it now.
+     */
+    receiptRefs: jsonb('receipt_refs').$type<string[]>(),
+    /**
+     * WHICH ITEMS the claim names (migration 0087) — a SNAPSHOT, in the same
+     * spirit as `disputedAmount`: what the PR pointed at when they pointed at it.
+     *
+     * Not an FK to payment_voucher_line: `update()` deletes and re-inserts every
+     * line on a voucher, so a line id does not survive a rewrite. `lineId` is a
+     * best-effort pointer; description/quantity/amount are what keep the claim
+     * legible afterwards. NULL = the whole receipt, or a row predating the column.
+     */
+    disputedItems: jsonb('disputed_items').$type<
+      {
+        lineId: string;
+        description: string;
+        quantity: number;
+        amount: string;
+      }[]
+    >(),
+    outcome: paymentVoucherDisputeOutcomeEnum('outcome'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolvedBy: varchar('resolved_by'),
+    resolutionNote: varchar('resolution_note', { length: 1000 }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     createdBy: varchar('created_by').notNull().default('system'),
     updatedBy: varchar('updated_by').notNull().default('system'),
   },
@@ -401,7 +498,10 @@ export const PaymentVoucherDisputeTable = MainSchema.table('payment_voucher_disp
   ],
 );
 
-export const paymentVoucherDayReviewStatusValues = ['approved', 'held'] as const;
+export const paymentVoucherDayReviewStatusValues = [
+  'approved',
+  'held',
+] as const;
 export type PaymentVoucherDayReviewStatus =
   (typeof paymentVoucherDayReviewStatusValues)[number];
 export const paymentVoucherDayReviewStatusEnum = MainSchema.enum(
@@ -456,34 +556,65 @@ export const PaymentVoucherDayReviewTable = MainSchema.table(
      * claims, and a reviewer should be able to tell later which one they made.
      */
     bulk: boolean('bulk').notNull().default(false),
-    reviewedAt: timestamp('reviewed_at', { withTimezone: true }).defaultNow().notNull(),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     reviewedBy: varchar('reviewed_by').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     createdBy: varchar('created_by').notNull().default('system'),
     updatedBy: varchar('updated_by').notNull().default('system'),
   },
   (table) => [
     // One review per day. Re-approving updates the row rather than stacking.
-    uniqueIndex('payment_voucher_day_review_one_per_day').on(table.voucherId, table.reviewDate),
+    uniqueIndex('payment_voucher_day_review_one_per_day').on(
+      table.voucherId,
+      table.reviewDate,
+    ),
   ],
 );
 
-export type PaymentVoucherDayReviewType = typeof PaymentVoucherDayReviewTable.$inferSelect;
+export type PaymentVoucherDayReviewType =
+  typeof PaymentVoucherDayReviewTable.$inferSelect;
 export type PaymentVoucherDayReviewInsertType =
   typeof PaymentVoucherDayReviewTable.$inferInsert;
 
 export type PaymentVoucherType = typeof PaymentVoucherTable.$inferSelect;
 export type PaymentVoucherInsertType = typeof PaymentVoucherTable.$inferInsert;
-export type PaymentVoucherReceiptType = typeof PaymentVoucherReceiptTable.$inferSelect;
-export type PaymentVoucherReceiptInsertType = typeof PaymentVoucherReceiptTable.$inferInsert;
-export type PaymentVoucherLineType = typeof PaymentVoucherLineTable.$inferSelect;
-export type PaymentVoucherLineInsertType = typeof PaymentVoucherLineTable.$inferInsert;
-export type PaymentVoucherDisputeType = typeof PaymentVoucherDisputeTable.$inferSelect;
-export type PaymentVoucherDisputeInsertType = typeof PaymentVoucherDisputeTable.$inferInsert;
+export type PaymentVoucherReceiptType =
+  typeof PaymentVoucherReceiptTable.$inferSelect;
+export type PaymentVoucherReceiptInsertType =
+  typeof PaymentVoucherReceiptTable.$inferInsert;
+export type PaymentVoucherLineType =
+  typeof PaymentVoucherLineTable.$inferSelect;
+export type PaymentVoucherLineInsertType =
+  typeof PaymentVoucherLineTable.$inferInsert;
+export type PaymentVoucherDisputeType =
+  typeof PaymentVoucherDisputeTable.$inferSelect;
+export type PaymentVoucherDisputeInsertType =
+  typeof PaymentVoucherDisputeTable.$inferInsert;
+
+/**
+ * A line as a read returns it: the stored columns plus `outletName`, the
+ * venue's CURRENT name through `outlet_id`, or the stored text when that is
+ * NULL. Write responses return the bare row and do not carry it.
+ */
+export type PaymentVoucherLineRead = PaymentVoucherLineType & {
+  outletName?: string | null;
+};
 
 export type PaymentVoucherWithLines = PaymentVoucherType & {
-  lines: PaymentVoucherLineType[];
+  lines: PaymentVoucherLineRead[];
+  /**
+   * The venues the voucher's lines name, CURRENT names joined " · " (a PR can
+   * work two venues in one week); the stored header text when no line links
+   * to one. Set by `getById`; absent on write responses.
+   */
+  outletName?: string | null;
 };
 
 export type PaymentVoucherFilter = {

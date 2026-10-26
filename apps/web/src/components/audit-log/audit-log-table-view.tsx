@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
@@ -11,11 +12,17 @@ import {
 	RefreshCw,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { AuditLogDetailDialog } from "@/components/audit-log/audit-log-detail-dialog";
 import {
+	auditEntityLabel,
+	formatAuditTimestamp,
+} from "@/components/audit-log/audit-log-format";
+import {
 	auditLogRoleDescription,
 	auditLogRoleLabel,
+	recordedRoleText,
 } from "@/components/audit-log/audit-log-role-copy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,14 +56,7 @@ import {
 } from "@/constants/audit-log-roles";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import {
-	formatAuditDate,
-	formatAuditEntity,
-	formatRoleLabel,
-	getAuditActionBadgeColor,
-	getErrorMessage,
-	truncateId,
-} from "@/lib/utils";
+import { getAuditActionBadgeColor, getErrorMessage } from "@/lib/utils";
 import {
 	type AuditLog,
 	type AuditLogsQueryParams,
@@ -181,7 +181,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 	const showTableLoading = isLoading && auditLogs.length === 0;
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={RoleIcon}
 				title={fill(t.adminAudit.roleAuditLogTitle, { role: roleLabel })}
@@ -213,93 +213,103 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 							</div>
 						</div>
 
-						<div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:flex-wrap">
-							<div className="flex items-center gap-2">
-								<Calendar className="h-4 w-4 text-muted-foreground" />
-								<Label
-									htmlFor="audit-date-from"
-									className="text-xs whitespace-nowrap"
-								>
-									{t.adminAudit.dateFrom}
-								</Label>
-								<Input
-									id="audit-date-from"
-									type="date"
-									value={dateFrom}
-									onChange={(event) => {
-										setDateFrom(event.target.value);
+						<AdminFilters className="admin-finance-filters">
+							<div className="admin-finance-filter-row flex flex-col gap-2 xl:flex-row xl:items-center xl:flex-wrap">
+								<div className="flex items-center gap-2">
+									<Calendar className="h-4 w-4 text-muted-foreground" />
+									<Label
+										htmlFor="audit-date-from"
+										className="text-xs whitespace-nowrap"
+									>
+										{t.adminAudit.dateFrom}
+									</Label>
+									<Input
+										id="audit-date-from"
+										type="date"
+										value={dateFrom}
+										onChange={(event) => {
+											setDateFrom(event.target.value);
+											setCurrentPage(1);
+										}}
+										className="w-[140px]"
+									/>
+								</div>
+								<div className="flex items-center gap-2">
+									<Label
+										htmlFor="audit-date-to"
+										className="text-xs whitespace-nowrap"
+									>
+										{t.adminAudit.dateTo}
+									</Label>
+									<Input
+										id="audit-date-to"
+										type="date"
+										value={dateTo}
+										onChange={(event) => {
+											setDateTo(event.target.value);
+											setCurrentPage(1);
+										}}
+										className="w-[140px]"
+									/>
+								</div>
+								<Select
+									value={selectedAction}
+									onValueChange={(value) => {
+										setSelectedAction(value);
 										setCurrentPage(1);
 									}}
-									className="w-[140px]"
-								/>
-							</div>
-							<div className="flex items-center gap-2">
-								<Label
-									htmlFor="audit-date-to"
-									className="text-xs whitespace-nowrap"
 								>
-									{t.adminAudit.dateTo}
-								</Label>
-								<Input
-									id="audit-date-to"
-									type="date"
-									value={dateTo}
-									onChange={(event) => {
-										setDateTo(event.target.value);
+									<SelectTrigger className="w-[180px]">
+										<SelectValue placeholder={t.adminAudit.allActions} />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">
+											{t.adminAudit.allActions}
+										</SelectItem>
+										{/* The RECORDED action codes — the value AND the label. */}
+										{uniqueActions.map((action) => (
+											<SelectItem key={action} value={action}>
+												{action}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								<Select
+									value={selectedEntity}
+									onValueChange={(value) => {
+										setSelectedEntity(value);
 										setCurrentPage(1);
 									}}
-									className="w-[140px]"
-								/>
+								>
+									<SelectTrigger className="w-[180px]">
+										<SelectValue placeholder={t.adminAudit.allTables} />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">
+											{t.adminAudit.allTables}
+										</SelectItem>
+										{/* The VALUE is the recorded key the API filters on; only
+										    the label is made readable. */}
+										{uniqueEntities.map((entity) => (
+											<SelectItem key={entity} value={entity}>
+												{auditEntityLabel(entity)}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
 							</div>
-							<Select
-								value={selectedAction}
-								onValueChange={(value) => {
-									setSelectedAction(value);
-									setCurrentPage(1);
-								}}
-							>
-								<SelectTrigger className="w-[180px]">
-									<SelectValue placeholder={t.adminAudit.allActions} />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">{t.adminAudit.allActions}</SelectItem>
-									{/* The RECORDED action codes — the value AND the label. */}
-									{uniqueActions.map((action) => (
-										<SelectItem key={action} value={action}>
-											{action}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-							<Select
-								value={selectedEntity}
-								onValueChange={(value) => {
-									setSelectedEntity(value);
-									setCurrentPage(1);
-								}}
-							>
-								<SelectTrigger className="w-[180px]">
-									<SelectValue placeholder={t.adminAudit.allTables} />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">{t.adminAudit.allTables}</SelectItem>
-									{/* Table names as recorded — data on both sides. */}
-									{uniqueEntities.map((entity) => (
-										<SelectItem key={entity} value={entity}>
-											{formatAuditEntity(entity)}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
+						</AdminFilters>
 					</div>
 				</CardHeader>
 
 				<CardContent>
 					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+						<Table className="admin-finance-table">
 							<TableHeader>
-								<TableRow>
+								{/* Headers wrap BETWEEN words only: the page inherits
+								    `overflow-wrap: anywhere`, which split "Table" mid-word
+								    at 1024px. The table scrolls sideways instead. */}
+								<TableRow className="[&>th]:[overflow-wrap:normal]">
 									<TableHead>{t.adminAudit.colTimestamp}</TableHead>
 									<TableHead>{t.adminAudit.colUser}</TableHead>
 									<TableHead>{t.adminAudit.colAction}</TableHead>
@@ -358,24 +368,26 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 											className="cursor-pointer hover:bg-muted/50"
 											onClick={() => handleViewDetail(log)}
 										>
-											<TableCell>{formatAuditDate(log.createdAt)}</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminAudit.colTimestamp}>
+												{formatAuditTimestamp(log.createdAt)}
+											</TableCell>
+											<TableCell data-label={t.adminAudit.colUser}>
 												<div className="flex flex-col">
 													<span className="font-medium">
 														{log.username ||
 															(log.userId
-																? truncateId(log.userId)
+																? t.adminUsers.actorUnknown // never the raw account id
 																: t.adminAudit.systemActor)}
 													</span>
 													{/* The role AS RECORDED on the log row. */}
 													{log.role && (
 														<span className="text-xs text-muted-foreground capitalize">
-															{formatRoleLabel(log.role)}
+															{recordedRoleText(log.role)}
 														</span>
 													)}
 												</div>
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminAudit.colAction}>
 												<Badge
 													variant="outline"
 													className={getAuditActionBadgeColor(log.action)}
@@ -383,11 +395,16 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 													{log.action}
 												</Badge>
 											</TableCell>
-											<TableCell>{formatAuditEntity(log.entity)}</TableCell>
-											<TableCell className="font-mono text-xs">
+											<TableCell data-label={t.adminAudit.colTable}>
+												{auditEntityLabel(log.entity)}
+											</TableCell>
+											<TableCell
+												data-label={t.adminAudit.colIpAddress}
+												className="font-mono text-xs"
+											>
 												{log.ipAddress}
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminAudit.colDetail}>
 												<Button
 													variant="ghost"
 													size="icon"

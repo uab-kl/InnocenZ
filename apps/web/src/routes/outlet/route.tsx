@@ -23,10 +23,17 @@ import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
 import { getActiveOrg } from "@/lib/active-org";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { ensurePortal, guardPortalClient } from "@/lib/auth/guards";
+import {
+	currentAppPath,
+	needsOrganisationChoice,
+	organisationChooserHref,
+} from "@/lib/auth/needs-organisation-choice";
 import { useProfile } from "@/lib/auth/use-profile";
+import { hardNavigate } from "@/lib/hard-navigate";
 import { PortalLocaleProvider } from "@/lib/portal-i18n/context";
 import "@agency-portal/prototype-theme.css";
 import "@agency-portal/agency-app-overrides.css";
+import "@agency-portal/approved-portal-design.css";
 
 export const Route = createFileRoute("/outlet")({
 	// Outlet-only tree: admin/agency sessions are sent to their own portal.
@@ -39,9 +46,27 @@ function OutletLayout() {
 	// to keep SSR hydration clean.
 	const [mounted, setMounted] = useState(false);
 	const [orgStatus, setOrgStatus] = useState<string | null>(null);
-	const { data: profile } = useProfile();
+	const {
+		data: profile,
+		isError: profileError,
+		isFetching: profileFetching,
+		refetch: refetchProfile,
+	} = useProfile();
 	const modulePermissions =
 		getPortalSessionKind() === "real" ? profile?.modulePermissions : undefined;
+	/*
+	 * ⚠️ WHICH VENUE — decided before anything renders or is fetched.
+	 *
+	 * With no organisation chosen in this tab no `x-org-id` travels, and the
+	 * server picks: an account holding an agency AND a venue was shown the
+	 * agency's invoices under the venue's name. Somebody the chooser would ask
+	 * goes there; a one-organisation account never does. A boolean, so the
+	 * effect below can depend on the ANSWER rather than the whole profile.
+	 */
+	const mustChooseOrganisation =
+		getPortalSessionKind() === "real" && profile?.id
+			? needsOrganisationChoice(profile, "outlet", getActiveOrg())
+			: false;
 
 	// Real backend accounts see the same pages with no data; demo accounts keep
 	// their seeded data. Blank before the first portal render so real accounts
@@ -53,6 +78,15 @@ function OutletLayout() {
 			const ok = await guardPortalClient("outlet");
 			if (cancelled || !ok) return;
 			if (getPortalSessionKind() === "real") {
+				// A successful portal check does not mean useProfile has loaded.
+				// Keep the page/redirect gate closed until the existing identity
+				// resolution can run for this account, including on direct links.
+				if (!profile?.id) return;
+				// The gate stays closed while the page leaves for the chooser.
+				if (mustChooseOrganisation) {
+					hardNavigate(organisationChooserHref(currentAppPath()));
+					return;
+				}
 				useStore.setState(buildBlankPortalReset());
 				// The blank reset wipes outletOwner / sub-role to demo defaults every
 				// mount; re-apply the real identity so it survives reloads.
@@ -135,7 +169,7 @@ function OutletLayout() {
 		// here the effect would run once with no id and the re-derive above could
 		// never fire — the tab would sit on a missing identity and fall through to
 		// demo data. The re-run is safe: every step is idempotent.
-	}, [profile?.id]);
+	}, [profile?.id, mustChooseOrganisation]);
 
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
@@ -195,7 +229,19 @@ function OutletLayout() {
 	]);
 
 	if (!mounted) {
-		return <PortalGateLoading variant="portal" />;
+		return (
+			<PortalGateLoading
+				variant="portal"
+				onRetry={
+					getPortalSessionKind() === "real" && profileError && !profile?.id
+						? () => {
+								void refetchProfile();
+							}
+						: undefined
+				}
+				retrying={profileFetching}
+			/>
+		);
 	}
 
 	return (

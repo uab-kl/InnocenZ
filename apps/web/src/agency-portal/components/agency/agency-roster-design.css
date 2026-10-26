@@ -1,0 +1,734 @@
+/* Approved Agency Today / Roster presentation; all records and actions stay
+   in their existing components. Wide schedules scroll inside their own panel. */
+.agency-roster-design,
+.agency-today-design {
+	min-width: 0;
+}
+.agency-roster-design > *,
+.agency-today-design > *,
+.agency-today-design .iz-portal-home-grid > * {
+	min-width: 0;
+}
+.agency-roster-design .iz-roster-toolbar {
+	gap: 16px;
+	padding: 0;
+	margin: 20px 0;
+	border: 0;
+	background: transparent;
+}
+.agency-roster-design .iz-roster-toggle {
+	border-radius: 10px;
+	padding: 4px;
+	background: var(--iz-panel2);
+}
+.agency-roster-design .iz-roster-toggle button {
+	min-height: 46px;
+	padding: 10px 20px;
+	border-radius: 7px;
+	font-size: var(--iz-fs-body);
+	touch-action: manipulation;
+}
+.agency-roster-design .iz-roster-toggle button.on {
+	background: var(--iz-gold-d);
+	color: var(--iz-txt);
+}
+.agency-roster-design .iz-roster-pr-link {
+	margin-left: auto;
+	min-height: 46px;
+	padding: 10px 16px;
+	border-radius: 8px;
+}
+/* The legacy popover has a 390px minimum. Bound the box and its calendar
+   columns together, so the Saturday column never extends past the surface. */
+.agency-roster-design .iz-roster-planning-date .iz-hist-cal--popover {
+	box-sizing: border-box;
+	width: min(390px, calc(100vw - 48px));
+	min-width: 0;
+	max-width: calc(100vw - 48px);
+}
+.agency-roster-design
+	.iz-roster-planning-date-popover
+	:is(.rdp-root, .rdp-months, .rdp-month, .rdp-month_grid) {
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+}
+.agency-roster-design .iz-roster-planning-date-popover .rdp-month_grid {
+	table-layout: fixed;
+}
+.agency-roster-design
+	.iz-roster-planning-date-popover
+	:is(.rdp-weekdays, .rdp-week) {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	width: 100%;
+}
+.agency-roster-design
+	.iz-roster-planning-date-popover
+	:is(.rdp-weekday, td.rdp-day) {
+	width: auto;
+	min-width: 0;
+	padding: 0;
+}
+.agency-roster-design .iz-roster-planning-date-popover td.rdp-day {
+	height: auto;
+	aspect-ratio: auto;
+}
+.agency-roster-design .iz-roster-planning-date-popover .rdp-day button {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	min-height: 44px;
+	height: 44px;
+	padding: 0;
+	font-size: var(--iz-fs-body);
+}
+.agency-roster-design
+	.iz-roster-planning-date-popover
+	:is(
+		.iz-hist-cal-nav,
+		.iz-hist-cal-nav-field,
+		.iz-hist-cal-select-wrap,
+		.iz-hist-cal-select
+	) {
+	min-width: 0;
+	max-width: 100%;
+}
+.agency-roster-design .iz-roster-stats {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	flex: 1 0 100%;
+	order: 10;
+	gap: 16px;
+	margin-top: 4px;
+	align-items: stretch;
+}
+.agency-roster-design[data-roster-view="planning"] .iz-roster-stats {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.agency-roster-design .iz-roster-stat {
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 22px;
+	min-width: 0;
+	min-height: 140px;
+	white-space: normal;
+	border: 1px solid var(--iz-line);
+	border-radius: 14px;
+	background: var(--iz-panel);
+	font-size: var(--iz-fs-body);
+	font-weight: 500;
+}
+.agency-roster-design .iz-roster-stat + .iz-roster-stat::before {
+	display: none;
+}
+.agency-roster-design .iz-roster-stat b {
+	font-size: var(--iz-fs-display);
+	line-height: 1.2;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+.agency-roster-design .iz-roster-stat:last-child {
+	background: var(--iz-panel);
+}
+.agency-roster-design .agency-roster-stat-detail {
+	font-size: var(--iz-fs-caption);
+}
+.agency-roster-design .iz-roster-planning,
+.agency-roster-design .iz-roster-gps {
+	min-width: 0;
+	margin-top: 20px;
+}
+.agency-roster-design .iz-roster-planning-panel {
+	min-width: 0;
+	padding: 20px;
+	border: 1px solid var(--iz-line);
+	border-radius: 14px;
+	background: var(--iz-panel);
+}
+.agency-roster-filter-disclosure,
+.agency-roster-filter-content {
+	min-width: 0;
+}
+.agency-roster-filter-toggle {
+	display: none;
+}
+.agency-roster-design .iz-roster-filterbar {
+	padding: 20px;
+	margin: 0 0 20px;
+	background: var(--iz-panel2);
+	border: 1px solid var(--iz-line);
+	border-radius: 12px;
+}
+.agency-roster-design .iz-roster-filterbar__head {
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-bottom: 16px;
+}
+.agency-roster-design .iz-roster-filterbar__title,
+.agency-roster-design .iz-roster-filterbar__count {
+	font-size: var(--iz-fs-body);
+	white-space: normal;
+}
+.agency-roster-design .iz-roster-filterbar__clear {
+	min-height: 44px;
+	font-size: var(--iz-fs-body);
+}
+.agency-roster-design .iz-roster-filterbar__row {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 16px;
+	align-items: end;
+}
+.agency-roster-design .iz-roster-filterbar__field,
+.agency-roster-design .iz-roster-filterbar__range,
+.agency-roster-design .iz-roster-filterbar__rangerow,
+.agency-roster-design .iz-roster-filterbar__time,
+.agency-roster-design .iz-roster-filterbar__inputwrap {
+	min-width: 0;
+	width: 100%;
+	max-width: 100%;
+}
+.agency-roster-design .iz-roster-filterbar__rangerow {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	gap: 8px;
+}
+.agency-roster-design .iz-roster-filterbar__input--num,
+.agency-roster-design .iz-roster-filterbar__field .iz-select {
+	min-width: 0;
+	width: 100%;
+}
+.agency-roster-design .iz-roster-filterbar__inputwrap {
+	min-height: 46px;
+	box-sizing: border-box;
+}
+.agency-roster-design .iz-roster-filterbar__label {
+	font-size: var(--iz-fs-body);
+	margin-bottom: 8px;
+}
+.agency-roster-design .iz-roster-table-wrap,
+.agency-roster-design .iz-roster-week-scroll {
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+}
+.agency-roster-design .iz-roster-table {
+	min-width: 1260px;
+	table-layout: auto;
+}
+.agency-roster-design .iz-roster-table :is(th, td) {
+	padding: 16px;
+	vertical-align: middle;
+}
+.agency-roster-design .iz-roster-row-actions {
+	align-items: center;
+	gap: 8px;
+}
+.agency-roster-design .iz-roster-amount-btn {
+	min-height: 44px;
+}
+.agency-roster-design .iz-roster-week-table {
+	min-width: 1760px;
+	font-size: var(--iz-fs-body);
+}
+.agency-roster-design .iz-roster-week-col-pr {
+	width: 220px;
+}
+.agency-roster-design .iz-roster-week-col-day {
+	width: calc((100% - 220px) / 7);
+}
+.agency-roster-design .iz-roster-week-pr {
+	width: 220px;
+	padding: 16px;
+	background: var(--iz-panel2);
+}
+.agency-roster-design .iz-roster-week-pr-col {
+	width: 220px;
+	background: var(--iz-panel2);
+}
+.agency-roster-design .iz-roster-week-td {
+	padding: 10px;
+	vertical-align: top;
+}
+.agency-roster-design .iz-roster-week-cell {
+	padding: 14px;
+	min-height: 100px;
+	margin-bottom: 10px;
+	border-radius: 10px;
+	white-space: normal;
+}
+.agency-roster-design .iz-roster-week-cell .outlet,
+.agency-roster-design .iz-roster-week-pr .name {
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+}
+.agency-roster-design .iz-roster-week-cell :is(.shift, .status, .reason) {
+	font-size: var(--iz-fs-caption);
+	line-height: 1.5;
+	white-space: normal;
+}
+.agency-roster-design .iz-roster-week-head {
+	gap: 12px;
+	margin-block: 20px 16px;
+}
+.agency-roster-design .iz-roster-week-nav {
+	width: 46px;
+	height: 46px;
+	flex-shrink: 0;
+}
+.agency-roster-design .iz-roster-demand-outlet {
+	min-width: 0;
+	padding-block: 12px;
+}
+.agency-roster-design .iz-roster-demand-band-rail {
+	gap: 12px;
+	padding-bottom: 12px;
+}
+.agency-roster-design .iz-roster-demand-band-rail > button {
+	flex-basis: 240px;
+	min-width: 220px;
+	padding: 16px;
+}
+.agency-roster-design .iz-roster-auto-assign {
+	min-height: 48px;
+	margin-block: 16px;
+	padding: 14px 16px;
+	white-space: normal;
+	text-align: left;
+}
+.agency-roster-planning-helper {
+	margin-block: 20px;
+	padding: 16px;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+}
+.agency-roster-planning-helper summary {
+	cursor: pointer;
+	font-weight: 600;
+	min-height: 28px;
+}
+.agency-today-design .iz-portal-home-grid {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 20px;
+}
+.agency-today-design .iz-portal-kpi-grid {
+	grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+	gap: 16px;
+	margin-top: 20px;
+}
+.agency-today-design .iz-portal-kpi {
+	padding: 22px;
+	min-height: 140px;
+	border: 1px solid var(--iz-line);
+}
+.agency-today-design .iz-agency-home-tabs {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+	padding: 10px;
+}
+.agency-today-design .iz-agency-home-tab {
+	padding: 16px 10px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+}
+.agency-today-design .iz-agency-home-tab.on {
+	border-color: var(--iz-line2);
+	background: var(--iz-panel2);
+}
+.agency-today-design .iz-agency-home-tab .l {
+	text-transform: none;
+	letter-spacing: normal;
+	font-size: var(--iz-fs-body);
+}
+.agency-today-design .iz-agency-home-tab .n {
+	font-size: var(--iz-fs-head);
+}
+.agency-today-design .iz-portal-panel-head {
+	flex-wrap: wrap;
+	gap: 12px;
+	padding: 20px;
+}
+.agency-today-design .iz-portal-table-wrap {
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+}
+.agency-today-design .iz-portal-table {
+	min-width: 760px;
+}
+.agency-today-design .iz-portal-home-aside {
+	margin-top: 0;
+}
+
+/* These classes belong only to Roster sheets, which mount outside the page. */
+body[data-agency-design] .iz-roster-shift-pick-scroll {
+	max-width: 100%;
+	min-width: 0;
+}
+body[data-agency-design] .iz-roster-shift-pick-list {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 12px;
+}
+body[data-agency-design] .iz-roster-shift-pick {
+	min-width: 0;
+	max-width: 100%;
+	padding: 18px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+body[data-agency-design] .iz-demand-sheet-top {
+	flex-wrap: wrap;
+	gap: 12px;
+}
+body[data-agency-design] .iz-demand-sheet-titles {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+	.agency-roster-design .iz-roster-stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.agency-roster-design .iz-roster-filterbar__row {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+@media (max-width: 767px) {
+	.agency-roster-design .iz-roster-toolbar {
+		align-items: stretch;
+	}
+	.agency-roster-design .iz-roster-toggle {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 100%;
+	}
+	.agency-roster-design .iz-roster-stats,
+	.agency-roster-design[data-roster-view="planning"] .iz-roster-stats {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+	}
+	.agency-roster-design .iz-roster-stat {
+		padding: 20px;
+		min-height: 130px;
+	}
+	.agency-roster-design .iz-roster-pr-link {
+		margin-left: 0;
+	}
+	.agency-roster-design .iz-roster-planning-panel {
+		padding: 14px;
+	}
+	.agency-roster-filter-disclosure {
+		margin-bottom: 20px;
+		border: 1px solid var(--iz-line);
+		border-radius: 12px;
+		background: var(--iz-panel2);
+	}
+	.agency-roster-filter-toggle {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		width: 100%;
+		min-height: 52px;
+		padding: 14px 16px;
+		border: 0;
+		border-radius: 12px;
+		background: transparent;
+		color: var(--iz-txt);
+		font-size: var(--iz-fs-body);
+		font-weight: 600;
+		text-align: left;
+	}
+	.agency-roster-filter-toggle svg {
+		margin-left: auto;
+		width: 18px;
+		height: 18px;
+		flex-shrink: 0;
+	}
+	.agency-roster-filter-disclosure[data-open="false"]
+		.agency-roster-filter-content {
+		display: none;
+	}
+	.agency-roster-filter-disclosure[data-open="true"]
+		.agency-roster-filter-toggle
+		svg {
+		transform: rotate(180deg);
+	}
+	.agency-roster-design .iz-roster-filterbar {
+		padding: 0 16px 16px;
+		margin: 0;
+		border: 0;
+		background: transparent;
+	}
+	.agency-roster-design .iz-roster-filterbar__title,
+	.agency-roster-design .iz-roster-filterbar__spacer {
+		display: none;
+	}
+	.agency-roster-design .iz-roster-filterbar__head {
+		justify-content: space-between;
+		align-items: center;
+	}
+	.agency-roster-design .iz-roster-filterbar__row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.agency-roster-design .iz-roster-week-pr,
+	.agency-roster-design .iz-roster-week-pr-col {
+		position: static;
+	}
+	.agency-roster-design .iz-roster-week-pr .name {
+		display: block;
+		overflow: visible;
+		white-space: normal;
+	}
+	.agency-roster-design .agency-roster-live-card > .iz-between {
+		align-items: flex-start;
+		flex-wrap: wrap;
+		gap: 14px;
+	}
+	.agency-roster-design .iz-roster-card-meta {
+		gap: 12px;
+		line-height: 1.5;
+	}
+	.agency-roster-design .iz-roster-actions {
+		flex-wrap: wrap;
+		gap: 10px;
+		margin-top: 16px;
+	}
+	.agency-roster-design .iz-roster-toolbar .iz-roster-filters {
+		flex: 1 1 100%;
+		width: 100%;
+		min-width: 0;
+	}
+	.agency-roster-design .iz-roster-filters > div,
+	.agency-roster-design .iz-roster-toolbar .iz-roster-planning-date,
+	.agency-roster-design .iz-roster-toolbar .iz-roster-planning-date-trigger {
+		width: 100%;
+		min-width: 0;
+	}
+	.agency-roster-design .iz-roster-planning-date .iz-hist-cal--popover {
+		width: min(390px, 100%);
+		max-width: 100%;
+		left: 0;
+		right: auto;
+	}
+	.agency-today-design .iz-portal-kpi-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.agency-today-design .iz-agency-home-tabs {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.agency-today-design .iz-portal-panel-head {
+		padding: 16px;
+	}
+	.agency-today-design .iz-portal-hub-link {
+		white-space: normal;
+		min-height: 44px;
+	}
+	/* The 760px floor is for desktop columns; on a phone the table fits its
+	   content as it did before the redesign and scrolls only past that. */
+	.agency-today-design .iz-portal-table {
+		min-width: 0;
+	}
+}
+
+/* Full-width date controls and consistently sized filter fields. */
+.iz-portal .iz-roster-toolbar {
+	display: grid;
+	grid-template-columns: minmax(240px, 1fr) minmax(280px, 2fr);
+	gap: 16px;
+	align-items: stretch;
+}
+.iz-portal .iz-roster-toolbar .iz-roster-toggle {
+	display: flex;
+	width: 100%;
+}
+.iz-portal .iz-roster-toolbar .iz-roster-toggle > button {
+	flex: 1;
+	min-height: 46px;
+}
+.iz-portal .iz-roster-toolbar .iz-roster-filters {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+}
+.iz-portal
+	.iz-roster-toolbar
+	:is(.iz-roster-week-control, .iz-roster-planning-date, .iz-roster-date-live) {
+	width: 100%;
+	min-width: 0;
+	max-width: none;
+}
+.iz-portal .iz-roster-toolbar .iz-roster-planning-date-trigger {
+	width: 100%;
+	min-height: 58px;
+	padding: 12px 18px;
+	font-size: var(--iz-fs-body);
+	border-radius: 10px;
+}
+.iz-portal .iz-roster-filterbar__row--planning {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 18px;
+}
+.iz-portal .iz-roster-filterbar__row--planning .iz-roster-filterbar__range {
+	grid-column: span 2;
+}
+.iz-portal
+	.iz-roster-filterbar__row--planning
+	:is(.iz-roster-filterbar__inputwrap, select, .iz-time-picker-btn) {
+	min-height: 46px;
+	border-radius: 8px;
+}
+.iz-portal
+	.iz-roster-filterbar__row--planning
+	.iz-roster-filterbar__inputwrap
+	input {
+	min-height: 0;
+}
+@media (max-width: 767px) {
+	.iz-portal .iz-roster-toolbar,
+	.iz-portal .iz-roster-filterbar__row--planning {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.iz-portal .iz-roster-filterbar__row--planning .iz-roster-filterbar__range {
+		grid-column: auto;
+	}
+}
+
+/* A flat toolbar: every filter uses the same control surface. */
+.iz-portal .iz-shift-filters {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+}
+.iz-portal .iz-shift-filters .iz-roster-filterbar__head {
+	margin-bottom: 14px;
+}
+.iz-portal .iz-shift-filters .iz-roster-filterbar__row {
+	display: grid;
+	grid-template-columns: minmax(140px, 1.2fr) repeat(2, minmax(125px, 1fr)) repeat(
+			2,
+			minmax(210px, 1.5fr)
+		);
+	gap: 12px;
+	align-items: end;
+}
+.iz-portal
+	.iz-shift-filters
+	:is(.iz-roster-filterbar__field, .iz-roster-filterbar__range) {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+.iz-portal .iz-shift-filters .iz-roster-filterbar__label {
+	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	line-height: 20px;
+	margin-bottom: 6px;
+	color: var(--iz-muted);
+}
+.iz-portal
+	.iz-shift-filters
+	:is(
+		.iz-roster-filterbar__inputwrap,
+		.iz-select,
+		.iz-roster-filterbar__rangerow
+	) {
+	min-height: 46px;
+	height: 46px;
+	box-sizing: border-box;
+	border: 1px solid var(--iz-line);
+	border-radius: 8px;
+	background: var(--iz-panel);
+	box-shadow: none;
+}
+.iz-portal .iz-shift-filters .iz-roster-filterbar__rangerow {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	align-items: center;
+	gap: 0;
+	padding: 0 4px;
+}
+.iz-portal
+	.iz-shift-filters
+	:is(
+		.iz-roster-filterbar__inputwrap input,
+		.iz-roster-filterbar__rangerow input,
+		.iz-roster-filterbar__rangerow .iz-time-picker-btn
+	) {
+	min-width: 0;
+	width: 100%;
+	height: 44px;
+	min-height: 44px;
+	padding: 0 10px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	outline: none;
+	border-radius: 6px;
+	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-weight: 400;
+}
+.iz-portal .iz-shift-filters .iz-roster-filterbar__inputwrap input {
+	padding: 0;
+}
+.iz-portal .iz-shift-filters .iz-roster-filterbar__time {
+	min-width: 0;
+	width: 100%;
+}
+.iz-portal
+	.iz-shift-filters
+	:is(
+		.iz-roster-filterbar__inputwrap,
+		.iz-roster-filterbar__rangerow
+	):focus-within {
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 2px;
+}
+@media (max-width: 1250px) {
+	.iz-portal .iz-shift-filters .iz-roster-filterbar__row {
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+	}
+	.iz-portal .iz-shift-filters .iz-roster-filterbar__field {
+		grid-column: span 2;
+	}
+	.iz-portal .iz-shift-filters .iz-roster-filterbar__range {
+		grid-column: span 3;
+	}
+}
+@media (max-width: 767px) {
+	.iz-portal .iz-shift-filters .iz-roster-filterbar__row {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 14px;
+	}
+	.iz-portal
+		.iz-shift-filters
+		:is(.iz-roster-filterbar__field, .iz-roster-filterbar__range) {
+		grid-column: 1;
+	}
+}
+
+.iz-portal .iz-shift-filters .iz-select {
+	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-weight: 400;
+}
+@media (max-width: 767px) {
+	.iz-portal .agency-roster-filter-disclosure:has(.iz-shift-filters) {
+		border: 0;
+		background: transparent;
+		margin-bottom: 0;
+	}
+	.iz-portal
+		.agency-roster-filter-disclosure:has(.iz-shift-filters)
+		.agency-roster-filter-toggle {
+		padding-inline: 0;
+	}
+}

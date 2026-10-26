@@ -10,6 +10,7 @@ import {
 	usePayoutBatch,
 	usePayoutBatches,
 } from "@agency-portal/hooks/use-payout-batches";
+import { formatPayrollWeekRange } from "@agency-portal/lib/payroll-display";
 import {
 	formatLocalIso,
 	parseLocalIso,
@@ -247,7 +248,8 @@ export function PayoutRunsPanel({ canPay }: { canPay: boolean }) {
 									<div className="min-w-0">
 										<p className="iz-sm truncate font-bold">{b.runNo}</p>
 										<p className="iz-tiny iz-muted2 truncate">
-											{b.weekStart} → {b.weekEnd} · {b.itemCount}
+											{formatPayrollWeekRange(b.weekStart, b.weekEnd, t)} ·{" "}
+											{b.itemCount}
 										</p>
 									</div>
 									<div className="flex shrink-0 items-center gap-2">
@@ -352,7 +354,7 @@ function PayoutBatchDetail({
 			<div>
 				<p className="iz-h3">{batch.runNo}</p>
 				<p className="iz-tiny iz-muted2">
-					{batch.weekStart} → {batch.weekEnd} ·{" "}
+					{formatPayrollWeekRange(batch.weekStart, batch.weekEnd, t)} ·{" "}
 					{formatRM(Number(batch.totalAmount))}
 				</p>
 			</div>

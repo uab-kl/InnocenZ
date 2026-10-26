@@ -5,8 +5,6 @@ import {
 	Building2,
 	CheckCircle2,
 	Clock,
-	Handshake,
-	LayoutGrid,
 	Loader2,
 	RefreshCw,
 	Store,
@@ -17,19 +15,9 @@ import { useAuth } from "@/lib/auth-context";
 import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, getErrorMessage } from "@/lib/utils";
-import {
-	type AdminRequest,
-	fetchAdminRequests,
-} from "@/services/admin-request";
 import { type Agency, fetchAgencies } from "@/services/agency";
 import { fetchOutlets, type Outlet } from "@/services/outlet";
-import {
-	fetchAdminPendingJobs,
-	type SpecialService,
-} from "@/services/special-service";
-
 export const Route = createFileRoute("/admin/rbac/pending")({
 	component: PendingApprovalsPage,
 	head: () => ({
@@ -39,15 +27,12 @@ export const Route = createFileRoute("/admin/rbac/pending")({
 
 type PendingHref =
 	| "/admin/user-management/agency"
-	| "/admin/user-management/outlet"
-	| "/admin/service/requests"
-	| "/admin/service/plan-changes"
-	| "/admin/service/other";
+	| "/admin/user-management/outlet";
 
 type PendingRow = {
 	id: string;
 	rawId: string;
-	kind: "agency" | "outlet" | "request" | "job";
+	kind: "agency" | "outlet";
 	typeLabel: string;
 	icon: typeof Building2;
 	name: string;
@@ -55,17 +40,6 @@ type PendingRow = {
 	date: string;
 	createdAt: string;
 	href: PendingHref;
-};
-
-const REQUEST_TYPE_LABELS: Record<
-	AdminRequest["type"],
-	(t: PortalTranslations) => string
-> = {
-	pos_integration_quote: (t) => t.admin.reqPosQuote,
-	custom_renegotiation: (t) => t.admin.reqCustom,
-	plan_change: (t) => t.admin.reqPlanChange,
-	contact: (t) => t.admin.reqContact,
-	other: (t) => t.admin.reqOther,
 };
 
 const PAGE_SIZE = 20;
@@ -92,40 +66,14 @@ function PendingApprovalsPage() {
 			),
 		staleTime: 30_000,
 	});
-	const requestsQuery = useQuery({
-		queryKey: ["pending-approvals", "requests"],
-		queryFn: () =>
-			fetchAdminRequests(
-				{ status: "pending", page: 1, pageSize: PAGE_SIZE },
-				logout,
-			),
-		staleTime: 30_000,
-	});
-	const jobsQuery = useQuery({
-		queryKey: ["pending-approvals", "jobs"],
-		queryFn: () =>
-			fetchAdminPendingJobs({ page: 1, pageSize: PAGE_SIZE }, logout),
-		staleTime: 30_000,
-	});
+	const isLoading = agenciesQuery.isLoading || outletsQuery.isLoading;
 
-	const isLoading =
-		agenciesQuery.isLoading ||
-		outletsQuery.isLoading ||
-		requestsQuery.isLoading ||
-		jobsQuery.isLoading;
-
-	// The four sources fail independently, so a failure is shown as a banner over
+	// The organization sources fail independently, so a failure is shown as a banner over
 	// whatever DID load — never as a replacement branch that would hide good rows.
-	const loadError =
-		agenciesQuery.error ??
-		outletsQuery.error ??
-		requestsQuery.error ??
-		jobsQuery.error;
+	const loadError = agenciesQuery.error ?? outletsQuery.error;
 	const refetchAll = () => {
 		agenciesQuery.refetch();
 		outletsQuery.refetch();
-		requestsQuery.refetch();
-		jobsQuery.refetch();
 	};
 
 	const rows: PendingRow[] = [
@@ -157,42 +105,6 @@ function PendingApprovalsPage() {
 				href: "/admin/user-management/outlet",
 			}),
 		),
-		...(requestsQuery.data?.data ?? []).map(
-			(r: AdminRequest): PendingRow => ({
-				id: `request-${r.id}`,
-				rawId: r.id,
-				kind: "request",
-				typeLabel:
-					r.type === "plan_change"
-						? t.rbac.typePlanChange
-						: t.rbac.typePlanRequest,
-				icon: Handshake,
-				name: r.subscriberName,
-				detail: REQUEST_TYPE_LABELS[r.type](t),
-				date: formatDate(r.createdAt),
-				createdAt: r.createdAt,
-				// The Plan Request inbox filters to its own two types, so a
-				// plan_change must deep-link to the page that actually lists it.
-				href:
-					r.type === "plan_change"
-						? "/admin/service/plan-changes"
-						: "/admin/service/requests",
-			}),
-		),
-		...(jobsQuery.data?.data ?? []).map(
-			(j: SpecialService): PendingRow => ({
-				id: `job-${j.id}`,
-				rawId: j.id,
-				kind: "job",
-				typeLabel: t.rbac.typeJobPosting,
-				icon: LayoutGrid,
-				name: j.title,
-				detail: `${j.postingAgencyName || t.rbac.agencyFallback} · ${j.category}`,
-				date: formatDate(j.createdAt),
-				createdAt: j.createdAt,
-				href: "/admin/service/other",
-			}),
-		),
 	].sort(
 		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
 	);
@@ -201,13 +113,11 @@ function PendingApprovalsPage() {
 	// unpaginated total — so we can say when this list is not the whole story.
 	const totalPending =
 		(agenciesQuery.data?.pagination.totalCount ?? 0) +
-		(outletsQuery.data?.pagination.totalCount ?? 0) +
-		(requestsQuery.data?.pagination.totalCount ?? 0) +
-		(jobsQuery.data?.pagination.totalCount ?? 0);
+		(outletsQuery.data?.pagination.totalCount ?? 0);
 	const truncated = totalPending > rows.length;
 
 	return (
-		<PageShell>
+		<PageShell className="admin-overview-design admin-pending-design">
 			<PageHeader
 				icon={Clock}
 				title={t.rbac.pendingTitle}
@@ -262,8 +172,10 @@ function PendingApprovalsPage() {
 									<row.icon className="h-4 w-4" />
 								</span>
 								<div className="min-w-0">
-									<div className="truncate text-sm font-bold">{row.name}</div>
-									<div className="truncate text-[11.5px] text-muted-foreground">
+									<div className="admin-pending-name text-sm font-bold">
+										{row.name}
+									</div>
+									<div className="admin-pending-detail text-muted-foreground">
 										{row.detail}
 									</div>
 								</div>
@@ -277,30 +189,11 @@ function PendingApprovalsPage() {
 								{row.date}
 							</div>
 							<div className="md:text-right">
-								{row.kind === "agency" ? (
-									<Link
-										to="/admin/user-management/agency"
-										search={{ focus: row.rawId }}
-										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
-									>
-										{t.rbac.review} →
+								<Button asChild variant="outline" size="sm">
+									<Link to={row.href} search={{ focus: row.rawId }}>
+										{t.rbac.review} <span aria-hidden>→</span>
 									</Link>
-								) : row.kind === "outlet" ? (
-									<Link
-										to="/admin/user-management/outlet"
-										search={{ focus: row.rawId }}
-										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
-									>
-										{t.rbac.review} →
-									</Link>
-								) : (
-									<Link
-										to={row.href}
-										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
-									>
-										{t.rbac.review} →
-									</Link>
-								)}
+								</Button>
 							</div>
 						</div>
 					))

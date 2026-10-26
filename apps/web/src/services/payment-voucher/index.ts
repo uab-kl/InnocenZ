@@ -31,7 +31,14 @@ export interface PaymentVoucherLine {
 	id: string;
 	voucherId: string;
 	lineDate: string | null;
+	/** The venue's name AS ISSUED — the printed voucher's snapshot. Screens show `outletName`. */
 	outlet: string | null;
+	/**
+	 * The venue's CURRENT name, read through the line's `outlet_id` (falls back
+	 * to `outlet` server-side when the line has no id). Absent on write
+	 * responses, so readers fall back to `outlet` themselves.
+	 */
+	outletName?: string | null;
 	description: string;
 	quantity: number;
 	// numeric(12,2) is serialized as a string by the backend.
@@ -111,7 +118,14 @@ export interface PaymentVoucher {
 	 */
 	prNickname: string | null;
 	prIc: string | null;
+	/** The header venue AS ISSUED — the printed voucher's snapshot. Screens show `outletName`. */
 	outlet: string | null;
+	/**
+	 * The CURRENT names of the venues the voucher's lines name, joined " · " (a
+	 * PR can work two venues in a week); the stored `outlet` when no line links
+	 * to one. On the list and detail reads; absent on write responses.
+	 */
+	outletName?: string | null;
 	cycle: string | null;
 	issuedDate: string | null;
 	dueDate: string | null;
@@ -181,6 +195,11 @@ export interface PaymentVoucherDayReview {
 // getById returns the voucher with its line items; list omits them.
 export interface PaymentVoucherWithLines extends PaymentVoucher {
 	lines: PaymentVoucherLine[];
+	/**
+	 * Does the IC copied onto this voucher still equal the PR's profile IC?
+	 * Detail route only; null when either side has none. A yes/no, never a value.
+	 */
+	prIcMatchesProfile?: boolean | null;
 	/** Only the agency/admin detail route returns these; absent on list rows. */
 	receipts?: PaymentVoucherReceipt[];
 	/**

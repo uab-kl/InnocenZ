@@ -9,6 +9,7 @@ import {
 	OutletShiftStatusBadge,
 } from "@agency-portal/components/outlet/OutletShiftDetailPanel";
 import { OutletShiftStaffingSection } from "@agency-portal/components/outlet/OutletShiftStaffingSection";
+import type { CalendarVisibleRange } from "@agency-portal/components/outlet/outlet-calendar-window";
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import {
 	canDeleteShiftOn,
@@ -311,6 +312,7 @@ export function OutletOperationsCalendar({
 	shifts: shiftsOverride,
 	roster: rosterOverride,
 	agencyPrs: agencyPrsOverride,
+	onVisibleRangeChange,
 }: {
 	/**
 	 * Backend-backed shifts + roster + PR records for a real outlet session (see
@@ -321,6 +323,12 @@ export function OutletOperationsCalendar({
 	shifts?: ShiftRequest[];
 	roster?: AgencyRosterSlot[];
 	agencyPrs?: AgencyManagedPR[];
+	/**
+	 * The days the grid shows, reported whenever the month changes — so the page
+	 * can fetch THAT range rather than a fixed window around today (see
+	 * `calendarFetchWindow`). Pass a stable callback.
+	 */
+	onVisibleRangeChange?: (range: CalendarVisibleRange) => void;
 } = {}) {
 	const { t } = usePortalLocale();
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
@@ -455,6 +463,16 @@ export function OutletOperationsCalendar({
 		return days;
 	}, [viewMonth]);
 
+	useEffect(() => {
+		const first = gridDays[0];
+		const last = gridDays[gridDays.length - 1];
+		if (!onVisibleRangeChange || !first || !last) return;
+		onVisibleRangeChange({
+			fromIso: isoKeyFromDate(first),
+			toIso: isoKeyFromDate(last),
+		});
+	}, [gridDays, onVisibleRangeChange]);
+
 	const monthEvents = useMemo(
 		() =>
 			events.filter((ev) =>
@@ -476,6 +494,34 @@ export function OutletOperationsCalendar({
 
 	return (
 		<>
+			<div className="iz-approved-calendar-stats">
+				<section>
+					<p>{t.approvedDesign.shiftsThisMonth}</p>
+					<strong>{totals.shifts}</strong>
+					<p>{format(viewMonth, "MMMM yyyy")}</p>
+				</section>
+				<section>
+					<p>{t.approvedDesign.staffedUpcoming}</p>
+					<strong>
+						{totals.supplied} / {totals.demand}
+					</strong>
+					<p>{t.approvedDesign.prPlaces}</p>
+				</section>
+				<section>
+					<p>{t.approvedDesign.unfilled}</p>
+					<strong>{totals.unfilled}</strong>
+					<p>
+						{/* An empty (or still-loading) month is not "All staffed". */}
+						{totals.shifts === 0
+							? fill(t.calendar.summaryNoShifts, {
+									month: format(viewMonth, "MMMM"),
+								})
+							: totals.unfilled === 0
+								? t.calendar.summaryAllStaffed
+								: fill(t.calendar.summaryUnfilled, { n: totals.unfilled })}
+					</p>
+				</section>
+			</div>
 			<div className="iz-outlet-ops-cal">
 				<div className="iz-outlet-ops-cal-toolbar">
 					<div className="iz-outlet-ops-cal-toolbar__left">
@@ -541,147 +587,133 @@ export function OutletOperationsCalendar({
 				    month says so here instead of leaving 42 blank boxes to
 				    interpret, and the grid stays on screen so you can keep
 				    paging. */}
-				<div className="iz-outlet-ops-cal-summary">
-					{totals.shifts === 0 ? (
-						<span className="iz-outlet-ops-cal-summary__quiet">
-							{fill(t.calendar.summaryNoShifts, {
-								month: format(viewMonth, "MMMM"),
-							})}
-						</span>
-					) : (
-						<>
-							<span className="iz-outlet-ops-cal-summary__count">
-								{totals.shifts === 1
-									? t.calendar.summaryShiftsOne
-									: fill(t.calendar.summaryShiftsMany, { n: totals.shifts })}
-							</span>
-							{totals.demand > 0 && (
-								<>
-									<span className="iz-outlet-ops-cal-summary__sep" aria-hidden>
-										·
-									</span>
-									<span className="iz-outlet-ops-cal-summary__slots">
-										{fill(t.calendar.summarySlots, {
-											filled: totals.supplied,
-											total: totals.demand,
-										})}
-									</span>
-									<span
-										className={cn(
-											"iz-outlet-ops-cal-summary__gap",
-											totals.unfilled === 0 &&
-												"iz-outlet-ops-cal-summary__gap--clear",
-										)}
-									>
-										{totals.unfilled === 0
-											? t.calendar.summaryAllStaffed
-											: fill(t.calendar.summaryUnfilled, {
-													n: totals.unfilled,
-												})}
-									</span>
-								</>
-							)}
-						</>
-					)}
-				</div>
 
-				<div className="iz-outlet-ops-cal-weekdays">
-					{WEEKDAYS.map((d) => (
-						<div key={d(t)} className="iz-outlet-ops-cal-weekday">
-							{d(t)}
-						</div>
-					))}
-				</div>
+				<section
+					className="iz-outlet-calendar-scroll"
+					aria-label={format(viewMonth, "MMMM yyyy")}
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users scroll the full week without moving page focus.
+					tabIndex={0}
+				>
+					<div className="iz-outlet-ops-cal-weekdays">
+						{WEEKDAYS.map((d) => (
+							<div key={d(t)} className="iz-outlet-ops-cal-weekday">
+								{d(t)}
+							</div>
+						))}
+					</div>
 
-				<div className="iz-outlet-ops-cal-grid">
-					{gridDays.map((day) => {
-						const iso = isoKeyFromDate(day);
-						const dayEvents = eventsByDate[iso] ?? [];
-						const inMonth = isSameMonth(day, viewMonth);
-						const today = iso === todayIso;
+					<div className="iz-outlet-ops-cal-grid">
+						{gridDays.map((day) => {
+							const iso = isoKeyFromDate(day);
+							const dayEvents = eventsByDate[iso] ?? [];
+							const inMonth = isSameMonth(day, viewMonth);
+							const today = iso === todayIso;
 
-						return (
-							<div
-								key={iso}
-								className={cn(
-									"iz-outlet-ops-cal-cell",
-									!inMonth && "iz-outlet-ops-cal-cell--outside",
-									today && "iz-outlet-ops-cal-cell--today",
-								)}
-							>
-								<div className="iz-outlet-ops-cal-cell-head">
-									<span
-										className={cn(
-											"iz-outlet-ops-cal-day-num",
-											today && "iz-outlet-ops-cal-day-num--today",
-										)}
-									>
-										{format(day, "d")}
-									</span>
-								</div>
-								<div className="iz-outlet-ops-cal-events">
-									{dayEvents.slice(0, EVENTS_PER_CELL).map((ev) => (
-										<button
-											key={ev.shift.id}
-											type="button"
+							return (
+								<div
+									key={iso}
+									className={cn(
+										"iz-outlet-ops-cal-cell",
+										!inMonth && "iz-outlet-ops-cal-cell--outside",
+										today && "iz-outlet-ops-cal-cell--today",
+									)}
+								>
+									<div className="iz-outlet-ops-cal-cell-head">
+										<span
 											className={cn(
-												"iz-outlet-ops-cal-event",
-												statusEventClass(ev.shift, ev.dateIso, now),
+												"iz-outlet-ops-cal-day-num",
+												today && "iz-outlet-ops-cal-day-num--today",
 											)}
-											onClick={() => setSelectedShiftId(ev.shift.id)}
 										>
-											<span className="iz-outlet-ops-cal-event-time">
-												{formatEventTimeDisplay(ev.timeRange)}
-											</span>
-											{/* Supplied BEFORE demand, unlike the old
+											{format(day, "d")}
+										</span>
+									</div>
+									<div className="iz-outlet-ops-cal-events">
+										{dayEvents.slice(0, EVENTS_PER_CELL).map((ev) => (
+											<button
+												key={ev.shift.id}
+												type="button"
+												className={cn(
+													"iz-outlet-ops-cal-event",
+													statusEventClass(ev.shift, ev.dateIso, now),
+												)}
+												onClick={() => setSelectedShiftId(ev.shift.id)}
+											>
+												<span className="iz-outlet-ops-cal-event-time">
+													{formatEventTimeDisplay(ev.timeRange)}
+												</span>
+												{/* Supplied BEFORE demand, unlike the old
 											    "Demand / supplied" box: the first number is
 											    the one that changes, and reading it as a
 											    fraction of the second is how staffing is
 											    spoken about. */}
-											<span
-												role="img"
-												className={cn(
-													"iz-outlet-ops-cal-fill",
-													`iz-outlet-ops-cal-fill--${fillLevel(ev.demand, ev.supplied)}`,
-												)}
-												aria-label={fill(t.calendar.staffedAria, {
-													supplied: ev.supplied,
-													demand: ev.demand,
+												<span
+													role="img"
+													className={cn(
+														"iz-outlet-ops-cal-fill",
+														`iz-outlet-ops-cal-fill--${fillLevel(ev.demand, ev.supplied)}`,
+													)}
+													aria-label={fill(t.calendar.staffedAria, {
+														supplied: ev.supplied,
+														demand: ev.demand,
+													})}
+												>
+													{ev.supplied}/{ev.demand}
+												</span>
+												<span className="iz-outlet-ops-cal-event-title">
+													{ev.shift.event}
+												</span>
+											</button>
+										))}
+										{dayEvents.length > EVENTS_PER_CELL && (
+											<button
+												type="button"
+												className="iz-outlet-ops-cal-more"
+												aria-label={fill(t.calendar.moreShifts, {
+													n: dayEvents.length - EVENTS_PER_CELL,
 												})}
+												title={fill(t.calendar.moreShifts, {
+													n: dayEvents.length - EVENTS_PER_CELL,
+												})}
+												onClick={() => setExpandedDateIso(iso)}
 											>
-												{ev.supplied}/{ev.demand}
-											</span>
-											<span className="iz-outlet-ops-cal-event-title">
-												{ev.shift.event}
-											</span>
-										</button>
-									))}
-									{dayEvents.length > EVENTS_PER_CELL && (
+												+{dayEvents.length - EVENTS_PER_CELL}
+											</button>
+										)}
+									</div>
+									{/* Phone only (`md:hidden`). A ~37px cell cannot hold a
+									    card's time and name — they clipped to "T." and "Fr".
+									    The day shows its shift count instead, and tapping it
+									    opens the day list "+N more" opens, which carries every
+									    shift's time, name and staffing. The phone block in
+									    approved-portal-design.css hides the cards above. */}
+									{dayEvents.length > 0 && (
 										<button
 											type="button"
-											className="iz-outlet-ops-cal-more"
-											aria-label={fill(t.calendar.moreShifts, {
-												n: dayEvents.length - EVENTS_PER_CELL,
-											})}
-											title={fill(t.calendar.moreShifts, {
-												n: dayEvents.length - EVENTS_PER_CELL,
-											})}
+											className="iz-outlet-ops-cal-more iz-outlet-ops-cal-more--day md:hidden"
+											aria-label={
+												dayEvents.length === 1
+													? t.calendar.summaryShiftsOne
+													: fill(t.calendar.summaryShiftsMany, {
+															n: dayEvents.length,
+														})
+											}
 											onClick={() => setExpandedDateIso(iso)}
 										>
-											+{dayEvents.length - EVENTS_PER_CELL}
+											{dayEvents.length}
 										</button>
 									)}
 								</div>
-							</div>
-						);
-					})}
-				</div>
+							);
+						})}
+					</div>
+				</section>
 			</div>
-
 			{/* Every shift on one day, reached from that cell's "+N more" chip.
 			    Picking a row hands over to the detail sheet below — the cell can
 			    only show two cards, so this is the ONLY way to reach the third. */}
 			<IzSheet
+				className="iz-sheet--calendar"
 				open={expandedDateIso !== null}
 				onClose={() => setExpandedDateIso(null)}
 				variant="dialog"
@@ -736,6 +768,7 @@ export function OutletOperationsCalendar({
 			</IzSheet>
 
 			<IzSheet
+				className="iz-sheet--calendar"
 				open={selectedShift !== null}
 				onClose={isDeleting || isSealing ? () => {} : closeSheet}
 				variant="dialog"

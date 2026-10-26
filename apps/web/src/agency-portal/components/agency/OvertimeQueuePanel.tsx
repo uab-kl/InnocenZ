@@ -1,6 +1,12 @@
-import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import {
+	formatRM,
+	IzCard,
+	IzSectionLabel,
+} from "@agency-portal/components/iz/ui";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
+import { formatPayrollDay } from "@agency-portal/lib/payroll-display";
 import { dayBelongsToWeekTab } from "@agency-portal/lib/payroll-week-scope";
+import { queueElsewhereLine } from "@agency-portal/lib/queue-read-only-copy";
 import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Check, Clock, X } from "lucide-react";
@@ -86,6 +92,10 @@ function OvertimeRow({
 	const cover = claim.coverImage?.trim()
 		? resolveProofPhotoUrl(claim.coverImage.trim())
 		: null;
+	// The server's priced figure, printed the way every payroll figure is —
+	// "RM 3,550.00", not the wire's "3550.00". Formatting only; never recomputed.
+	const amount = formatRM(Number(claim.amount));
+	const weekOf = claim.week ? formatPayrollDay(claim.week.weekStart, t) : null;
 
 	return (
 		<div className="rounded-xl border border-[var(--iz-line)] p-3">
@@ -133,24 +143,20 @@ function OvertimeRow({
 				<span>
 					{/* Priced by the server, by the same function the approval uses. */}
 					<span className="iz-tiny iz-muted block">{t.table.pays}</span>
-					<span className="iz-nums">RM {claim.amount}</span>
+					<span className="iz-nums">{amount}</span>
 				</span>
 				<span>
 					<span className="iz-tiny iz-muted block">
 						{t.payroll.ontoTheWeekOf}
 					</span>
-					<span className="iz-nums">
-						{claim.week ? claim.week.weekStart : "—"}
-					</span>
+					<span className="iz-nums">{weekOf ?? "—"}</span>
 				</span>
 			</div>
 
 			<p className="iz-tiny iz-muted2 mt-2">
 				<Clock className="mr-1 inline h-3 w-3" />
-				{claim.week
-					? fill(t.agencyQueues.overtimeHoldsWeek, {
-							week: claim.week.weekStart,
-						})
+				{weekOf
+					? fill(t.agencyQueues.overtimeHoldsWeek, { week: weekOf })
 					: t.agencyQueues.overtimeHoldsItsWeek}
 			</p>
 
@@ -165,9 +171,7 @@ function OvertimeRow({
 						>
 							<Check className="h-4 w-4" />
 							{confirming === "approve"
-								? fill(t.agencyQueues.confirmPayAmount, {
-										amount: `RM ${claim.amount}`,
-									})
+								? fill(t.agencyQueues.confirmPayAmount, { amount })
 								: t.common.approve}
 						</button>
 						<button
@@ -186,7 +190,7 @@ function OvertimeRow({
 						<p className="iz-tiny iz-muted2 mt-1">
 							{confirming === "approve"
 								? fill(t.agencyQueues.approveAddsToVoucher, {
-										amount: `RM ${claim.amount}`,
+										amount,
 										name: claim.prName ?? t.agencyQueues.thePr,
 									})
 								: t.payroll.noMoneyAddedWarning}
@@ -326,14 +330,10 @@ export function OvertimeQueuePanel({
 					<p className="iz-tiny iz-muted">{t.payroll.noOvertimeThisWeek}</p>
 				)}
 
+				{/* "…to decide it" only for a lane that can decide. */}
 				{!isLoading && pendingElsewhere > 0 && (
 					<p className="iz-tiny mt-1 text-[var(--iz-amber)]">
-						{fill(
-							pendingElsewhere === 1
-								? t.agencyQueues.overtimeElsewhereOne
-								: t.agencyQueues.overtimeElsewhereMany,
-							{ n: pendingElsewhere },
-						)}
+						{queueElsewhereLine("overtime", pendingElsewhere, canDecide, t)}
 					</p>
 				)}
 

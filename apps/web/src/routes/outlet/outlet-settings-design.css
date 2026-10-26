@@ -1,0 +1,242 @@
+/* Outlet-only layout; the shared profile/team components retain their behavior. */
+.iz-outlet-settings .iz-outlet-page-header {
+	align-items: center;
+	gap: 20px;
+}
+
+.iz-outlet-settings .iz-profile-edit-trigger {
+	width: auto;
+	max-width: 100%;
+	margin-top: 0;
+	flex-shrink: 0;
+}
+
+.iz-outlet-settings-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	align-self: flex-start;
+	gap: 4px;
+	max-width: 100%;
+	padding: 5px;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+	background: var(--iz-bg2);
+}
+
+.iz-outlet-settings-tabs > button {
+	min-height: 44px;
+	padding: 10px 20px;
+	border: 0;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--iz-muted);
+	font: inherit;
+	cursor: pointer;
+}
+
+.iz-outlet-settings-tabs > button[aria-selected="true"] {
+	background: var(--iz-panel);
+	color: var(--iz-txt);
+	box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+}
+
+.iz-outlet-settings-tabs > button:focus-visible {
+	outline: 2px solid var(--iz-accent, #baa4d6);
+	outline-offset: 2px;
+}
+
+.iz-outlet-settings-panel {
+	min-width: 0;
+}
+
+.iz-outlet-settings-panel[hidden] {
+	display: none !important;
+}
+
+.iz-outlet-settings-panel > .iz-sect-label,
+.iz-outlet-settings-partnerships > .iz-sect-label {
+	margin: 24px 0 12px;
+	font-size: var(--iz-fs-title);
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.iz-outlet-settings-panel > .iz-sect-label:first-child {
+	margin-top: 0;
+}
+
+.iz-outlet-settings .iz-outlet-settings-identity {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 20px;
+	padding: 24px;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+
+.iz-outlet-settings-identity-copy {
+	flex: 1 1 180px;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.iz-outlet-settings-identity-copy > div:last-child {
+	line-height: 1.5;
+}
+
+.iz-outlet-settings-identity-copy > div:last-child > svg {
+	flex-shrink: 0;
+}
+
+.iz-outlet-settings .iz-profile-photo-actions {
+	justify-content: flex-start;
+	width: 100%;
+	margin-top: 0;
+}
+
+.iz-outlet-settings .iz-profile-photo-actions > button {
+	width: auto;
+	min-height: 44px;
+}
+
+.iz-outlet-settings .iz-profile-section {
+	padding: 8px 24px;
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+
+.iz-outlet-settings .iz-profile-section > .grid {
+	column-gap: 24px;
+}
+
+.iz-outlet-settings-organization-fields .iz-profile-section {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	column-gap: 24px;
+}
+
+.iz-outlet-settings-organization-fields .iz-profile-section > .grid {
+	grid-column: 1 / -1;
+}
+
+.iz-outlet-settings .iz-profile-field {
+	min-width: 0;
+	padding-block: 16px;
+}
+
+[data-portal="outlet"] .iz-outlet-settings .iz-profile-field__label {
+	font-size: var(--iz-fs-tiny);
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+[data-portal="outlet"] .iz-outlet-settings .iz-profile-field__value,
+[data-portal="outlet"] .iz-outlet-settings .iz-profile-field__input {
+	min-width: 0;
+	max-width: 100%;
+	font-size: var(--iz-fs-body);
+	font-weight: 400;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"] .iz-outlet-settings .iz-profile-field__hint {
+	font-size: var(--iz-fs-tiny);
+	line-height: 1.5;
+}
+
+.iz-outlet-settings-account {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 24px;
+	margin-bottom: 20px;
+}
+
+.iz-outlet-settings-team .truncate,
+.iz-outlet-settings-partnerships .truncate {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+.iz-outlet-settings-team .iz-card > .border-b {
+	gap: 16px;
+	padding-block: 16px;
+}
+
+@media (max-width: 640px) {
+	.iz-outlet-settings .iz-outlet-page-header {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.iz-outlet-settings-tabs {
+		align-self: stretch;
+		width: 100%;
+	}
+
+	.iz-outlet-settings-tabs > button {
+		flex: 1 1 auto;
+		padding-inline: 10px;
+		font-size: var(--iz-fs-body);
+	}
+
+	.iz-outlet-settings .iz-outlet-settings-identity {
+		gap: 16px;
+		padding: 20px 16px;
+	}
+
+	.iz-outlet-settings .iz-outlet-settings-identity .iz-avatar--xl {
+		width: 64px;
+		height: 64px;
+	}
+
+	.iz-outlet-settings-identity-copy {
+		flex-basis: 140px;
+	}
+
+	.iz-outlet-settings .iz-profile-section {
+		padding-inline: 16px;
+	}
+
+	.iz-outlet-settings-account {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.iz-outlet-settings-organization-fields .iz-profile-section {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.iz-outlet-settings-team .iz-card > .border-b,
+	.iz-outlet-settings-partnerships li {
+		flex-wrap: wrap;
+	}
+
+	.iz-outlet-settings-team .iz-card > .border-b > .min-w-0 {
+		flex-basis: 100%;
+	}
+
+	.iz-outlet-settings-team .iz-card > .border-b > .shrink-0 {
+		max-width: 100%;
+		flex-wrap: wrap;
+	}
+
+	.iz-outlet-settings-team select,
+	.iz-outlet-settings-team input,
+	.iz-outlet-settings-partnerships select {
+		min-width: 0;
+		max-width: 100%;
+		font-size: var(--iz-fs-body) !important;
+	}
+
+	.iz-outlet-settings-partnerships li > .min-w-0 {
+		flex-basis: calc(100% - 60px);
+	}
+
+	.iz-outlet-settings-partnerships select {
+		flex-basis: 100%;
+	}
+}

@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { Box, Clock, Globe, Monitor, User as UserIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,14 +19,10 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import {
-	formatAuditDate,
-	formatAuditEntity,
-	formatRoleLabel,
-	getAuditActionBadgeColor,
-	truncateId,
-} from "@/lib/utils";
+import { getAuditActionBadgeColor } from "@/lib/utils";
 import type { AuditLog } from "@/services/audit-log";
+import { auditEntityLabel, formatAuditTimestamp } from "./audit-log-format";
+import { recordedRoleText } from "./audit-log-role-copy";
 
 interface AuditLogDetailDialogProps {
 	log: AuditLog | null;
@@ -56,7 +53,7 @@ export function AuditLogDetailDialog({
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent
-				className="max-h-[90vh] overflow-y-auto"
+				className="admin-finance-sheet max-h-[90vh] overflow-y-auto"
 				style={{ maxWidth: "min(95vw, 1400px)" }}
 			>
 				<DialogHeader>
@@ -66,7 +63,7 @@ export function AuditLogDetailDialog({
 								{t.adminAudit.detailTitle}
 							</DialogTitle>
 							<DialogDescription>
-								{formatAuditEntity(log.entity)}
+								{auditEntityLabel(log.entity)}
 							</DialogDescription>
 						</div>
 						{/* The RECORDED action — reproduced verbatim, never translated. */}
@@ -91,7 +88,7 @@ export function AuditLogDetailDialog({
 										</span>
 									</div>
 									<p className="text-lg font-semibold">
-										{formatAuditDate(log.createdAt)}
+										{formatAuditTimestamp(log.createdAt)}
 									</p>
 								</CardContent>
 							</Card>
@@ -107,12 +104,12 @@ export function AuditLogDetailDialog({
 									<p className="text-lg font-semibold">
 										{log.username ||
 											(log.userId
-												? truncateId(log.userId)
+												? t.adminUsers.actorUnknown // never the raw account id
 												: t.adminAudit.systemActor)}
 									</p>
 									{log.role && (
 										<p className="text-sm text-muted-foreground mt-1 capitalize">
-											{formatRoleLabel(log.role)}
+											{recordedRoleText(log.role)}
 										</p>
 									)}
 								</CardContent>
@@ -127,7 +124,7 @@ export function AuditLogDetailDialog({
 										</span>
 									</div>
 									<p className="text-lg font-semibold">
-										{formatAuditEntity(log.entity)}
+										{auditEntityLabel(log.entity)}
 									</p>
 								</CardContent>
 							</Card>
@@ -169,7 +166,7 @@ export function AuditLogDetailDialog({
 								{t.adminAudit.changes}
 							</h3>
 							<div className="rounded-lg border border-(--lavender-soft)/30 overflow-x-auto">
-								<Table>
+								<Table className="admin-finance-table">
 									<TableHeader>
 										<TableRow>
 											<TableHead>{t.adminAudit.colField}</TableHead>
@@ -188,7 +185,7 @@ export function AuditLogDetailDialog({
 												return (
 													<TableRow key={key}>
 														{/* Column name and both values are RECORDED data. */}
-														<TableCell>
+														<TableCell data-label={t.adminAudit.colField}>
 															<div className="flex items-center gap-2">
 																{hasChanged && (
 																	<span className="h-2 w-2 rounded-full bg-orange-500" />
@@ -196,7 +193,10 @@ export function AuditLogDetailDialog({
 																<span className="font-medium">{key}</span>
 															</div>
 														</TableCell>
-														<TableCell className="min-w-[200px] max-w-[300px]">
+														<TableCell
+															data-label={t.adminAudit.colOldValue}
+															className="min-w-[200px] max-w-[300px]"
+														>
 															{oldValue !== null && oldValue !== undefined ? (
 																<span
 																	className={
@@ -213,7 +213,10 @@ export function AuditLogDetailDialog({
 																</span>
 															)}
 														</TableCell>
-														<TableCell className="min-w-[200px] max-w-[300px]">
+														<TableCell
+															data-label={t.adminAudit.colNewValue}
+															className="min-w-[200px] max-w-[300px]"
+														>
 															{newValue !== null && newValue !== undefined ? (
 																<span
 																	className={

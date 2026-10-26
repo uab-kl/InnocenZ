@@ -6,6 +6,7 @@ import {
 import { memberQueueState } from "@agency-portal/lib/member-queue-state";
 import { Clock, Loader2, UserCheck, UserX } from "lucide-react";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
@@ -172,6 +173,7 @@ export function PendingMembersPanel({
 	orgId,
 	selectedId,
 	onSelect,
+	filterContainer,
 }: {
 	kind: OrgKind;
 	orgId: string | null;
@@ -187,6 +189,8 @@ export function PendingMembersPanel({
 	 * write cannot drift apart between the two portals.
 	 */
 	onSelect?: (id: string) => void;
+	/** Optional full-width toolbar; the queue still owns its filter state. */
+	filterContainer?: HTMLElement | null;
 }) {
 	const { t } = usePortalLocale();
 	const { members, isLoading, changeMember, removeMember } = useOrgMembers(
@@ -257,8 +261,12 @@ export function PendingMembersPanel({
 		["all", t.portalUi.membersAll, members.length],
 	] as const;
 
-	const filterRow = (
-		<div className="mb-3 flex flex-wrap gap-2">
+	const filterControls = (
+		<div
+			className={
+				filterContainer ? "iz-approvals-subfilter" : "mb-3 flex flex-wrap gap-2"
+			}
+		>
 			{filters.map(([value, label, count]) => (
 				<button
 					key={value}
@@ -271,6 +279,9 @@ export function PendingMembersPanel({
 			))}
 		</div>
 	);
+	const filterRow = filterContainer
+		? createPortal(filterControls, filterContainer)
+		: filterControls;
 
 	if (waiting.length === 0) {
 		return (
@@ -310,6 +321,8 @@ export function PendingMembersPanel({
 							: {})}
 						className={cn(
 							"@container/row rounded-xl border bg-card p-4",
+							onSelect && "iz-approvals-member-row",
+							onSelect && selectedId === m.id && "on",
 							onSelect &&
 								"w-full cursor-pointer text-left hover:border-foreground/25",
 							onSelect &&

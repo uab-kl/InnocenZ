@@ -25,6 +25,7 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
+import "./outlet-date-popover.css";
 
 /**
  * "27 Aug 2026" / "2026年8月27日" — the outlet portal's dated field value.

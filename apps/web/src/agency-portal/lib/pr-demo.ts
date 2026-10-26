@@ -416,6 +416,8 @@ export interface PrPaymentVoucher {
 	 */
 	prId?: string;
 	prIc?: string;
+	/** True when the voucher's IC copy no longer equals the PR's profile IC (detail reads only). */
+	prIcMismatch?: boolean;
 	outlet: string;
 	cycle: string;
 	issued: string;

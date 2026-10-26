@@ -143,7 +143,7 @@ export function AgencyDetailsSheet({
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
 				side="right"
-				className="w-full overflow-y-auto sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+				className="iz-admin-detail-sheet w-full overflow-y-auto sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
 			>
 				<SheetHeader className="pb-0">
 					<SheetTitle>{t.adminOrg.agencyDetailsTitle}</SheetTitle>
@@ -151,7 +151,7 @@ export function AgencyDetailsSheet({
 				</SheetHeader>
 
 				{agency && (
-					<div className="space-y-4 px-4 pb-6">
+					<div className="iz-admin-detail-content space-y-4 px-4 pb-6">
 						<DetailsHero
 							name={agency.name}
 							subtitle={orgMemberIdStem("agency", agency.memberCodePrefix)}
@@ -163,7 +163,7 @@ export function AgencyDetailsSheet({
 							imageUrl={apiAssetUrl(agency.logoImage)}
 						/>
 
-						<Tabs defaultValue="basic">
+						<Tabs className="iz-admin-detail-main" defaultValue="basic">
 							<TabsList className="w-full">
 								<TabsTrigger value="basic">
 									<Building2 className="h-3.5 w-3.5" />{" "}
@@ -324,6 +324,7 @@ export function AgencyDetailsSheet({
 							createdBy={agency.createdBy}
 							createdAt={agency.createdAt}
 							updatedBy={agency.updatedBy}
+							updatedByName={agency.updatedByName}
 							updatedAt={agency.updatedAt}
 						/>
 					</div>

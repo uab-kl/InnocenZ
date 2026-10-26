@@ -11,6 +11,7 @@ import {
 	Trash2,
 	XCircle,
 } from "lucide-react";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,7 +97,7 @@ export function ModulesTable({
 	const showLoading = isLoading && modules.length === 0;
 
 	return (
-		<Card className="border-(--lavender-soft)/40 bg-card">
+		<Card className="admin-modules-design border-(--lavender-soft)/40 bg-card">
 			<CardHeader>
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
@@ -108,37 +109,39 @@ export function ModulesTable({
 						</CardTitle>
 						<CardDescription>{t.rbac.modulesCardHint}</CardDescription>
 					</div>
-					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-						<div className="relative sm:w-56">
-							<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-							<Input
-								value={search}
-								onChange={(e) => onSearchChange(e.target.value)}
-								placeholder={t.rbac.searchModules}
-								className="pl-8"
-								aria-label={t.rbac.searchModulesAria}
-							/>
-						</div>
-						<Select
-							value={statusFilter}
-							onValueChange={(value) =>
-								onStatusFilterChange(value as ModuleStatusFilter)
-							}
-						>
-							<SelectTrigger
-								className="sm:w-40"
-								aria-label={t.rbac.filterByStatus}
+					<div className="admin-rbac-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+						<AdminFilters className="admin-module-filters">
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={search}
+									onChange={(e) => onSearchChange(e.target.value)}
+									placeholder={t.rbac.searchModules}
+									className="pl-8"
+									aria-label={t.rbac.searchModulesAria}
+								/>
+							</div>
+							<Select
+								value={statusFilter}
+								onValueChange={(value) =>
+									onStatusFilterChange(value as ModuleStatusFilter)
+								}
 							>
-								<SelectValue placeholder={t.rbac.filterByStatus} />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">{t.rbac.allStatusCaps}</SelectItem>
-								<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
-								<SelectItem value="inactive">
-									{t.rbac.statusInactive}
-								</SelectItem>
-							</SelectContent>
-						</Select>
+								<SelectTrigger
+									className="sm:w-40"
+									aria-label={t.rbac.filterByStatus}
+								>
+									<SelectValue placeholder={t.rbac.filterByStatus} />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">{t.rbac.allStatusCaps}</SelectItem>
+									<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
+									<SelectItem value="inactive">
+										{t.rbac.statusInactive}
+									</SelectItem>
+								</SelectContent>
+							</Select>
+						</AdminFilters>
 						<Button onClick={onCreateClick} className="shrink-0">
 							<Plus className="mr-2 h-4 w-4" />
 							{t.rbac.createModule}
@@ -148,7 +151,7 @@ export function ModulesTable({
 			</CardHeader>
 
 			<CardContent>
-				<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
+				<div className="admin-modules-table rounded-lg border border-(--lavender-soft)/30">
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -157,7 +160,9 @@ export function ModulesTable({
 								<TableHead className="w-[100px]">{t.rbac.colPortal}</TableHead>
 								<TableHead className="w-[120px]">{t.rbac.colStatus}</TableHead>
 								<TableHead className="w-[180px]">{t.rbac.colCreated}</TableHead>
-								<TableHead className="w-[60px]" />
+								<TableHead className="w-[60px]">
+									<span className="sr-only">{t.rbac.colAction}</span>
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -233,7 +238,7 @@ export function ModulesTable({
 													<Button
 														variant="ghost"
 														size="icon"
-														className="h-8 w-8"
+														className="admin-module-actions h-11 w-11"
 														aria-label={fill(t.rbac.actionsFor, {
 															name: module.moduleName,
 														})}
@@ -266,7 +271,7 @@ export function ModulesTable({
 				</div>
 
 				{pagination && pagination.totalCount > 0 && (
-					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+					<div className="admin-rbac-pagination mt-4 flex items-center justify-between text-xs text-muted-foreground">
 						<div>
 							{fill(t.rbac.showingModules, {
 								from: (pagination.page - 1) * pageSize + 1,

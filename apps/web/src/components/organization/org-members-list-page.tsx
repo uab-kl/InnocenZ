@@ -7,17 +7,16 @@ import {
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
 	AlertCircle,
-	Ban,
 	Building2,
-	CheckCircle2,
-	ChevronRight,
 	Loader2,
+	MoreHorizontal,
 	RefreshCw,
 	Search,
 	Users2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,12 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -62,7 +67,7 @@ import type { AgencyPagination, AgencyTeamMember } from "@/services/agency";
 import { fetchAgencyTeamMembers, updateAgencyMember } from "@/services/agency";
 import type { OutletTeamMember } from "@/services/outlet";
 import { fetchOutletTeamMembers, updateOutletMember } from "@/services/outlet";
-import { formatSubRole } from "./org-status";
+import { formatSubRole, memberStatusLabel } from "./org-status";
 import {
 	AGENCY_TEAM_GROUPS,
 	type OrgKind,
@@ -305,7 +310,7 @@ export function OrgMembersListPage({
 	const showLoading = isLoading && rows.length === 0;
 
 	return (
-		<PageShell>
+		<PageShell className="iz-admin-management">
 			<PageHeader
 				icon={Users2}
 				title={isAgency ? t.admin.navAgencyTeam : t.admin.navOutletTeam}
@@ -341,7 +346,7 @@ export function OrgMembersListPage({
 				</div>
 			)}
 
-			<Card className="border-(--lavender-soft)/40 bg-card">
+			<Card className="iz-admin-management-card border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
 					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 						<div>
@@ -356,74 +361,68 @@ export function OrgMembersListPage({
 							</CardDescription>
 						</div>
 
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-							<div className="relative sm:w-64">
-								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-								<Input
-									value={searchInput}
-									onChange={(e) => setSearchInput(e.target.value)}
-									placeholder={t.adminOrg.teamMembersSearchPlaceholder}
-									className="pl-8"
-									aria-label={t.adminOrg.teamMembersSearchAria}
-								/>
-							</div>
-							<Select
-								value={statusFilter}
-								onValueChange={(value) => {
-									setStatusFilter(value);
-									setCurrentPage(1);
-								}}
-							>
-								<SelectTrigger
-									className="sm:w-44"
-									aria-label={t.admin.filterByStatus}
+						<AdminFilters>
+							<div className="iz-admin-management-filters flex flex-col gap-2 sm:flex-row sm:items-center">
+								<div className="relative sm:w-64">
+									<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										value={searchInput}
+										onChange={(e) => setSearchInput(e.target.value)}
+										placeholder={t.adminOrg.teamMembersSearchPlaceholder}
+										className="pl-8"
+										aria-label={t.adminOrg.teamMembersSearchAria}
+									/>
+								</div>
+								<Select
+									value={statusFilter}
+									onValueChange={(value) => {
+										setStatusFilter(value);
+										setCurrentPage(1);
+									}}
 								>
-									<SelectValue placeholder={t.admin.filterByStatus} />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-									{STATUS_OPTIONS.map((status) => (
-										<SelectItem key={status} value={status}>
-											{recordStatusLabel(status, t)}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
+									<SelectTrigger
+										className="sm:w-44"
+										aria-label={t.admin.filterByStatus}
+									>
+										<SelectValue placeholder={t.admin.filterByStatus} />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+										{STATUS_OPTIONS.map((status) => (
+											<SelectItem key={status} value={status}>
+												{recordStatusLabel(status, t)}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+						</AdminFilters>
 					</div>
 				</CardHeader>
 
 				<CardContent>
-					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+					<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
+						<Table className="iz-admin-management-table">
 							<TableHeader>
 								<TableRow>
-									<TableHead className="w-[150px]">
-										{t.adminOrg.memberCodeLabel}
-									</TableHead>
-									<TableHead>{t.admin.colName}</TableHead>
 									<TableHead>
-										{isAgency ? t.adminOrg.agencyName : t.adminOrg.venue}
+										{t.admin.colName} / {t.adminOrg.memberCodeLabel}
 									</TableHead>
-									<TableHead className="w-[150px]">
+									<TableHead>
+										{isAgency ? t.adminOrg.agencyName : t.adminOrg.venue} /{" "}
 										{t.adminOrg.memberSubRole}
 									</TableHead>
 									<TableHead>{t.adminUsers.colContact}</TableHead>
-									<TableHead className="w-[120px]">
-										{t.admin.colStatus}
+									<TableHead>
+										{t.admin.colStatus} / {t.admin.colCreated}
 									</TableHead>
-									<TableHead className="w-[140px]">
-										{t.admin.colCreated}
-									</TableHead>
-									<TableHead className="w-[190px]">
-										{t.admin.colActions}
-									</TableHead>
+									<TableHead>{t.admin.colActions}</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
 								{showLoading ? (
 									<TableRow>
-										<TableCell colSpan={8} className="h-32">
+										<TableCell colSpan={5} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
 												<span>{t.adminOrg.memberLoading}</span>
@@ -432,7 +431,7 @@ export function OrgMembersListPage({
 									</TableRow>
 								) : isError ? (
 									<TableRow>
-										<TableCell colSpan={8} className="h-32">
+										<TableCell colSpan={5} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="text-sm text-muted-foreground">
@@ -451,7 +450,7 @@ export function OrgMembersListPage({
 									</TableRow>
 								) : rows.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={8} className="h-32">
+										<TableCell colSpan={5} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Users2 className="h-6 w-6" />
 												<span>{t.adminOrg.teamMembersNone}</span>
@@ -465,79 +464,90 @@ export function OrgMembersListPage({
 											className="cursor-pointer"
 											onClick={() => openMember(row)}
 										>
-											<TableCell className="font-mono text-sm">
-												{row.memberCode ?? "—"}
-											</TableCell>
-											<TableCell className="font-medium">
-												{row.username || `${row.userId.slice(0, 8)}…`}
-											</TableCell>
 											<TableCell>
+												<button
+													type="button"
+													className="iz-admin-record-name"
+													onClick={(event) => {
+														event.stopPropagation();
+														openMember(row);
+													}}
+												>
+													{row.username ||
+														row.email ||
+														row.phoneNum ||
+														t.adminUsers.actorUnknown}
+												</button>
+												<div className="iz-admin-record-secondary">
+													{row.memberCode ?? "—"}
+												</div>
+											</TableCell>
+											<TableCell
+												data-label={
+													isAgency ? t.adminOrg.agencyName : t.adminOrg.venue
+												}
+											>
 												<div className="font-medium">{row.orgName}</div>
+												<div className="iz-admin-record-secondary">
+													{laneLabel(row.subRole)}
+												</div>
 											</TableCell>
-											<TableCell>{laneLabel(row.subRole)}</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminUsers.colContact}>
 												<div className="text-sm">{row.email || "—"}</div>
 												<div className="text-xs text-muted-foreground">
 													{row.phoneNum || "—"}
 												</div>
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.admin.colStatus}>
 												<Badge
 													variant="outline"
 													className="capitalize text-muted-foreground"
 												>
-													{recordStatusLabel(row.status, t)}
+													{memberStatusLabel(row.status, t)}
 												</Badge>
+												<div className="iz-admin-record-secondary">
+													{formatDate(row.createdAt)}
+												</div>
 											</TableCell>
-											<TableCell className="text-sm text-muted-foreground">
-												{formatDate(row.createdAt)}
-											</TableCell>
-											{/* stopPropagation on every control: the row itself navigates, and a
-											    status flip must not also open the person. */}
-											<TableCell onClick={(e) => e.stopPropagation()}>
-												<div className="flex items-center gap-1.5">
-													{row.status === "active" ? (
+											<TableCell onClick={(event) => event.stopPropagation()}>
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
 														<Button
-															variant="destructive"
-															size="sm"
+															variant="outline"
+															size="icon"
 															disabled={actionId === row.membershipId}
-															onClick={() =>
-																setPending({ row, next: "inactive" })
+															aria-label={
+																t.admin.colActions +
+																" · " +
+																(row.username || row.memberCode || row.userId)
 															}
 														>
-															{actionId === row.membershipId ? (
-																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-															) : (
-																<Ban className="mr-1 h-3.5 w-3.5" />
-															)}
-															{t.adminOrg.setInactive}
+															<MoreHorizontal aria-hidden className="h-4 w-4" />
 														</Button>
-													) : (
-														<Button
-															size="sm"
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end">
+														<DropdownMenuItem onSelect={() => openMember(row)}>
+															{t.adminOrg.memberPageTitle}
+														</DropdownMenuItem>
+														<DropdownMenuItem
 															disabled={actionId === row.membershipId}
-															onClick={() => {
-																setRestoreLane("");
-																setPending({ row, next: "active" });
+															onSelect={() => {
+																if (row.status !== "active") setRestoreLane("");
+																setPending({
+																	row,
+																	next:
+																		row.status === "active"
+																			? "inactive"
+																			: "active",
+																});
 															}}
 														>
-															{actionId === row.membershipId ? (
-																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-															) : (
-																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-															)}
-															{t.adminOrg.activate}
-														</Button>
-													)}
-													<Button
-														variant="ghost"
-														size="sm"
-														aria-label={t.adminOrg.memberPageTitle}
-														onClick={() => openMember(row)}
-													>
-														<ChevronRight className="h-4 w-4" />
-													</Button>
-												</div>
+															{row.status === "active"
+																? t.adminOrg.setInactive
+																: t.adminOrg.activate}
+														</DropdownMenuItem>
+													</DropdownMenuContent>
+												</DropdownMenu>
 											</TableCell>
 										</TableRow>
 									))
@@ -547,7 +557,7 @@ export function OrgMembersListPage({
 					</div>
 
 					{pagination && pagination.totalCount > 0 && (
-						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+						<div className="iz-admin-management-pagination text-muted-foreground">
 							<div>
 								{fill(t.adminOrg.teamMembersShowing, {
 									from: (pagination.page - 1) * PAGE_SIZE + 1,

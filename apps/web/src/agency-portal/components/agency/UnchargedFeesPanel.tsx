@@ -1,7 +1,11 @@
-import { IzCard } from "@agency-portal/components/iz/ui";
+import { formatRM, IzCard } from "@agency-portal/components/iz/ui";
 import { NavAlertBadge } from "@agency-portal/components/portal/NavAlertBadge";
 import { useAgencyPenaltyProposals } from "@agency-portal/hooks/use-agency-penalty-proposals";
 import { useAgencyUncharged } from "@agency-portal/hooks/use-agency-uncharged";
+import {
+	formatPayrollDay,
+	formatPayrollWeekRange,
+} from "@agency-portal/lib/payroll-display";
 import { useStore } from "@agency-portal/lib/store";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
@@ -62,8 +66,9 @@ function penaltyRuleLabel(ruleType: string, t: PortalTranslations): string {
  * "2–8 Aug", or "28 Jul – 3 Aug" when the week straddles a month.
  *
  * `week 2026-08-02 – 2026-08-08` was 25 characters of mostly-repeated digits on
- * a line of its own under every carried-over row. The ISO pair survives in the
- * cell's `title`, so nothing is lost to someone who needs the exact dates.
+ * a line of its own under every carried-over row. The full range, year
+ * included, survives in the cell's `title`, so nothing is lost to someone who
+ * needs the exact dates.
  *
  * The month keeps its three-letter shape — the reason the array it came from
  * existed at all is that a date must read as a date and not as an id — but the
@@ -191,7 +196,7 @@ function FeeLine({ row, canSelect }: { row: FeeRow; canSelect: boolean }) {
 				</span>
 			) : null}
 			<b className="iz-sm w-[5.5rem] shrink-0 text-right tabular-nums text-[var(--iz-gold-l)]">
-				RM {row.amountRm.toFixed(2)}
+				{formatRM(row.amountRm)}
 			</b>
 		</>
 	);
@@ -282,7 +287,7 @@ function FeeGroup({
 			<div className="flex items-baseline justify-between gap-2 pb-1">
 				<b className="iz-tiny iz-muted2 uppercase tracking-wide">{title}</b>
 				<span className="iz-tiny iz-muted2 shrink-0 tabular-nums">
-					{rows.length} · RM {total.toFixed(2)}
+					{rows.length} · {formatRM(total)}
 				</span>
 			</div>
 			{/*
@@ -437,10 +442,9 @@ export function UnchargedFeesPanel({
 		// left the column blank on two rows out of three and the week itself
 		// unstated beside the fine it produced.
 		when: formatWeekRange(p.weekStart, p.weekEnd, t),
-		whenTitle: fill(t.agencyQueues.weekFromTo, {
-			from: p.weekStart,
-			to: p.weekEnd,
-		}),
+		// The hover keeps the exact dates, year included — in the portal's date
+		// shape, not the stored "2026-08-02 – 2026-08-08".
+		whenTitle: formatPayrollWeekRange(p.weekStart, p.weekEnd, t),
 		amountRm: Number(p.fineRm ?? 0),
 		checked: selectedCharges.has(p.chargeId),
 		onToggle: () => toggleCharge(p.chargeId),
@@ -453,13 +457,13 @@ export function UnchargedFeesPanel({
 		// one column answers "when" for both kinds of money instead of the date
 		// hiding at the head of a sentence on one of them.
 		when: formatShiftDay(c.shiftDate, t),
-		whenTitle: String(c.shiftDate ?? ""),
+		whenTitle: c.shiftDate ? formatPayrollDay(c.shiftDate, t) : "",
 		detail:
 			[c.slot, c.outletName].filter(Boolean).join(" · ") ||
 			t.agencyQueues.cancelledShift,
 		basis: `${fill(t.agencyQueues.feePctOfWage, {
 			pct: c.feePct ?? 0,
-			wage: `RM ${Number(c.dailyWageRm ?? 0).toFixed(2)}`,
+			wage: formatRM(Number(c.dailyWageRm ?? 0)),
 		})}${
 			c.noticeHours != null
 				? Number(c.noticeHours) < 0
@@ -586,7 +590,7 @@ export function UnchargedFeesPanel({
 						{proposalsLoading
 							? t.payroll.checkingPenalties
 							: pending.length > 0
-								? `${t.payroll.nothingBilledYet} · ${pending.length} · RM ${pendingRm.toFixed(2)}`
+								? `${t.payroll.nothingBilledYet} · ${pending.length} · ${formatRM(pendingRm)}`
 								: t.payroll.nothingOutstanding}
 					</span>
 				</button>
@@ -640,17 +644,19 @@ export function UnchargedFeesPanel({
 				<NavAlertBadge count={count} tone="red" />
 				<span className="iz-tiny iz-muted2">
 					·{" "}
-					{fill(t.agencyQueues.outstandingAmount, { amount: `RM ${totalRm}` })}
+					{fill(t.agencyQueues.outstandingAmount, {
+						amount: formatRM(Number(totalRm)),
+					})}
 					{penalties.length > 0 && cancellations.length > 0
 						? ` ${fill(t.agencyQueues.weeklyPlusCancellations, {
-								weekly: `RM ${penaltiesRm}`,
-								cancellations: `RM ${cancellationsRm}`,
+								weekly: formatRM(Number(penaltiesRm)),
+								cancellations: formatRM(Number(cancellationsRm)),
 							})}`
 						: ""}
 					{/* Sealed and unrecorded are different debts. Summing only the
 					    sealed ones here hid the half nobody had accepted yet. */}
 					{pending.length > 0
-						? ` · ${t.payroll.notYetRecorded}: ${pending.length} · RM ${pendingRm.toFixed(2)}`
+						? ` · ${t.payroll.notYetRecorded}: ${pending.length} · ${formatRM(pendingRm)}`
 						: ""}
 				</span>
 				{/* The one sentence that changes what somebody DOES — a voucher already
@@ -711,7 +717,7 @@ export function UnchargedFeesPanel({
 							<span className="iz-tiny iz-muted2">
 								{fill(t.agencyQueues.selectedTotal, {
 									n: selected.size + selectedCharges.size,
-									amount: `RM ${selectedTotal.toFixed(2)}`,
+									amount: formatRM(selectedTotal),
 								})}
 							</span>
 							<div className="flex items-center gap-2">

@@ -1,0 +1,321 @@
+/* Admin management presentation only. Shared organization components keep their
+   existing data, permission checks and mutation handlers on every portal. */
+body[data-admin-design] .iz-admin-management {
+	min-width: 0;
+	gap: 24px;
+}
+body[data-admin-design] .iz-admin-management > *,
+body[data-admin-design] .iz-admin-management-card {
+	min-width: 0;
+	max-width: 100%;
+}
+body[data-admin-design] .iz-admin-management-card > [data-slot="card-header"] {
+	gap: 20px;
+}
+body[data-admin-design] .iz-admin-management-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 16px;
+	min-width: 0;
+}
+body[data-admin-design] .iz-admin-management-filters > * {
+	min-width: 0;
+	max-width: 100%;
+}
+body[data-admin-design] .iz-admin-management-scroll {
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	border-radius: 10px;
+}
+body[data-admin-design] .iz-admin-management-table {
+	width: 100%;
+	table-layout: fixed;
+}
+body[data-admin-design] .iz-admin-management-table :is(th, td) {
+	padding: 16px 12px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	vertical-align: middle;
+	text-align: left;
+}
+body[data-admin-design] .iz-admin-management-table th:last-child {
+	width: 140px;
+}
+body[data-admin-design] .iz-admin-management-table td:last-child {
+	white-space: normal;
+}
+body[data-admin-design] .iz-admin-record-name {
+	display: inline-block;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--foreground);
+	font: inherit;
+	font-weight: 600;
+	text-align: left;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+body[data-admin-design] .iz-admin-record-name:hover {
+	color: var(--primary);
+}
+body[data-admin-design] .iz-admin-record-secondary {
+	display: block;
+	margin-top: 6px;
+	color: var(--muted-foreground);
+	font-size: var(--iz-fs-tiny, 0.875rem);
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+body[data-admin-design] .iz-admin-management-pagination {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-top: 20px;
+}
+body[data-admin-design] .iz-admin-management-pagination > div {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+body[data-admin-design] .iz-admin-detail-sheet {
+	width: min(1040px, calc(100vw - 32px));
+	max-width: none;
+	overflow-y: auto;
+}
+body[data-admin-design] .iz-admin-detail-content {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+	align-items: start;
+	gap: 20px;
+	padding: 20px 24px 24px;
+}
+body[data-admin-design] .iz-admin-detail-content > * {
+	min-width: 0;
+	margin: 0;
+}
+body[data-admin-design] .iz-admin-detail-content > .iz-admin-detail-hero {
+	grid-column: 1 / -1;
+}
+body[data-admin-design] .iz-admin-detail-main {
+	min-width: 0;
+	grid-column: 1;
+	grid-row: 2 / span 2;
+}
+body[data-admin-design] .iz-admin-detail-content > .iz-admin-detail-section {
+	grid-column: 2;
+}
+body[data-admin-design] .iz-admin-detail-hero {
+	display: grid;
+	grid-template-columns: 88px minmax(0, 1fr);
+	align-items: center;
+	text-align: left;
+	gap: 20px;
+	padding: 22px;
+	border-radius: 13px;
+	background: var(--card);
+}
+body[data-admin-design] .iz-admin-detail-hero > :first-child {
+	grid-column: 1;
+	grid-row: 1 / span 4;
+	width: 88px;
+	height: 88px;
+}
+body[data-admin-design] .iz-admin-detail-hero > img {
+	object-fit: cover;
+	object-position: center;
+	padding: 0;
+}
+body[data-admin-design] .iz-admin-detail-hero > :not(:first-child) {
+	grid-column: 2;
+	min-width: 0;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+body[data-admin-design] .iz-admin-detail-hero > [data-slot="badge"] {
+	width: fit-content;
+}
+body[data-admin-design] .iz-admin-detail-hero :is(h1, h2, h3) {
+	font-size: var(--iz-fs-head, 1.5rem);
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+body[data-admin-design] .iz-admin-detail-section {
+	min-width: 0;
+	border-radius: 13px;
+	background: var(--card);
+}
+body[data-admin-design]
+	.iz-admin-detail-main
+	.iz-admin-detail-section
+	> :first-child {
+	padding: 18px 20px;
+}
+body[data-admin-design]
+	.iz-admin-detail-main
+	.iz-admin-detail-section
+	> :last-child {
+	padding: 20px;
+	gap: 20px;
+}
+body[data-admin-design]
+	.iz-admin-detail-section
+	> :first-child
+	> p:first-child {
+	font-size: var(--iz-fs-title, 1.25rem);
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+}
+body[data-admin-design]
+	.iz-admin-detail-content
+	> .iz-admin-detail-section
+	> .grid {
+	grid-template-columns: minmax(0, 1fr);
+	padding: 0;
+	background: transparent;
+}
+body[data-admin-design] .iz-admin-detail-field > div > :first-child {
+	font-size: var(--iz-fs-tiny, 0.875rem);
+	text-transform: none;
+	letter-spacing: 0;
+}
+body[data-admin-design] .iz-admin-detail-field > div > :last-child {
+	font-size: var(--iz-fs-body, 1rem);
+}
+body[data-admin-design]
+	:is(.iz-admin-detail-sheet, .iz-admin-member-detail)
+	.truncate {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+body[data-admin-design] .iz-admin-detail-field {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+body[data-admin-design] .iz-admin-detail-field > div {
+	min-width: 0;
+}
+body[data-admin-design] .iz-admin-create-account-form {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	align-content: start;
+	gap: 20px;
+	padding: 24px;
+}
+body[data-admin-design] .iz-admin-create-account-form > [role="alert"] {
+	grid-column: 1 / -1;
+}
+body[data-admin-design] .iz-admin-member-detail > .space-y-4 {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	align-items: start;
+	gap: 20px;
+}
+body[data-admin-design] .iz-admin-member-detail > .space-y-4 > * {
+	min-width: 0;
+	margin: 0;
+}
+body[data-admin-design] .iz-admin-member-detail .iz-admin-detail-hero {
+	grid-column: 1 / -1;
+}
+body[data-admin-design] .iz-admin-member-detail li {
+	flex-wrap: wrap;
+	overflow-wrap: anywhere;
+}
+@media (max-width: 1023px) {
+	body[data-admin-design] .iz-admin-detail-content {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	body[data-admin-design] .iz-admin-detail-main,
+	body[data-admin-design] .iz-admin-detail-content > .iz-admin-detail-section {
+		grid-column: 1;
+		grid-row: auto;
+	}
+}
+@media (max-width: 767px) {
+	body[data-admin-design] .iz-admin-management-filters,
+	body[data-admin-design] .iz-admin-create-account-form,
+	body[data-admin-design] .iz-admin-member-detail > .space-y-4 {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+	}
+	body[data-admin-design]
+		.iz-admin-management-filters
+		:is(input, [role="combobox"]) {
+		width: 100%;
+	}
+	body[data-admin-design] .iz-admin-management-table,
+	body[data-admin-design] .iz-admin-management-table tbody {
+		display: block;
+		width: 100%;
+		min-width: 0;
+	}
+	body[data-admin-design] .iz-admin-management-table thead {
+		display: none;
+	}
+	body[data-admin-design] .iz-admin-management-table tbody tr {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+		padding: 20px 16px;
+	}
+	body[data-admin-design] .iz-admin-management-table td {
+		display: block;
+		padding: 0;
+		min-width: 0;
+		max-width: 100%;
+		border: 0;
+	}
+	body[data-admin-design] .iz-admin-management-table td:first-child,
+	body[data-admin-design] .iz-admin-management-table td:last-child,
+	body[data-admin-design] .iz-admin-management-table td[colspan] {
+		grid-column: 1 / -1;
+	}
+	body[data-admin-design] .iz-admin-management-table td[data-label]::before {
+		content: attr(data-label);
+		display: block;
+		margin-bottom: 8px;
+		color: var(--muted-foreground);
+		font-size: var(--iz-fs-tiny, 0.875rem);
+	}
+	body[data-admin-design] .iz-admin-management-table td[colspan] {
+		height: auto;
+		min-height: 96px;
+	}
+	body[data-admin-design] .iz-admin-detail-sheet {
+		width: 100%;
+		max-width: 100%;
+	}
+	body[data-admin-design] .iz-admin-detail-content {
+		padding: 16px;
+	}
+	body[data-admin-design] .iz-admin-detail-hero {
+		grid-template-columns: 64px minmax(0, 1fr);
+		gap: 12px;
+		padding: 16px;
+	}
+	body[data-admin-design] .iz-admin-detail-hero > :first-child {
+		width: 64px;
+		height: 64px;
+	}
+	body[data-admin-design]
+		.iz-admin-detail-main
+		.iz-admin-detail-section
+		> :first-child,
+	body[data-admin-design]
+		.iz-admin-detail-main
+		.iz-admin-detail-section
+		> :last-child {
+		padding: 16px;
+	}
+	body[data-admin-design] .iz-admin-create-account-form {
+		padding: 20px 16px;
+	}
+}

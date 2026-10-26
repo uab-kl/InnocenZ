@@ -1,3 +1,4 @@
+import "@/components/admin/admin-overview-design.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/admin/settings")({
 function SettingsComponent() {
 	const { t } = usePortalLocale();
 	return (
-		<PageShell>
+		<PageShell className="admin-overview-design admin-settings-design">
 			<PageHeader
 				title={t.admin.navSettings}
 				description={t.admin.setSubtitle}
@@ -47,7 +48,7 @@ function SettingsComponent() {
 					<CardTitle>{t.admin.setEnvironment}</CardTitle>
 					<CardDescription>{t.admin.setEnvironmentHint}</CardDescription>
 				</CardHeader>
-				<CardContent className="space-y-2 text-sm">
+				<CardContent className="admin-settings-environment">
 					<div className="flex justify-between gap-4 border-b pb-2">
 						<span className="text-muted-foreground">{t.admin.setApiUrl}</span>
 						<code>{import.meta.env.VITE_API_URL}</code>
@@ -178,8 +179,8 @@ function PlatformConfigCard() {
 						{t.admin.setLoadFailed}
 					</p>
 				) : (
-					<form onSubmit={handleSubmit} className="space-y-4 max-w-xl">
-						<div className="grid gap-4 sm:grid-cols-2">
+					<form onSubmit={handleSubmit} className="admin-settings-form">
+						<div className="admin-settings-fields">
 							<ConfigField
 								id="platformFeePercent"
 								label={t.admin.setPlatformFee}
@@ -260,7 +261,7 @@ function ConfigField({
 	error?: string;
 }) {
 	return (
-		<div className="space-y-1.5">
+		<div className="min-w-0 space-y-2">
 			<Label htmlFor={id}>{label}</Label>
 			<Input
 				id={id}

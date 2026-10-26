@@ -1,3 +1,4 @@
+import "@/components/admin/admin-overview-design.css";
 import {
 	createFileRoute,
 	Link,
@@ -34,19 +35,13 @@ const TAB_ACTIVE = "bg-[color:var(--lavender-soft)] !text-lavender";
 function RbacLayout() {
 	const { t } = usePortalLocale();
 	const badges = useSidebarBadges();
-	// The Pending list shows ALL pending admin-requests, so the tab total has to
-	// add plan changes back — the requests badge excludes them by design (the
-	// sidebar renders Plan Request and Plan Change as two separate badges).
+	// Organization approvals live here; plans keep their dedicated service queues.
 	const pendingTotal =
-		(badges["sidebar-user-agency"] ?? 0) +
-		(badges["sidebar-user-outlet"] ?? 0) +
-		(badges["sidebar-service-requests"] ?? 0) +
-		(badges["sidebar-service-plan-changes"] ?? 0) +
-		(badges["sidebar-service-other"] ?? 0);
+		(badges["sidebar-user-agency"] ?? 0) + (badges["sidebar-user-outlet"] ?? 0);
 
 	return (
-		<div className="flex flex-col">
-			<div className="flex flex-wrap items-center gap-1.5 border-b px-6 pt-6 md:px-8">
+		<div className="admin-rbac-design flex min-w-0 flex-col">
+			<div className="admin-rbac-tabs flex flex-wrap items-center gap-1.5 border-b px-6 pt-6 md:px-8">
 				{rbacSections.map((section) => (
 					<Link
 						key={section.key}

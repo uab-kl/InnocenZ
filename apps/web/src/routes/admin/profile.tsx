@@ -1,9 +1,11 @@
+import "@/components/admin/admin-overview-design.css";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Camera, Loader2, Settings, User as UserIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AdminLoginSecurityCard } from "@/components/admin/AdminLoginSecurityCard";
+import { adminConsoleRoleLabel } from "@/components/admin/admin-role-label";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -18,7 +20,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { adminConsoleRoleName } from "@/lib/auth/console-role";
 import {
 	updateMyDisplayName,
 	uploadMyProfileImage,
@@ -61,8 +62,9 @@ function ProfilePage() {
 		};
 	}, [previewUrl]);
 
-	// The admin role, not `roles[0]` — see `adminConsoleRoleName`.
-	const roleLabel = adminConsoleRoleName(user?.roles);
+	// The admin role, not `roles[0]` — see `adminConsoleRoleName` — and as a
+	// label, never the stored lower-case "admin".
+	const roleLabel = adminConsoleRoleLabel(user?.roles, t);
 	const savedImageUrl = apiAssetUrl(user?.profileImage);
 	const avatarSrc =
 		previewUrl ??
@@ -117,7 +119,7 @@ function ProfilePage() {
 	}
 
 	return (
-		<PageShell>
+		<PageShell className="admin-overview-design admin-profile-design">
 			<PageHeader
 				icon={UserIcon}
 				title={t.admin.navProfile}
@@ -189,7 +191,7 @@ function ProfilePage() {
 									</p>
 								</div>
 
-								<div className="grid flex-1 gap-4 sm:grid-cols-2">
+								<div className="admin-profile-fields grid min-w-0 flex-1 gap-5 sm:grid-cols-2">
 									<div className="space-y-2 sm:col-span-1">
 										<Label htmlFor="admin-display-name">
 											{t.adminProfile.displayName}

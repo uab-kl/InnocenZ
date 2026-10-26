@@ -56,13 +56,25 @@ import { useAuth } from "@/lib/auth-context";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { fetchAgencyLogoSource } from "@/services/agency/agency";
+import "./agency-management-design.css";
+
+type SettingsSection = "organization" | "team" | "personal";
 
 export const Route = createFileRoute("/agency/profile")({
 	component: AgencyProfile,
 });
 
 function AgencyProfile() {
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
+	const [section, setSection] = useState<SettingsSection>("organization");
+	const sections: { id: SettingsSection; label: string }[] = [
+		{
+			id: "organization",
+			label: locale === "zh" ? "机构资料" : "Organization",
+		},
+		{ id: "team", label: locale === "zh" ? "团队" : "Team" },
+		{ id: "personal", label: locale === "zh" ? "个人" : "Personal" },
+	];
 	const agencyOwner = useStore((s) => s.agencyOwner);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
 	const allAgencyPRs = useStore((s) => s.agencyPRs);
@@ -133,10 +145,17 @@ function AgencyProfile() {
 	 * that lands after the owner has picked a new file cannot replace the image
 	 * they are framing, without making `photoSource` a dependency that would
 	 * re-run this effect the moment a pick set it.
+	 *
+	 * ⚠️ Asked ONLY by a lane that may edit. The route is `agencyOwnerOfParam`
+	 * (owner, or a guarantor standing in) — exactly the lanes holding
+	 * `settings:update`, which is what `editSettings` reads. Everyone else got a
+	 * 403 on every visit, for a source only the edit mode's Adjust button uses.
 	 */
+	const can = useAgencyCan();
+	const canEdit = can("editSettings");
 	useEffect(() => {
 		const agencyId = profile.agencyId;
-		if (!agencyId) return;
+		if (!agencyId || !canEdit) return;
 		let cancelled = false;
 		void fetchAgencyLogoSource(agencyId, logout).then((source) => {
 			if (cancelled || !source) return;
@@ -157,11 +176,9 @@ function AgencyProfile() {
 		return () => {
 			cancelled = true;
 		};
-	}, [profile.agencyId, logout]);
+	}, [profile.agencyId, logout, canEdit]);
 
 	const avatarFileRef = useRef<HTMLInputElement>(null);
-	const can = useAgencyCan();
-	const canEdit = can("editSettings");
 	/** Whoever is signed in — used for Login & security, which is personal. */
 	const { user: currentUser } = useCurrentUser();
 
@@ -446,9 +463,24 @@ function AgencyProfile() {
 	const orgStatus = getAgencyIdentity()?.agencyStatus;
 
 	return (
-		<div className="iz-screen">
-			<header>
-				<IzPageTitle>{t.agencyMisc.settings}</IzPageTitle>
+		<div className="iz-screen iz-agency-settings">
+			<header className="iz-agency-settings-header">
+				<div>
+					<IzPageTitle>{t.agencyMisc.settings}</IzPageTitle>
+					<p className="iz-muted mt-2">
+						{locale === "zh"
+							? "机构资料、团队权限和您的个人账户。"
+							: "Organization, team access, and your personal account."}
+					</p>
+				</div>
+				{section === "organization" && canEdit && !editing && (
+					<ProfileEditTrigger
+						onClick={startEdit}
+						label={
+							locale === "zh" ? "编辑机构资料" : "Edit organization profile"
+						}
+					/>
+				)}
 				{/* `!canEdit`, not one named lane — see routes/outlet/settings.tsx. */}
 				{!canEdit && !editing && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
@@ -459,230 +491,338 @@ function AgencyProfile() {
 				)}
 			</header>
 			<PendingReviewBanner orgStatus={orgStatus} kind="agency" />
-
 			<div
-				className={`iz-settings-profile flex flex-col items-center py-5${editing ? " iz-settings-profile--editing" : ""}`}
+				className="iz-agency-settings-tabs"
+				role="tablist"
+				aria-label={t.agencyMisc.settings}
 			>
-				<input
-					ref={avatarFileRef}
-					type="file"
-					accept="image/*"
-					className="sr-only"
-					onChange={onAvatarFilePick}
-				/>
-				<AvatarCropSheet
-					open={Boolean(pendingPhoto)}
-					pick={pendingPhoto}
-					onCancel={() => setPendingPhoto(null)}
-					onConfirm={applyCroppedPhoto}
-				/>
-				<div className="relative">
-					<div
-						className={`iz-avatar iz-avatar--xl${owner.avatarPhoto ? " iz-avatar-photo" : ""}`}
-						style={
-							owner.avatarPhoto ? undefined : { background: "var(--iz-grad)" }
-						}
+				{sections.map((item, index) => (
+					<button
+						key={item.id}
+						type="button"
+						role="tab"
+						id={`agency-settings-tab-${item.id}`}
+						aria-controls={`agency-settings-panel-${item.id}`}
+						aria-selected={section === item.id}
+						tabIndex={section === item.id ? 0 : -1}
+						onClick={() => setSection(item.id)}
+						onKeyDown={(event) => {
+							const nextIndex =
+								event.key === "ArrowRight"
+									? (index + 1) % sections.length
+									: event.key === "ArrowLeft"
+										? (index + sections.length - 1) % sections.length
+										: event.key === "Home"
+											? 0
+											: event.key === "End"
+												? sections.length - 1
+												: -1;
+							const next = sections[nextIndex];
+							if (!next) return;
+							event.preventDefault();
+							setSection(next.id);
+							event.currentTarget.parentElement
+								?.querySelectorAll<HTMLButtonElement>("[role=tab]")
+								[nextIndex]?.focus();
+						}}
 					>
-						{owner.avatarPhoto ? (
-							<img src={owner.avatarPhoto} alt="" />
-						) : (
-							avatarLetter
-						)}
-					</div>
-				</div>
-				<div className="mt-3 iz-heading text-lg font-bold">{owner.orgName}</div>
-				{/* Owner only — see the twin in routes/outlet/settings.tsx. */}
-				{isOrgOwner ? (
-					<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
-				) : null}
-				<div
-					className={`mt-1 flex items-center gap-1 iz-tiny ${
-						isOrgSuspended(orgStatus)
-							? "text-[var(--iz-red)]"
-							: owner.accountActivated
-								? "text-[var(--iz-green)]"
-								: "text-[var(--iz-amber)]"
-					}`}
-				>
-					<Shield className="h-3 w-3" />
-					{isOrgSuspended(orgStatus)
-						? t.profile.suspendedProfileOnly
-						: owner.accountActivated
-							? fill(t.profile.verifiedUsageBased, {
-									price: subscriptionBilling.priceLabel,
-								})
-							: profile.backed || isOrgPendingReview(orgStatus)
-								? t.profile.pendingAdminApproval
-								: t.profile.pendingOtpActivation}
-				</div>
-				{editing && canEdit ? (
-					<ProfilePhotoActions
-						hasPhoto={Boolean(draft.avatarPhoto)}
-						onChangePhoto={openAvatarUpload}
-						// Both, deliberately: a source can outlive the photo it came
-						// from — remove the logo, save, then edit again, and the
-						// restored source would otherwise offer Adjust on nothing.
-						onAdjustPhoto={
-							draft.avatarPhoto && photoSource ? adjustCrop : undefined
-						}
-						onRemovePhoto={
-							draft.avatarPhoto
-								? () => {
-										update({ avatarPhoto: null });
-										setLogoMeta(null);
-										setLogoCleared(true);
-										setPhotoSource(null);
-									}
-								: undefined
-						}
-					/>
-				) : (
-					canEdit && <ProfileEditTrigger onClick={startEdit} />
-				)}
+						{item.label}
+					</button>
+				))}
 			</div>
 
-			<IzSectionLabel>{t.agencyMisc.ownerInformation}</IzSectionLabel>
-			<ProfileSectionCard editing={editing && canEdit}>
-				<ProfileSettingsField
-					icon={Building2}
-					label={t.agencyMisc.organization}
-					value={owner.orgName}
-					onChange={(v) => update({ orgName: v })}
-					mode={fieldMode}
-					placeholder={t.agencyMisc.agencyNamePlaceholder}
-				/>
-				<ProfileSettingsField
-					icon={User}
-					label={t.agencyMisc.ownerName}
-					value={owner.ownerName}
-					onChange={(v) => update({ ownerName: v })}
-					mode={fieldMode}
-					placeholder={t.agencyMisc.fullNamePlaceholder}
-				/>
-				<ProfileSettingsField
-					icon={Phone}
-					label={t.agencyMisc.mobile}
-					value={owner.mobile}
-					mode="locked"
-					hint={t.agencyMisc.changeInLoginSecurity}
-				/>
-				<ProfileSettingsField
-					icon={Mail}
-					label={t.agencyMisc.email}
-					value={owner.email}
-					mode="locked"
-					hint={t.agencyMisc.changeInLoginSecurity}
-				/>
-				{!profile.backed && (
-					<ProfileSettingsField
-						icon={Shield}
-						label={t.agencyMisc.icForPv}
-						value={owner.ic}
-						onChange={(v) => update({ ic: v })}
-						mode={fieldMode}
-					/>
-				)}
-				{profile.backed && (
-					<ProfileAddressFields
-						value={address}
-						onChange={updateAddress}
-						mode={fieldMode}
-					/>
-				)}
-			</ProfileSectionCard>
+			{/* Mounted panels preserve organization drafts and personal uploads across tabs. */}
+			<section
+				className="iz-agency-settings-panel"
+				role="tabpanel"
+				id="agency-settings-panel-organization"
+				aria-labelledby="agency-settings-tab-organization"
+				hidden={section !== "organization"}
+			>
+				<section className="iz-approved-org-profile">
+					<h2>{t.approvedDesign.organizationProfile}</h2>
+					<p className="iz-muted">{t.approvedDesign.identityContact}</p>
+					<div
+						className={`iz-settings-profile iz-agency-settings-identity${editing ? " iz-settings-profile--editing" : ""}`}
+					>
+						<input
+							ref={avatarFileRef}
+							type="file"
+							accept="image/*"
+							className="sr-only"
+							onChange={onAvatarFilePick}
+						/>
+						<AvatarCropSheet
+							open={Boolean(pendingPhoto)}
+							pick={pendingPhoto}
+							onCancel={() => setPendingPhoto(null)}
+							onConfirm={applyCroppedPhoto}
+						/>
+						<div className="relative">
+							<div
+								className={`iz-avatar iz-avatar--xl${owner.avatarPhoto ? " iz-avatar-photo" : ""}`}
+								style={
+									owner.avatarPhoto
+										? undefined
+										: { background: "var(--iz-grad)" }
+								}
+							>
+								{owner.avatarPhoto ? (
+									<img src={owner.avatarPhoto} alt="" />
+								) : (
+									avatarLetter
+								)}
+							</div>
+						</div>
+						<div className="iz-agency-settings-identity-copy">
+							<div className="iz-heading text-lg font-bold">
+								{owner.orgName}
+							</div>
+							{/* Owner only — see the twin in routes/outlet/settings.tsx. */}
+							{isOrgOwner ? (
+								<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
+							) : null}
+							<div
+								className={`mt-1 flex items-center gap-1 iz-tiny ${
+									isOrgSuspended(orgStatus)
+										? "text-[var(--iz-red)]"
+										: owner.accountActivated
+											? "text-[var(--iz-green)]"
+											: "text-[var(--iz-amber)]"
+								}`}
+							>
+								<Shield className="h-3 w-3" />
+								{isOrgSuspended(orgStatus)
+									? t.profile.suspendedProfileOnly
+									: owner.accountActivated
+										? fill(t.profile.verifiedUsageBased, {
+												price: subscriptionBilling.priceLabel,
+											})
+										: profile.backed || isOrgPendingReview(orgStatus)
+											? t.profile.pendingAdminApproval
+											: t.profile.pendingOtpActivation}
+							</div>
+						</div>
+						{editing && canEdit ? (
+							<ProfilePhotoActions
+								hasPhoto={Boolean(draft.avatarPhoto)}
+								onChangePhoto={openAvatarUpload}
+								// Both, deliberately: a source can outlive the photo it came
+								// from — remove the logo, save, then edit again, and the
+								// restored source would otherwise offer Adjust on nothing.
+								onAdjustPhoto={
+									draft.avatarPhoto && photoSource ? adjustCrop : undefined
+								}
+								onRemovePhoto={
+									draft.avatarPhoto
+										? () => {
+												update({ avatarPhoto: null });
+												setLogoMeta(null);
+												setLogoCleared(true);
+												setPhotoSource(null);
+											}
+										: undefined
+								}
+							/>
+						) : null}
+					</div>
 
+					<div className="iz-agency-settings-organization-fields">
+						<ProfileSectionCard editing={editing && canEdit}>
+							<ProfileSettingsField
+								icon={Building2}
+								label={t.agencyMisc.organization}
+								value={owner.orgName}
+								onChange={(v) => update({ orgName: v })}
+								mode={fieldMode}
+								placeholder={t.agencyMisc.agencyNamePlaceholder}
+							/>
+							<ProfileSettingsField
+								icon={User}
+								label={t.agencyMisc.ownerName}
+								value={owner.ownerName}
+								onChange={(v) => update({ ownerName: v })}
+								mode={fieldMode}
+								placeholder={t.agencyMisc.fullNamePlaceholder}
+							/>
+							<ProfileSettingsField
+								icon={Phone}
+								label={t.agencyMisc.mobile}
+								value={owner.mobile}
+								mode="locked"
+								hint={t.agencyMisc.changeInLoginSecurity}
+							/>
+							<ProfileSettingsField
+								icon={Mail}
+								label={t.agencyMisc.email}
+								value={owner.email}
+								mode="locked"
+								hint={t.agencyMisc.changeInLoginSecurity}
+							/>
+							{!profile.backed && (
+								<ProfileSettingsField
+									icon={Shield}
+									label={t.agencyMisc.icForPv}
+									value={owner.ic}
+									onChange={(v) => update({ ic: v })}
+									mode={fieldMode}
+								/>
+							)}
+						</ProfileSectionCard>
+					</div>
+					{profile.backed && (
+						<section className="iz-approved-org-address">
+							<h2>{t.approvedDesign.address}</h2>
+							<ProfileAddressFields
+								value={address}
+								onChange={updateAddress}
+								mode={fieldMode}
+							/>
+						</section>
+					)}
+				</section>
+
+				{/* Demo-only Finance Head form — real staff live in OrgMembersPanel. */}
+				{!profile.backed && (
+					<>
+						<IzSectionLabel>{t.agencyMisc.financeHeadDualSign}</IzSectionLabel>
+						<ProfileSectionCard editing={editing && canEdit}>
+							<p className="iz-tiny iz-muted mb-1 pt-2">
+								{t.profile.icAutoStamps}
+							</p>
+							<ProfileSettingsField
+								icon={User}
+								label={t.agencyMisc.name}
+								value={finance.name}
+								onChange={(v) => updateFinance({ name: v })}
+								mode={fieldMode}
+							/>
+							<ProfileSettingsField
+								icon={Shield}
+								label={t.agencyMisc.ic}
+								value={finance.ic}
+								onChange={(v) => updateFinance({ ic: v })}
+								mode={fieldMode}
+							/>
+							<ProfileSettingsField
+								icon={Mail}
+								label={t.agencyMisc.email}
+								value={finance.email}
+								onChange={(v) => updateFinance({ email: v })}
+								mode={fieldMode}
+							/>
+							{finance.eSignatureStored && (
+								<p className="iz-tiny text-[var(--iz-green)] mt-2 mb-2">
+									{t.profile.eSignatureOnFile}
+								</p>
+							)}
+						</ProfileSectionCard>
+
+						{editing && canEdit && (
+							<>
+								<IzSectionLabel>
+									{t.agencyMisc.inviteFinanceHead}
+								</IzSectionLabel>
+								<ProfileSectionCard editing>
+									<p className="iz-tiny iz-muted mb-2 pt-2">
+										{t.profile.subRoleInviteHint}
+									</p>
+									<input
+										className="iz-profile-field__input mb-3"
+										placeholder="finance@agency.my"
+										value={inviteEmail}
+										onChange={(e) => setInviteEmail(e.target.value)}
+									/>
+								</ProfileSectionCard>
+							</>
+						)}
+					</>
+				)}
+			</section>
+			{/* Real staff from `agency_user`. */}
+			<section
+				className="iz-agency-settings-panel iz-agency-settings-team"
+				role="tabpanel"
+				id="agency-settings-panel-team"
+				aria-labelledby="agency-settings-tab-team"
+				hidden={section !== "team"}
+			>
+				{!editing && !profile.agencyId && (
+					<IzCard>
+						<p className="iz-muted">{t.profile.noTeamMembers}</p>
+					</IzCard>
+				)}
+				{!editing && (
+					<OrgMembersPanel
+						kind="agency"
+						orgId={profile.agencyId}
+						canManage={canEdit}
+					/>
+				)}
+				{editing && (
+					<IzCard>
+						<p className="iz-muted">
+							{locale === "zh"
+								? "请先保存或取消机构资料的更改，再管理团队。"
+								: "Save or cancel your organization changes before managing the team."}
+						</p>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !w-auto mt-3"
+							onClick={() => setSection("organization")}
+						>
+							{locale === "zh" ? "返回机构资料" : "Back to organization"}
+						</button>
+					</IzCard>
+				)}
+			</section>
+			<section
+				className="iz-agency-settings-panel"
+				role="tabpanel"
+				id="agency-settings-panel-personal"
+				aria-labelledby="agency-settings-tab-personal"
+				hidden={section !== "personal"}
+			>
+				{/* Sits with Login & security, not with the demo Finance Head card
+			    above: this is the signed-in person's own signature, whoever they
+			    are, and it is real. */}
+				<SignatureOnFileCard />
+
+				<IzSectionLabel>{t.agencyMisc.loginAndSecurity}</IzSectionLabel>
+				<IzCard>
+					<AccountAvatarCard />
+					<div className="iz-agency-settings-account">
+						<ProfileSettingsField
+							icon={Mail}
+							label={t.agencyMisc.email}
+							value={currentUser?.email ?? (profile.backed ? "" : owner.email)}
+							mode="view"
+						/>
+						<ProfileSettingsField
+							icon={Phone}
+							label={t.agencyMisc.mobile}
+							value={
+								currentUser?.contactNo ?? (profile.backed ? "" : owner.mobile)
+							}
+							mode="view"
+						/>
+					</div>
+					<p className="iz-tiny iz-muted mb-3">{t.profile.passwordOtpHint}</p>
+					<button
+						type="button"
+						className="iz-btn iz-btn-primary w-full"
+						onClick={() => setSecurityOpen(true)}
+					>
+						{t.profile.securitySettings}
+					</button>
+				</IzCard>
+			</section>
 			{canEdit && editing && (
 				<ProfileEditDock
 					onSave={saveEdit}
 					onCancel={cancelEdit}
 					saving={saving}
 				/>
-			)}
-
-			{/* Demo-only Finance Head form — real staff live in OrgMembersPanel. */}
-			{!profile.backed && (
-				<>
-					<IzSectionLabel>{t.agencyMisc.financeHeadDualSign}</IzSectionLabel>
-					<ProfileSectionCard editing={editing && canEdit}>
-						<p className="iz-tiny iz-muted mb-1 pt-2">
-							{t.profile.icAutoStamps}
-						</p>
-						<ProfileSettingsField
-							icon={User}
-							label={t.agencyMisc.name}
-							value={finance.name}
-							onChange={(v) => updateFinance({ name: v })}
-							mode={fieldMode}
-						/>
-						<ProfileSettingsField
-							icon={Shield}
-							label={t.agencyMisc.ic}
-							value={finance.ic}
-							onChange={(v) => updateFinance({ ic: v })}
-							mode={fieldMode}
-						/>
-						<ProfileSettingsField
-							icon={Mail}
-							label={t.agencyMisc.email}
-							value={finance.email}
-							onChange={(v) => updateFinance({ email: v })}
-							mode={fieldMode}
-						/>
-						{finance.eSignatureStored && (
-							<p className="iz-tiny text-[var(--iz-green)] mt-2 mb-2">
-								{t.profile.eSignatureOnFile}
-							</p>
-						)}
-					</ProfileSectionCard>
-
-					{editing && canEdit && (
-						<>
-							<IzSectionLabel>{t.agencyMisc.inviteFinanceHead}</IzSectionLabel>
-							<ProfileSectionCard editing>
-								<p className="iz-tiny iz-muted mb-2 pt-2">
-									{t.profile.subRoleInviteHint}
-								</p>
-								<input
-									className="iz-profile-field__input mb-3"
-									placeholder="finance@agency.my"
-									value={inviteEmail}
-									onChange={(e) => setInviteEmail(e.target.value)}
-								/>
-							</ProfileSectionCard>
-						</>
-					)}
-				</>
-			)}
-
-			{/* Real staff from `agency_user`. */}
-			{!editing && (
-				<OrgMembersPanel
-					kind="agency"
-					orgId={profile.agencyId}
-					canManage={canEdit}
-				/>
-			)}
-
-			{/* Sits with Login & security, not with the demo Finance Head card
-			    above: this is the signed-in person's own signature, whoever they
-			    are, and it is real. */}
-			{!editing && <SignatureOnFileCard />}
-
-			{!editing && (
-				<>
-					<IzSectionLabel>{t.agencyMisc.loginAndSecurity}</IzSectionLabel>
-					<IzCard>
-						<AccountAvatarCard />
-						<p className="iz-tiny iz-muted mb-3">{t.profile.passwordOtpHint}</p>
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary w-full"
-							onClick={() => setSecurityOpen(true)}
-						>
-							{t.profile.securitySettings}
-						</button>
-					</IzCard>
-				</>
 			)}
 
 			<SecuritySettingsSheets
@@ -697,8 +837,8 @@ function AgencyProfile() {
 				 * on its own account: the screen named one address and would have
 				 * changed another.
 				 */
-				email={currentUser?.email ?? owner.email}
-				mobile={currentUser?.contactNo ?? owner.mobile}
+				email={currentUser?.email ?? (profile.backed ? "" : owner.email)}
+				mobile={currentUser?.contactNo ?? (profile.backed ? "" : owner.mobile)}
 				/*
 				 * No `canEdit` — that is `settings:update` on the ORGANISATION, and
 				 * this sheet is purely personal. Gating it on the org permission

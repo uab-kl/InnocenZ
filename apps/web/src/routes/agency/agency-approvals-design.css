@@ -1,0 +1,437 @@
+/* Approved review workbench. Request data and decision handlers stay in React. */
+.iz-portal .iz-approvals-page-head > .iz-btn {
+	width: auto;
+	flex: 0 0 auto;
+}
+.iz-portal .iz-approvals-page-head > div {
+	flex: 1;
+	min-width: 0;
+}
+.iz-approvals-queue-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 6px 18px;
+}
+.iz-approvals-queue-heading h2 {
+	font-size: var(--iz-fs-title);
+	font-weight: 400;
+	margin: 0;
+}
+.iz-portal .iz-approvals-page-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 24px;
+	margin-bottom: 24px;
+}
+.iz-approved-description {
+	margin-top: 10px;
+	color: var(--iz-muted);
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+}
+.iz-portal .iz-approvals-page .iz-approvals-groups {
+	display: flex;
+	width: fit-content;
+	max-width: 100%;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 5px;
+	margin: 0 0 20px;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+	background: var(--iz-panel2);
+}
+.iz-portal .iz-approvals-page .iz-approvals-group {
+	min-height: 46px;
+	border: 0;
+	border-radius: 7px;
+	padding: 10px 14px;
+	background: transparent;
+	box-shadow: none;
+	font: inherit;
+	color: var(--iz-muted);
+}
+.iz-portal .iz-approvals-page .iz-approvals-group.on {
+	background: var(--iz-panel);
+	color: var(--iz-txt);
+}
+.iz-portal .iz-approvals-page .iz-approvals-group__count {
+	font: inherit;
+	min-width: 24px;
+	height: auto;
+	border-radius: 5px;
+}
+.iz-portal .iz-approvals-workbench {
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+	overflow: clip;
+}
+.iz-portal .iz-approvals-toolbar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px 20px;
+	padding: 14px 18px;
+	border-bottom: 1px solid var(--iz-line);
+	background: var(--iz-panel2);
+}
+.iz-portal .iz-approvals-page :is(.iz-approvals-tabs, .iz-approvals-subfilter) {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	width: fit-content;
+	max-width: 100%;
+	padding: 3px;
+	margin: 0;
+	border: 1px solid var(--iz-line);
+	border-radius: 8px;
+	background: var(--iz-panel);
+}
+.iz-portal
+	.iz-approvals-page
+	:is(.iz-approvals-tab, .iz-approvals-subfilter .iz-chip) {
+	width: auto;
+	flex: 0 1 auto;
+	min-height: 46px;
+	padding: 10px 12px;
+	border: 0;
+	border-radius: 6px;
+	font: inherit;
+	color: var(--iz-muted);
+	box-shadow: none;
+	background: transparent;
+	text-align: center;
+}
+.iz-portal
+	.iz-approvals-page
+	:is(.iz-approvals-tab.on, .iz-approvals-subfilter .iz-chip.on) {
+	background: #372d45;
+	color: var(--iz-txt);
+}
+.iz-portal .iz-approvals-workbench .iz-approvals-layout {
+	grid-template-columns: minmax(280px, 32%) minmax(0, 1fr);
+	gap: 0;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+.iz-portal .iz-approvals-workbench .iz-approvals-sidebar {
+	border: 0;
+	border-right: 1px solid var(--iz-line);
+	border-radius: 0;
+	padding: 10px;
+	background: transparent;
+	box-shadow: none;
+}
+.iz-portal .iz-approvals-page .iz-approvals-list {
+	padding: 0;
+	max-height: 75vh;
+	overflow-y: auto;
+}
+.iz-portal .iz-approvals-page .iz-approvals-list-item {
+	position: relative;
+	display: flex;
+	padding: 16px;
+	margin: 0 0 6px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	box-shadow: none;
+	text-align: left;
+	color: var(--iz-txt);
+}
+.iz-portal .iz-approvals-page .iz-approvals-list-item.on {
+	border-color: var(--iz-violet);
+	background: #372d45;
+	box-shadow: inset 3px 0 var(--iz-violet);
+}
+.iz-portal .iz-approvals-page .iz-approvals-list-item :is(.name, .sub) {
+	display: block;
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+	font-family: var(--iz-font);
+}
+.iz-portal .iz-approvals-page .iz-approvals-list-item .name {
+	font-weight: 600;
+}
+.iz-portal .iz-approvals-page .iz-approvals-list-item .sub {
+	margin-top: 6px;
+	color: var(--iz-muted);
+}
+.iz-approved-request-status {
+	display: inline-flex;
+	margin-top: 8px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: #3e3523;
+	color: #e4c572;
+	font-size: var(--iz-fs-label);
+}
+.iz-approved-request-status.approved {
+	color: #8dc9a9;
+	background: #24392f;
+}
+.iz-approved-request-status.rejected {
+	color: #e5a1a6;
+	background: #3c282f;
+}
+.iz-portal .iz-approvals-workbench .iz-approvals-detail {
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	overflow: visible;
+}
+.iz-portal .iz-approvals-page .iz-approvals-detail-head {
+	padding: 20px;
+	margin: 0;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-portal .iz-approvals-page .iz-approvals-detail-name {
+	font-size: var(--iz-fs-title);
+	font-weight: 600;
+}
+.iz-portal
+	.iz-approvals-page
+	:is(.iz-approvals-personal, .iz-approvals-docs, .iz-approvals-completeness) {
+	margin: 0;
+	padding: 20px;
+}
+.iz-portal .iz-approvals-page :is(h3, .iz-approvals-info-title) {
+	font-size: var(--iz-fs-title);
+	font-weight: 600;
+	line-height: 1.5;
+	margin: 0 0 16px;
+}
+.iz-approved-data-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 16px 18px;
+	margin: 0;
+	padding: 16px;
+	border-radius: 8px;
+	background: var(--iz-panel2);
+}
+.iz-approved-data-grid > div {
+	min-width: 0;
+}
+.iz-approved-data-grid dt {
+	color: var(--iz-muted);
+	margin-bottom: 6px;
+}
+.iz-approved-data-grid dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: 3px;
+	margin: 0 0 20px;
+	width: fit-content;
+	max-width: 100%;
+	border: 1px solid var(--iz-line);
+	border-radius: 8px;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-tab {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 10px 12px;
+	min-height: 46px;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--iz-muted);
+	box-shadow: none;
+	font: inherit;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-tab .t {
+	font: inherit;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-tab .s {
+	display: none;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-tab.on {
+	background: #372d45;
+	color: var(--iz-txt);
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-cell {
+	min-width: 0;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+	background: var(--iz-panel2);
+	box-shadow: none;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-cell .cell-label {
+	font: inherit;
+	padding: 10px;
+	letter-spacing: normal;
+	text-transform: none;
+	color: var(--iz-muted);
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-cell .cell-media {
+	height: 200px;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-cell .cell-media img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+.iz-approvals-completeness dl {
+	margin: 0;
+}
+.iz-approvals-completeness dl > div {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 12px 0;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-approvals-completeness dd {
+	margin: 0;
+	color: var(--iz-muted);
+}
+@media (max-width: 767px) {
+	.iz-portal .iz-approvals-page-head {
+		flex-wrap: wrap;
+	}
+	.iz-portal .iz-approvals-workbench .iz-approvals-layout {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.iz-portal .iz-approvals-workbench .iz-approvals-sidebar {
+		border-right: 0;
+		border-bottom: 1px solid var(--iz-line);
+	}
+	.iz-portal .iz-approvals-page .iz-approvals-list {
+		max-height: 320px;
+	}
+	.iz-approved-data-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.iz-portal .iz-approvals-page .iz-approvals-doc-row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+.iz-portal[data-portal="outlet"] .iz-approvals-page-head {
+	display: block;
+}
+.iz-portal[data-portal="outlet"] .iz-approvals-page-head p {
+	margin-top: 10px;
+	color: var(--iz-muted);
+}
+.iz-portal .iz-approvals-queue-title {
+	font-size: var(--iz-fs-title);
+	padding: 20px 6px;
+}
+.iz-portal .iz-approvals-page .uppercase {
+	text-transform: none;
+	letter-spacing: normal;
+}
+.iz-portal .iz-approvals-docs > .iz-approvals-detail-actions {
+	justify-content: flex-end;
+	padding-top: 20px;
+	margin-top: 20px;
+	border-top: 1px solid var(--iz-line);
+}
+
+/* Consistent queue controls and a list that fills the review column. */
+.iz-portal .iz-approvals-page .iz-approvals-tabs:empty {
+	display: none;
+}
+.iz-portal .iz-approvals-filter-host {
+	min-width: 0;
+	order: 1;
+	flex: 0 1 auto;
+}
+.iz-portal .iz-approvals-page .iz-approvals-groups {
+	width: 100%;
+}
+.iz-portal .iz-approvals-page .iz-approvals-group {
+	flex: 1 1 150px;
+}
+@media (min-width: 901px) {
+	.iz-portal .iz-approvals-workbench .iz-approvals-sidebar {
+		display: flex;
+		flex-direction: column;
+		align-self: stretch;
+		min-height: 520px;
+		max-height: none;
+	}
+	.iz-portal .iz-approvals-page .iz-approvals-list:not([hidden]) {
+		flex: 1;
+		min-height: 0;
+		max-height: none;
+		contain: size;
+		overflow-y: auto;
+	}
+}
+@media (max-width: 900px) {
+	.iz-portal .iz-approvals-filter-host,
+	.iz-portal .iz-approvals-filter-host .iz-approvals-subfilter {
+		width: 100%;
+	}
+	.iz-portal .iz-approvals-page .iz-approvals-subfilter > button {
+		flex: 1 1 auto;
+	}
+}
+
+.iz-portal .iz-approvals-sidebar .iz-approvals-member-row {
+	padding: 16px;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	background: transparent;
+	box-shadow: none;
+}
+.iz-portal .iz-approvals-sidebar .iz-approvals-member-row.on {
+	border-color: var(--iz-violet);
+	background: #372d45;
+	box-shadow: inset 3px 0 var(--iz-violet);
+}
+.iz-portal .iz-approvals-member-row .truncate {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.iz-portal .iz-approvals-page .iz-approvals-doc-tabs {
+	width: 100%;
+}
+
+.iz-portal .iz-approvals-page :is(.iz-approvals-tabs, .iz-approvals-subfilter) {
+	flex: 0 1 auto;
+	width: fit-content;
+}
+.iz-portal
+	.iz-approvals-page
+	:is(.iz-approvals-tabs, .iz-approvals-subfilter)
+	> button {
+	flex: 0 1 auto;
+	justify-content: center;
+}
+@media (min-width: 901px) {
+	.iz-portal[data-portal="outlet"] .iz-screen.iz-approvals-page {
+		min-height: calc(100dvh - 80px);
+		display: flex;
+		flex-direction: column;
+		box-sizing: border-box;
+	}
+	.iz-portal[data-portal="outlet"] .iz-approvals-workbench {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+	.iz-portal[data-portal="outlet"]
+		.iz-approvals-workbench
+		.iz-approvals-layout {
+		flex: 1;
+	}
+}

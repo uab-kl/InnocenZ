@@ -2,11 +2,13 @@ import {
 	AlertCircle,
 	CheckCircle2,
 	Loader2,
+	MoreHorizontal,
 	Plus,
 	RefreshCw,
 	Shield,
 	XCircle,
 } from "lucide-react";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +18,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
 	Select,
 	SelectContent,
@@ -89,7 +97,7 @@ export function AdminsTable({
 	const showLoading = isLoading && admins.length === 0;
 
 	return (
-		<Card className="border-(--lavender-soft)/40 bg-card">
+		<Card className="iz-admin-management-card border-(--lavender-soft)/40 bg-card">
 			<CardHeader>
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
@@ -103,26 +111,28 @@ export function AdminsTable({
 					</div>
 
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-						<Select
-							value={statusFilter}
-							onValueChange={(value) =>
-								onStatusFilterChange(value as AdminStatusFilter)
-							}
-						>
-							<SelectTrigger
-								className="sm:w-40"
-								aria-label={t.admin.filterByStatus}
+						<AdminFilters>
+							<Select
+								value={statusFilter}
+								onValueChange={(value) =>
+									onStatusFilterChange(value as AdminStatusFilter)
+								}
 							>
-								<SelectValue placeholder={t.admin.filterByStatus} />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-								<SelectItem value="active">{t.admin.statusActive}</SelectItem>
-								<SelectItem value="inactive">
-									{t.admin.statusInactive}
-								</SelectItem>
-							</SelectContent>
-						</Select>
+								<SelectTrigger
+									className="sm:w-40"
+									aria-label={t.admin.filterByStatus}
+								>
+									<SelectValue placeholder={t.admin.filterByStatus} />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									<SelectItem value="active">{t.admin.statusActive}</SelectItem>
+									<SelectItem value="inactive">
+										{t.admin.statusInactive}
+									</SelectItem>
+								</SelectContent>
+							</Select>
+						</AdminFilters>
 
 						<Button onClick={onCreateClick} className="shrink-0">
 							<Plus className="mr-2 h-4 w-4" />
@@ -133,25 +143,22 @@ export function AdminsTable({
 			</CardHeader>
 
 			<CardContent>
-				<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-					<Table>
+				<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
+					<Table className="iz-admin-management-table">
 						<TableHeader>
 							<TableRow>
-								<TableHead>{t.admin.colDisplayName}</TableHead>
-								<TableHead>{t.admin.colEmail}</TableHead>
-								<TableHead className="w-[120px]">{t.admin.colStatus}</TableHead>
-								<TableHead className="w-[180px]">
-									{t.admin.colCreated}
+								<TableHead>
+									{t.admin.colDisplayName} / {t.admin.colEmail}
 								</TableHead>
-								<TableHead className="w-[200px] text-right">
-									{t.admin.colActions}
-								</TableHead>
+								<TableHead>{t.admin.colStatus}</TableHead>
+								<TableHead>{t.admin.colCreated}</TableHead>
+								<TableHead>{t.admin.colActions}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={6} className="h-32">
+									<TableCell colSpan={4} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>{t.admin.loadingAdmins}</span>
@@ -160,7 +167,7 @@ export function AdminsTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={6} className="h-32">
+									<TableCell colSpan={4} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -178,7 +185,7 @@ export function AdminsTable({
 								</TableRow>
 							) : admins.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={6} className="h-32">
+									<TableCell colSpan={4} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Shield className="h-6 w-6" />
 											<span>{t.admin.noAdminsFound}</span>
@@ -188,11 +195,13 @@ export function AdminsTable({
 							) : (
 								admins.map((admin) => (
 									<TableRow key={admin.id}>
-										<TableCell className="font-medium">
-											{admin.displayName}
-										</TableCell>
-										<TableCell>{admin.email}</TableCell>
 										<TableCell>
+											{admin.displayName}
+											<div className="iz-admin-record-secondary">
+												{admin.email}
+											</div>
+										</TableCell>
+										<TableCell data-label={t.admin.colStatus}>
 											<Badge
 												variant="outline"
 												className={`${statusColors[admin.status] ?? statusColors.inactive} flex w-fit items-center gap-1 capitalize`}
@@ -205,43 +214,51 @@ export function AdminsTable({
 												{recordStatusLabel(admin.status, t)}
 											</Badge>
 										</TableCell>
-										<TableCell className="text-muted-foreground text-sm">
+										<TableCell data-label={t.admin.colCreated}>
 											{formatDate(admin.createdAt)}
 										</TableCell>
-										<TableCell className="text-right">
+										<TableCell>
 											{admin.id === currentUserId ? (
-												<span className="text-muted-foreground text-xs">
+												<span className="text-muted-foreground">
 													{t.admin.thisIsYou}
 												</span>
 											) : (
-												<div className="flex justify-end gap-2">
-													<Button
-														variant="outline"
-														size="sm"
-														disabled={busyUserId === admin.id}
-														onClick={() =>
-															onSetStatus?.(
-																admin,
-																admin.status === "active"
-																	? "inactive"
-																	: "active",
-															)
-														}
-													>
-														{admin.status === "active"
-															? t.admin.disable
-															: t.admin.enable}
-													</Button>
-													<Button
-														variant="outline"
-														size="sm"
-														className="text-destructive"
-														disabled={busyUserId === admin.id}
-														onClick={() => onRevokeAdmin?.(admin)}
-													>
-														{t.admin.removeAdmin}
-													</Button>
-												</div>
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button
+															variant="outline"
+															size="icon"
+															aria-label={`${t.admin.colActions} · ${admin.displayName}`}
+															disabled={busyUserId === admin.id}
+														>
+															<MoreHorizontal aria-hidden className="h-4 w-4" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end">
+														<DropdownMenuItem
+															disabled={busyUserId === admin.id}
+															onSelect={() =>
+																onSetStatus?.(
+																	admin,
+																	admin.status === "active"
+																		? "inactive"
+																		: "active",
+																)
+															}
+														>
+															{admin.status === "active"
+																? t.admin.disable
+																: t.admin.enable}
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															className="text-destructive"
+															disabled={busyUserId === admin.id}
+															onSelect={() => onRevokeAdmin?.(admin)}
+														>
+															{t.admin.removeAdmin}
+														</DropdownMenuItem>
+													</DropdownMenuContent>
+												</DropdownMenu>
 											)}
 										</TableCell>
 									</TableRow>
@@ -252,7 +269,7 @@ export function AdminsTable({
 				</div>
 
 				{pagination && pagination.totalCount > 0 && (
-					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+					<div className="iz-admin-management-pagination text-muted-foreground">
 						<div>
 							{fill(t.admin.showingAdmins, {
 								from: (pagination.page - 1) * pageSize + 1,

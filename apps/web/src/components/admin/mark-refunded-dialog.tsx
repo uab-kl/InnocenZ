@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { Loader2 } from "lucide-react";
@@ -103,7 +104,7 @@ export function MarkRefundedDialog({
 				if (!open && !mutation.isPending) onClose();
 			}}
 		>
-			<DialogContent className="sm:max-w-md">
+			<DialogContent className="admin-finance-sheet sm:max-w-md">
 				<form
 					className="grid gap-4"
 					onSubmit={(event) => {

@@ -134,10 +134,16 @@ const GUIDE_ENTRIES: {
 	},
 ];
 
-export function IconGuide({ className }: { className?: string }) {
+export function IconGuide({
+	className,
+	defaultOpen,
+}: {
+	className?: string;
+	defaultOpen?: boolean;
+}) {
 	const { t } = usePortalLocale();
 	return (
-		<details className={cn("iz-icon-guide", className)}>
+		<details className={cn("iz-icon-guide", className)} open={defaultOpen}>
 			<summary className="iz-icon-guide__summary">
 				<span className="iz-icon-guide__summary-label">
 					<CircleHelp

@@ -1,10 +1,11 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	keepPreviousData,
 	useMutation,
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { format } from "date-fns";
 import {
 	AlertCircle,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AGENCY_SERVICES_ENABLED } from "@/agency-portal/lib/phase-flags";
 import {
 	DateMultiFilter,
 	DateSingleFilter,
@@ -90,6 +92,15 @@ import {
 } from "@/services/special-service";
 
 export const Route = createFileRoute("/admin/service/other")({
+	/*
+	 * Hidden from the sidebar while agency services are off — and a hidden page
+	 * that still opens from a typed URL or an old bookmark is a page nobody is
+	 * maintaining. Sent to the admin's home instead, the same place `/admin`
+	 * goes, until the flag is switched on.
+	 */
+	beforeLoad: () => {
+		if (!AGENCY_SERVICES_ENABLED) throw redirect({ to: "/admin/dashboard" });
+	},
 	component: SpecialServicesPage,
 	/*
 	 * Document title stays ENGLISH — `head()` is route metadata evaluated
@@ -344,7 +355,7 @@ function SpecialServicesPage() {
 	];
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={LayoutGrid}
 				title={t.adminService.jobsTitle}
@@ -526,12 +537,9 @@ function SpecialServicesPage() {
 
 				<CardContent>
 					<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table>
+						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
-									<TableHead className="w-[220px]">
-										{t.adminService.colServiceId}
-									</TableHead>
 									<TableHead>{t.adminService.colTitle}</TableHead>
 									<TableHead>{t.filters.source}</TableHead>
 									<TableHead className="w-[160px]">
@@ -583,7 +591,7 @@ function SpecialServicesPage() {
 							<TableBody>
 								{showLoading ? (
 									<TableRow>
-										<TableCell colSpan={10} className="h-32">
+										<TableCell colSpan={9} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
 												<span>{t.common.loading}</span>
@@ -592,7 +600,7 @@ function SpecialServicesPage() {
 									</TableRow>
 								) : servicesQuery.isError ? (
 									<TableRow>
-										<TableCell colSpan={10} className="h-32">
+										<TableCell colSpan={9} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
@@ -614,7 +622,7 @@ function SpecialServicesPage() {
 									</TableRow>
 								) : records.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={10} className="h-32">
+										<TableCell colSpan={9} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<LayoutGrid className="h-6 w-6" />
 												<span>
@@ -634,18 +642,13 @@ function SpecialServicesPage() {
 												className="cursor-pointer"
 												onClick={() => setEditRecord(record)}
 											>
-												<TableCell>
-													<code
-														className="block max-w-[200px] truncate font-mono text-xs text-muted-foreground"
-														title={record.id}
-													>
-														{record.id}
-													</code>
-												</TableCell>
-												<TableCell className="font-medium">
+												<TableCell
+													data-label={t.adminService.colTitle}
+													className="font-medium"
+												>
 													{record.title}
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.filters.source}>
 													<div className="flex flex-col gap-1">
 														<span className="text-sm">
 															{sourceNameOf(record) || "—"}
@@ -658,7 +661,7 @@ function SpecialServicesPage() {
 														</Badge>
 													</div>
 												</TableCell>
-												<TableCell>
+												<TableCell data-label={t.adminService.colCategory}>
 													<Badge
 														variant="outline"
 														className="w-fit border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender"
@@ -667,7 +670,10 @@ function SpecialServicesPage() {
 															record.category}
 													</Badge>
 												</TableCell>
-												<TableCell className="max-w-[280px] text-sm text-muted-foreground">
+												<TableCell
+													data-label={t.adminService.colDescription}
+													className="max-w-[280px] text-sm text-muted-foreground"
+												>
 													{record.description?.trim() ? (
 														<span
 															className="line-clamp-3"
@@ -679,21 +685,38 @@ function SpecialServicesPage() {
 														"—"
 													)}
 												</TableCell>
-												<TableCell className="text-sm">
+												<TableCell
+													data-label={t.adminService.colBudget}
+													className="text-sm"
+												>
 													{formatBudget(record.budget)}
 												</TableCell>
-												<TableCell className="text-sm text-muted-foreground">
+												<TableCell
+													data-label={t.adminService.colThirdParty}
+													className="text-sm text-muted-foreground"
+												>
 													{record.vendorName ?? "—"}
 												</TableCell>
-												<TableCell className="text-sm text-muted-foreground">
+												<TableCell
+													data-label={t.adminService.scheduledFor}
+													className="text-sm text-muted-foreground"
+												>
 													{record.scheduledFor
 														? formatDate(record.scheduledFor)
 														: "—"}
 												</TableCell>
-												<TableCell className="text-sm text-muted-foreground">
+												<TableCell
+													data-label={t.adminService.requestedTime}
+													className="text-sm text-muted-foreground"
+												>
 													{formatDate(record.createdAt)}
 												</TableCell>
 												<TableCell
+													data-label={
+														isPendingView
+															? t.admin.colActions
+															: t.admin.colStatus
+													}
 													onClick={(e) => e.stopPropagation()}
 													onKeyDown={(e) => e.stopPropagation()}
 												>
@@ -815,7 +838,7 @@ function SpecialServicesPage() {
 			>
 				<SheetContent
 					side="right"
-					className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+					className="admin-finance-sheet w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
 				>
 					{editRecord && (
 						<OrderEditForm

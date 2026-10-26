@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	AlertCircle,
 	CheckCircle2,
@@ -8,6 +9,7 @@ import {
 	RefreshCw,
 	XCircle,
 } from "lucide-react";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import {
 	SourceToggle,
 	type SourceValue,
@@ -160,17 +162,15 @@ export function SubscriptionsTable({
 	const { t } = usePortalLocale();
 	const showLoading = isLoading && subscriptions.length === 0;
 
-	// Show the cheapest plan first. Sort is applied to the current page (all
-	// plans fit on one page), so the lowest price always sits on top.
-	const sortedSubscriptions = [...subscriptions].sort(
-		(a, b) => Number(a.price) - Number(b.price),
-	);
+	// Cheapest first. The caller hands one page of a list already sorted across
+	// the whole catalogue (`pagePlansByPrice`) — sorting a single server page
+	// here put a cheap plan on page 2 beneath dearer ones on page 1. Render as is.
 
 	const showOutletPosAddonRow =
 		audienceFilter === "outlet" && !showLoading && !isError;
 
 	return (
-		<Card className="border-(--lavender-soft)/40 bg-card">
+		<Card className="admin-finance-page admin-finance-catalogue border-(--lavender-soft)/40 bg-card">
 			<CardHeader>
 				<div className="space-y-4">
 					<div>
@@ -183,75 +183,76 @@ export function SubscriptionsTable({
 						<CardDescription>{t.adminSubscription.plansHint}</CardDescription>
 					</div>
 
-					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-						<SourceToggle
-							className="sm:mr-auto"
-							value={audienceFilter as SourceValue}
-							onChange={(value) =>
-								onAudienceFilterChange(value as SubscriptionAudienceFilter)
-							}
-						/>
+					<AdminFilters className="admin-finance-filters">
+						<div className="admin-finance-filter-row flex flex-col gap-2 sm:flex-row sm:items-center">
+							<SourceToggle
+								className="sm:mr-auto"
+								value={audienceFilter as SourceValue}
+								onChange={(value) =>
+									onAudienceFilterChange(value as SubscriptionAudienceFilter)
+								}
+							/>
 
-						<Select
-							value={billingCycleFilter}
-							onValueChange={(value) =>
-								onBillingCycleFilterChange(value as BillingCycleFilter)
-							}
-						>
-							<SelectTrigger
-								className="sm:w-40"
-								aria-label={t.adminSubscription.filterByBillingCycle}
+							<Select
+								value={billingCycleFilter}
+								onValueChange={(value) =>
+									onBillingCycleFilterChange(value as BillingCycleFilter)
+								}
 							>
-								<SelectValue placeholder={t.adminSubscription.allCycles} />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">
-									{t.adminSubscription.allCycles}
-								</SelectItem>
-								<SelectItem value="weekly">
-									{t.subscription.billedWeekly}
-								</SelectItem>
-								<SelectItem value="monthly">
-									{t.subscription.billedMonthly}
-								</SelectItem>
-								<SelectItem value="annually">
-									{t.subscription.billedAnnually}
-								</SelectItem>
-							</SelectContent>
-						</Select>
+								<SelectTrigger
+									className="sm:w-40"
+									aria-label={t.adminSubscription.filterByBillingCycle}
+								>
+									<SelectValue placeholder={t.adminSubscription.allCycles} />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">
+										{t.adminSubscription.allCycles}
+									</SelectItem>
+									<SelectItem value="weekly">
+										{t.subscription.billedWeekly}
+									</SelectItem>
+									<SelectItem value="monthly">
+										{t.subscription.billedMonthly}
+									</SelectItem>
+									<SelectItem value="annually">
+										{t.subscription.billedAnnually}
+									</SelectItem>
+								</SelectContent>
+							</Select>
 
-						<Select
-							value={statusFilter}
-							onValueChange={(value) =>
-								onStatusFilterChange(value as SubscriptionStatusFilter)
-							}
-						>
-							<SelectTrigger
-								className="sm:w-40"
-								aria-label={t.admin.filterByStatus}
+							<Select
+								value={statusFilter}
+								onValueChange={(value) =>
+									onStatusFilterChange(value as SubscriptionStatusFilter)
+								}
 							>
-								<SelectValue placeholder={t.admin.filterByStatus} />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-								<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
-								<SelectItem value="inactive">
-									{t.rbac.statusInactive}
-								</SelectItem>
-							</SelectContent>
-						</Select>
-
-						<Button onClick={onCreateClick} className="shrink-0">
-							<Plus className="mr-2 h-4 w-4" />
-							{t.adminSubscription.createPlan}
-						</Button>
-					</div>
+								<SelectTrigger
+									className="sm:w-40"
+									aria-label={t.admin.filterByStatus}
+								>
+									<SelectValue placeholder={t.admin.filterByStatus} />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+									<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
+									<SelectItem value="inactive">
+										{t.rbac.statusInactive}
+									</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+					</AdminFilters>
+					<Button onClick={onCreateClick} className="shrink-0">
+						<Plus className="mr-2 h-4 w-4" />
+						{t.adminSubscription.createPlan}
+					</Button>
 				</div>
 			</CardHeader>
 
 			<CardContent>
 				<div className="overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-					<Table>
+					<Table className="admin-finance-table">
 						<TableHeader>
 							<TableRow>
 								<TableHead>{t.admin.colName}</TableHead>
@@ -305,10 +306,15 @@ export function SubscriptionsTable({
 								</TableRow>
 							) : (
 								<>
-									{sortedSubscriptions.map((sub) => (
+									{subscriptions.map((sub) => (
 										<TableRow key={sub.id}>
-											<TableCell className="font-medium">{sub.name}</TableCell>
-											<TableCell>
+											<TableCell
+												data-label={t.admin.colName}
+												className="font-medium"
+											>
+												{sub.name}
+											</TableCell>
+											<TableCell data-label={t.adminSubscription.colAudience}>
 												<Badge
 													variant="outline"
 													className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
@@ -317,6 +323,7 @@ export function SubscriptionsTable({
 												</Badge>
 											</TableCell>
 											<TableCell
+												data-label={t.adminSubscription.colPrice}
 												className={
 													isAgencyCustomPlan(sub)
 														? "text-sm text-muted-foreground italic"
@@ -325,13 +332,19 @@ export function SubscriptionsTable({
 											>
 												{priceLabelFor(sub, t)}
 											</TableCell>
-											<TableCell className="text-sm text-muted-foreground">
+											<TableCell
+												data-label={t.adminSubscription.colCoverage}
+												className="text-sm text-muted-foreground"
+											>
 												{sub.coverage || coverageFor(sub, t)}
 											</TableCell>
-											<TableCell className="capitalize">
+											<TableCell
+												data-label={t.adminBusiness.colBillingCycle}
+												className="capitalize"
+											>
 												{billingCycleLabel(sub.billingCycle, t)}
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.admin.colStatus}>
 												<Badge
 													variant="outline"
 													className={`${statusColors[sub.status] ?? statusColors.inactive} flex w-fit items-center gap-1 capitalize`}
@@ -344,10 +357,13 @@ export function SubscriptionsTable({
 													{recordStatusLabel(sub.status, t)}
 												</Badge>
 											</TableCell>
-											<TableCell className="text-muted-foreground text-sm">
+											<TableCell
+												data-label={t.adminSubscription.colLastEdited}
+												className="text-muted-foreground text-sm"
+											>
 												{formatDate(sub.updatedAt)}
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.admin.colAction}>
 												<Button
 													variant="ghost"
 													size="icon"
@@ -363,7 +379,10 @@ export function SubscriptionsTable({
 									))}
 									{showOutletPosAddonRow && (
 										<TableRow className="bg-muted/20 hover:bg-muted/20">
-											<TableCell className="font-medium">
+											<TableCell
+												data-label={t.admin.colName}
+												className="font-medium"
+											>
 												<div className="flex flex-wrap items-center gap-2">
 													<span>{t.plans.posAddon}</span>
 													<Badge
@@ -374,7 +393,7 @@ export function SubscriptionsTable({
 													</Badge>
 												</div>
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.adminSubscription.colAudience}>
 												<Badge
 													variant="outline"
 													className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
@@ -382,16 +401,25 @@ export function SubscriptionsTable({
 													{planAudienceLabel("outlet", t)}
 												</Badge>
 											</TableCell>
-											<TableCell className="text-sm text-muted-foreground italic">
+											<TableCell
+												data-label={t.adminSubscription.colPrice}
+												className="text-sm text-muted-foreground italic"
+											>
 												{t.plans.posAddonPrice}
 											</TableCell>
-											<TableCell className="text-sm text-muted-foreground">
+											<TableCell
+												data-label={t.adminSubscription.colCoverage}
+												className="text-sm text-muted-foreground"
+											>
 												{t.adminSubscription.posSyncAddon}
 											</TableCell>
-											<TableCell className="text-sm text-muted-foreground">
+											<TableCell
+												data-label={t.adminBusiness.colBillingCycle}
+												className="text-sm text-muted-foreground"
+											>
 												—
 											</TableCell>
-											<TableCell>
+											<TableCell data-label={t.admin.colStatus}>
 												<Badge
 													variant="outline"
 													className="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
@@ -399,10 +427,13 @@ export function SubscriptionsTable({
 													{t.outletSubscription.addOn}
 												</Badge>
 											</TableCell>
-											<TableCell className="text-sm text-muted-foreground">
+											<TableCell
+												data-label={t.adminSubscription.colLastEdited}
+												className="text-sm text-muted-foreground"
+											>
 												—
 											</TableCell>
-											<TableCell />
+											<TableCell data-label={t.admin.colAction} />
 										</TableRow>
 									)}
 								</>

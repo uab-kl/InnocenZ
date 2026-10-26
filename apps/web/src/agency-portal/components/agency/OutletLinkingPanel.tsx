@@ -17,6 +17,7 @@ import {
 	X,
 } from "lucide-react";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { kickToLogin } from "@/lib/auth/guards";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -364,11 +365,13 @@ function OutletPlace({ link }: { link: AgencyOutletLink }) {
 
 /** LEFT COLUMN — filter chips + the venue rows. */
 export function OutletLinkingList({
+	filterContainer,
 	filter,
 	onFilterChange,
 	selectedOutletId,
 	onSelect,
 }: {
+	filterContainer?: HTMLElement | null;
 	filter: AgencyOutletApproveStatus;
 	onFilterChange: (next: AgencyOutletApproveStatus) => void;
 	selectedOutletId: string | null;
@@ -377,24 +380,30 @@ export function OutletLinkingList({
 	const { t } = usePortalLocale();
 	const queue = useAgencyOutletLinks(filter);
 
+	const filterControls = (
+		<div className="iz-approvals-subfilter">
+			{FILTERS.map((status) => (
+				<button
+					key={status}
+					type="button"
+					className={cn("iz-chip iz-tiny", filter === status && "on")}
+					onClick={() => onFilterChange(status)}
+				>
+					{STATUS_LABEL[status](t)} ({queue.counts[status] ?? "…"})
+				</button>
+			))}
+		</div>
+	);
+
 	return (
 		<div className="flex flex-col gap-2">
 			{/* Chips, not queue tabs: this narrows ONE queue by status, exactly
 			    like the PR side's Current/Approved/Rejected/All. Wearing the
 			    `iz-approvals-tab` look made it read as a third level of
 			    navigation. */}
-			<div className="iz-approvals-subfilter">
-				{FILTERS.map((status) => (
-					<button
-						key={status}
-						type="button"
-						className={cn("iz-chip iz-tiny", filter === status && "on")}
-						onClick={() => onFilterChange(status)}
-					>
-						{STATUS_LABEL[status](t)} ({queue.counts[status] ?? "…"})
-					</button>
-				))}
-			</div>
+			{filterContainer
+				? createPortal(filterControls, filterContainer)
+				: filterControls}
 
 			{queue.isLoading ? (
 				<p className="iz-tiny iz-muted px-1 py-4 text-center">

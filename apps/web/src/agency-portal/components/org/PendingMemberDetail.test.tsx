@@ -33,8 +33,11 @@ vi.mock("@/lib/auth/use-profile", () => ({
 	useProfile: () => ({ data: { id: "owner-user", modulePermissions: [] } }),
 }));
 
+// Flipped per test: `settings:update` (owner / guarantor) is what decides.
+let canDecide = true;
+
 vi.mock("@/lib/auth/module-permissions", () => ({
-	canModule: () => true,
+	canModule: () => canDecide,
 	grantsForPortal: () => [],
 }));
 
@@ -56,7 +59,7 @@ vi.mock("@/lib/portal-i18n/context", () => ({
 	}),
 }));
 
-import { PendingMemberDetail } from "./PendingMemberDetail";
+import { isLastActiveOwner, PendingMemberDetail } from "./PendingMemberDetail";
 
 const deactivated = (subRole: string) => ({
 	id: "mem-1",
@@ -79,6 +82,7 @@ function renderPane() {
 }
 
 beforeEach(() => {
+	canDecide = true;
 	toast.mockClear();
 	changeMutate.mockReset();
 	removeMutate.mockReset();
@@ -152,5 +156,124 @@ describe("PendingMemberDetail — deactivate", () => {
 			"Member deactivated — they no longer have access.",
 			"success",
 		);
+	});
+});
+
+/*
+ * AN OWNER ROW IS NOT A PICKER, AND THE LAST OWNER IS NOT OFFERED FOR REMOVAL
+ * (22 Oct 2026: Frank Lee, the venue's owner, read "Change their role:
+ * Financial Head", and Deactivate was offered on him though the server answers
+ * 409 "Cannot remove the last active owner").
+ */
+const activeAs = (id: string, subRole: string) => ({
+	...deactivated(subRole),
+	id,
+	userId: `${id}-user`,
+	status: "active",
+});
+
+describe("PendingMemberDetail — owner and guarantor rows", () => {
+	it("shows the only active owner's title read-only, with no picker and no Deactivate", () => {
+		members = [activeAs("mem-1", "owner"), activeAs("mem-2", "finance")];
+		renderPane();
+
+		expect(screen.queryByRole("combobox")).toBeNull();
+		expect(screen.getByText("portalUi.currentRole")).toBeTruthy();
+		// The badge AND the read-only line both name the owner lane.
+		expect(screen.getAllByText("profile.roleOwner").length).toBeGreaterThan(1);
+		expect(screen.queryByText("portalUi.deactivateMember")).toBeNull();
+		expect(screen.getByText("portalUi.lastOwnerStays")).toBeTruthy();
+	});
+
+	it("offers Deactivate on an owner once another active owner exists — as the server allows", () => {
+		members = [activeAs("mem-1", "owner"), activeAs("mem-2", "owner")];
+		renderPane();
+
+		expect(screen.queryByRole("combobox")).toBeNull();
+		expect(screen.getByText("portalUi.deactivateMember")).toBeTruthy();
+		expect(screen.queryByText("portalUi.lastOwnerStays")).toBeNull();
+	});
+
+	it("never shows a Guarantor as the first approvable title", () => {
+		members = [activeAs("mem-1", "guarantor"), activeAs("mem-2", "owner")];
+		renderPane();
+
+		expect(screen.queryByRole("combobox")).toBeNull();
+		expect(screen.getAllByText("profile.roleGuarantor").length).toBeGreaterThan(
+			1,
+		);
+		expect(screen.queryByText("profile.roleFinance")).toBeNull();
+		// Only an OWNER is protected; removing a guarantor is the server's to allow.
+		expect(screen.getByText("portalUi.deactivateMember")).toBeTruthy();
+	});
+
+	it("keeps the picker for a lane the queue can grant", () => {
+		members = [activeAs("mem-1", "director"), activeAs("mem-2", "owner")];
+		renderPane();
+
+		expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
+			"director",
+		);
+		expect(screen.queryByText("portalUi.currentRole")).toBeNull();
+	});
+});
+
+describe("isLastActiveOwner", () => {
+	const row = (id: string, subRole: string, status = "active") => ({
+		id,
+		subRole,
+		status,
+	});
+
+	it("is true only for the one active owner left", () => {
+		const owner = row("a", "owner");
+		expect(isLastActiveOwner([owner, row("b", "finance")], owner)).toBe(true);
+	});
+
+	it("is false while another ACTIVE owner exists", () => {
+		const owner = row("a", "owner");
+		expect(isLastActiveOwner([owner, row("b", "owner")], owner)).toBe(false);
+	});
+
+	it("does not count an inactive owner as the other one", () => {
+		const owner = row("a", "owner");
+		expect(
+			isLastActiveOwner([owner, row("b", "owner", "inactive")], owner),
+		).toBe(true);
+	});
+
+	it("is false for anyone who is not an active owner", () => {
+		expect(isLastActiveOwner([], row("a", "guarantor"))).toBe(false);
+		expect(isLastActiveOwner([], row("a", "owner", "inactive"))).toBe(false);
+	});
+});
+
+describe("PendingMemberDetail — a lane that may only look", () => {
+	// 22 Oct 2026: an Ops Head opening Finance's row saw "Change their role"
+	// greyed out with no reason.
+	it("says why the role picker is greyed out", () => {
+		canDecide = false;
+		members = [activeAs("mem-1", "finance"), activeAs("mem-2", "owner")];
+		renderPane();
+
+		expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(
+			true,
+		);
+		expect(screen.getByText("portalUi.onlyOwnerDecides")).toBeTruthy();
+	});
+
+	it("says why Approve is greyed out on a waiting request", () => {
+		canDecide = false;
+		members = [{ ...activeAs("mem-1", "finance"), status: "pending" }];
+		renderPane();
+
+		expect(screen.getByText("portalUi.onlyOwnerDecides")).toBeTruthy();
+	});
+
+	it("shows no reason line to an owner who can decide", () => {
+		members = [activeAs("mem-1", "finance"), activeAs("mem-2", "owner")];
+		renderPane();
+
+		expect(screen.queryByText("portalUi.onlyOwnerDecides")).toBeNull();
 	});
 });

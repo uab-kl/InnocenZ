@@ -5,6 +5,7 @@ import { useOutletProfile } from "@agency-portal/hooks/use-outlet-profile";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import "../agency/agency-approvals-design.css";
 
 export const Route = createFileRoute("/outlet/approvals")({
 	component: OutletApprovalsPage,
@@ -38,38 +39,48 @@ function OutletApprovalsPage() {
 	const { t } = usePortalLocale();
 	const { outletId } = useOutletProfile();
 	const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+	const [filterContainer, setFilterContainer] = useState<HTMLDivElement | null>(
+		null,
+	);
 
 	return (
 		<div className="iz-screen iz-approvals-page">
-			<div className="iz-approvals-layout">
-				<aside className="iz-approvals-sidebar">
-					<header className="iz-approvals-sidebar-head">
-						<IzPageTitle level={1} dateTime>
-							{t.approvals.title}
-						</IzPageTitle>
-					</header>
+			<header className="iz-approvals-page-head">
+				<IzPageTitle level={1} dateTime>
+					{t.approvals.title}
+				</IzPageTitle>
+				<p>{t.approvedDesign.outletApprovalsDescription}</p>
+			</header>
+			<div className="iz-approvals-workbench">
+				<div className="iz-approvals-toolbar" ref={setFilterContainer} />
+				<div className="iz-approvals-layout">
+					<aside className="iz-approvals-sidebar">
+						<h2 className="iz-approvals-queue-title">
+							{t.approvedDesign.requests}
+						</h2>
+						<div className="iz-approvals-list">
+							<PendingMembersPanel
+								kind="outlet"
+								filterContainer={filterContainer}
+								orgId={outletId}
+								selectedId={selectedMemberId}
+								onSelect={setSelectedMemberId}
+							/>
+						</div>
+					</aside>
 
-					<div className="iz-approvals-list">
-						<PendingMembersPanel
+					<main className="iz-approvals-detail">
+						<PendingMemberDetail
 							kind="outlet"
 							orgId={outletId}
-							selectedId={selectedMemberId}
-							onSelect={setSelectedMemberId}
+							memberId={selectedMemberId}
+							// A decided row leaves the Waiting filter, and a pane still
+							// showing a row the list no longer holds is how a screen starts
+							// lying about its own state.
+							onDecided={() => setSelectedMemberId(null)}
 						/>
-					</div>
-				</aside>
-
-				<main className="iz-approvals-detail">
-					<PendingMemberDetail
-						kind="outlet"
-						orgId={outletId}
-						memberId={selectedMemberId}
-						// A decided row leaves the Waiting filter, and a pane still
-						// showing a row the list no longer holds is how a screen starts
-						// lying about its own state.
-						onDecided={() => setSelectedMemberId(null)}
-					/>
-				</main>
+					</main>
+				</div>
 			</div>
 		</div>
 	);
