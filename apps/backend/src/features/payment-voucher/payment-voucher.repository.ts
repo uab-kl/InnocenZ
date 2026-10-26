@@ -3,6 +3,7 @@ import {
   asc,
   desc,
   eq,
+  getTableColumns,
   gte,
   ilike,
   inArray,
@@ -27,6 +28,7 @@ import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
 import { klToday, paymentDueDate } from './payment-voucher-week';
 import { ShiftTable } from '@/features/shift/shift.model';
+import { OutletTable } from '@/features/outlet/outlet.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
 import { uniqueByRef, withCarriedFacts } from './payment-voucher-line-edit';
 import {
@@ -58,6 +60,52 @@ import {
 } from './payment-voucher.model';
 
 type LineInput = Omit<PaymentVoucherLineInsertType, 'id' | 'voucherId'>;
+
+/**
+ * A line as screens read it: every stored column, plus the venue's CURRENT
+ * name through `outlet_id` (0083), falling back to the stored text only when
+ * the id is NULL. One fact, one table — the stored `outlet` stays the
+ * as-issued snapshot for the printed voucher; it is not what a screen shows.
+ * Pair with `.leftJoin(OutletTable, eq(OutletTable.id, PaymentVoucherLineTable.outletId))`.
+ */
+const LINE_READ_COLUMNS = {
+  ...getTableColumns(PaymentVoucherLineTable),
+  outletName: sql<
+    string | null
+  >`coalesce(${OutletTable.name}, ${PaymentVoucherLineTable.outlet})`,
+};
+
+/**
+ * The venues a voucher's lines name — current names, distinct, alphabetical,
+ * joined " · ". A PR can work two venues in one week (2 of 13 live vouchers
+ * do), so the header is a summary of its lines, not a column of its own. Null
+ * when no line names one. `VOUCHER_VENUE_NAMES_SQL` is the same rule for the
+ * list route, which has no lines in hand.
+ */
+export function currentVenueNames(
+  lines: ReadonlyArray<{ outletName?: string | null }>,
+): string | null {
+  const names = [
+    ...new Set(
+      lines
+        .map((line) => line.outletName?.trim())
+        .filter((n): n is string => !!n),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+  return names.length > 0 ? names.join(' · ') : null;
+}
+
+/** `currentVenueNames` in SQL, per voucher row, falling back to the header text. */
+const VOUCHER_VENUE_NAMES_SQL = sql<string | null>`coalesce((
+  select string_agg(distinct venue.name, ' · ' order by venue.name)
+    from (
+      select nullif(btrim(coalesce(o.name, l.outlet)), '') as name
+        from main.payment_voucher_line l
+        left join main.outlet o on o.id = l.outlet_id
+       where l.voucher_id = ${PaymentVoucherTable.id}
+    ) venue
+   where venue.name is not null
+), ${PaymentVoucherTable.outlet})`;
 type ReceiptInput = Omit<
   PaymentVoucherReceiptInsertType,
   'id' | 'receiptNo' | 'createdAt' | 'updatedAt'
@@ -77,7 +125,11 @@ const VOUCHER_NO_ATTEMPTS = 20;
 function isVoucherNoConflict(error: unknown): boolean {
   const candidates = [error, (error as { cause?: unknown } | null)?.cause];
   return candidates.some((e) => {
-    const err = e as { code?: string; constraint?: string; message?: string } | null;
+    const err = e as {
+      code?: string;
+      constraint?: string;
+      message?: string;
+    } | null;
     if (!err || err.code !== '23505') return false;
     const where = `${err.constraint ?? ''} ${err.message ?? ''}`;
     return where.includes('voucher_no');
@@ -169,7 +221,9 @@ export class PaymentVoucherRepositoryClass {
   ): Promise<void> {
     const ids = [
       ...new Set(
-        lines.map((line) => assignmentIdFromRef(line.ref)).filter((id): id is string => id !== null),
+        lines
+          .map((line) => assignmentIdFromRef(line.ref))
+          .filter((id): id is string => id !== null),
       ),
     ];
     if (ids.length === 0) return;
@@ -180,11 +234,118 @@ export class PaymentVoucherRepositoryClass {
       .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
       .where(inArray(ShiftAssignmentTable.id, ids));
 
-    const shiftDateById = new Map(rows.map((row) => [row.id.toLowerCase(), row.shiftDate]));
+    const shiftDateById = new Map(
+      rows.map((row) => [row.id.toLowerCase(), row.shiftDate]),
+    );
     for (const line of lines) {
-      const reason = checkLineAgainstShift(line.lineDate, line.ref, shiftDateById);
+      const reason = checkLineAgainstShift(
+        line.lineDate,
+        line.ref,
+        shiftDateById,
+      );
       if (reason) throw new LineDateConflictError(reason);
     }
+  }
+
+  /**
+   * WHICH VENUE each line is for, by id — so `outlet_id` (0083) is written on
+   * every insert instead of left NULL for a backfill to chase.
+   *
+   * Read from the line's own records, never from its text, in the backfill's
+   * order: the receipt's shift (`receipt_id` → receipt → assignment → shift),
+   * then the assignment its `ref` names → shift. A line already carrying an id
+   * (a penalty restored across `update`'s wipe) keeps it; one naming neither
+   * stays NULL, and screens fall back to its stored text.
+   *
+   * Called on every insert path `assertLinesAgreeWithShifts` guards, inside the
+   * caller's transaction — so a receipt inserted a moment earlier in the same
+   * write is visible to it.
+   *
+   * TENANT-SCOPED to `voucherId`. `receiptId` and `ref` both arrive from the
+   * client (`PaymentVoucherLineSchema`), so an unscoped read let an agency name
+   * a FOREIGN receipt or assignment and have that venue written onto its line —
+   * after which every read printed the other agency's venue under its current
+   * name. Only a receipt on THIS voucher, and an assignment of THIS voucher's
+   * agency, may name a venue; anything else is dropped and the id stays NULL.
+   * Checked in the query AND on the rows it returns.
+   */
+  private async resolveLineOutletIds<
+    T extends {
+      ref?: string | null;
+      receiptId?: string | null;
+      outletId?: string | null;
+    },
+  >(tx: DbTransaction, lines: T[], voucherId: string): Promise<T[]> {
+    const receiptIds = [
+      ...new Set(
+        lines.map((line) => line.receiptId).filter((id): id is string => !!id),
+      ),
+    ];
+    const receiptAssignment = new Map<string, string>();
+    if (receiptIds.length > 0) {
+      const receipts = await tx
+        .select({
+          id: PaymentVoucherReceiptTable.id,
+          voucherId: PaymentVoucherReceiptTable.voucherId,
+          assignmentId: PaymentVoucherReceiptTable.shiftAssignmentId,
+        })
+        .from(PaymentVoucherReceiptTable)
+        .where(
+          and(
+            inArray(PaymentVoucherReceiptTable.id, receiptIds),
+            eq(PaymentVoucherReceiptTable.voucherId, voucherId),
+          ),
+        );
+      for (const r of receipts)
+        if (r.assignmentId && r.voucherId === voucherId)
+          receiptAssignment.set(r.id, r.assignmentId.toLowerCase());
+    }
+
+    const assignmentFor = (line: T) =>
+      (line.receiptId ? receiptAssignment.get(line.receiptId) : undefined) ??
+      assignmentIdFromRef(line.ref) ??
+      null;
+    const assignmentIds = [
+      ...new Set(
+        lines.map(assignmentFor).filter((id): id is string => id !== null),
+      ),
+    ];
+    if (assignmentIds.length === 0) return lines;
+
+    const [voucher] = await tx
+      .select({ agencyId: PaymentVoucherTable.agencyId })
+      .from(PaymentVoucherTable)
+      .where(eq(PaymentVoucherTable.id, voucherId));
+    if (!voucher) return lines;
+
+    const rows = await tx
+      .select({
+        id: ShiftAssignmentTable.id,
+        agencyId: ShiftAssignmentTable.agencyId,
+        outletId: ShiftTable.outletId,
+      })
+      .from(ShiftAssignmentTable)
+      .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+      .where(
+        and(
+          inArray(ShiftAssignmentTable.id, assignmentIds),
+          eq(ShiftAssignmentTable.agencyId, voucher.agencyId),
+        ),
+      );
+    const outletByAssignment = new Map(
+      rows
+        .filter((row) => row.agencyId === voucher.agencyId)
+        .map((row) => [row.id.toLowerCase(), row.outletId]),
+    );
+
+    return lines.map((line) => {
+      if (line.outletId) return line;
+      const assignmentId = assignmentFor(line);
+      const outletId = assignmentId
+        ? outletByAssignment.get(assignmentId)
+        : undefined;
+      return outletId ? { ...line, outletId } : line;
+    });
   }
 
   /**
@@ -266,23 +427,38 @@ export class PaymentVoucherRepositoryClass {
           logger.warn(
             '[PaymentVoucherRepository.create] Could not allocate a voucher number; creating unnumbered',
           );
-          [voucher] = await tx.insert(PaymentVoucherTable).values(data).returning();
+          [voucher] = await tx
+            .insert(PaymentVoucherTable)
+            .values(data)
+            .returning();
         }
         await this.assertLinesAgreeWithShifts(tx, lines);
+        const withVenues = await this.resolveLineOutletIds(
+          tx,
+          lines,
+          voucher.id,
+        );
         const insertedLines =
-          lines.length > 0
+          withVenues.length > 0
             ? await tx
                 .insert(PaymentVoucherLineTable)
                 .values(
-                  lines.map((line, i) =>
-                    prepareLine({ ...line, voucherId: voucher.id, sortOrder: i }),
+                  withVenues.map((line, i) =>
+                    prepareLine({
+                      ...line,
+                      voucherId: voucher.id,
+                      sortOrder: i,
+                    }),
                   ),
                 )
                 .returning()
             : [];
         return { ...voucher, lines: insertedLines };
       });
-      logger.info('[PaymentVoucherRepository.create] Voucher created:', created.id);
+      logger.info(
+        '[PaymentVoucherRepository.create] Voucher created:',
+        created.id,
+      );
       return created;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.create] Error:', error);
@@ -325,8 +501,10 @@ export class PaymentVoucherRepositoryClass {
           if (
             current &&
             ((expectedUpdatedAt !== undefined &&
-              current.updatedAt.getTime() !== new Date(expectedUpdatedAt).getTime()) ||
-              (expectedStatus !== undefined && current.status !== expectedStatus))
+              current.updatedAt.getTime() !==
+                new Date(expectedUpdatedAt).getTime()) ||
+              (expectedStatus !== undefined &&
+                current.status !== expectedStatus))
           ) {
             throw new VoucherConflictError(id);
           }
@@ -389,13 +567,17 @@ export class PaymentVoucherRepositoryClass {
             (l) => resolveComponent(l) === 'deduction',
           );
           const sentRefs = new Set(lines.map((l) => l.ref).filter(Boolean));
-          const missing = protectedLines.filter((l) => !l.ref || !sentRefs.has(l.ref));
+          const missing = protectedLines.filter(
+            (l) => !l.ref || !sentRefs.has(l.ref),
+          );
 
           // Before the delete, not after: this path wipes and re-inserts every
           // line, so a refusal that landed mid-way would leave the voucher with
           // no lines at all.
           await this.assertLinesAgreeWithShifts(tx, lines);
-          await tx.delete(PaymentVoucherLineTable).where(eq(PaymentVoucherLineTable.voucherId, id));
+          await tx
+            .delete(PaymentVoucherLineTable)
+            .where(eq(PaymentVoucherLineTable.voucherId, id));
           // Restored penalties are re-stated as ordinary LineInputs so BOTH sets
           // go through one `prepareLine` map below — two arms with two shapes is
           // how the classification rule starts differing between them.
@@ -406,23 +588,28 @@ export class PaymentVoucherRepositoryClass {
             ref: line.ref,
             lineDate: line.lineDate,
             outlet: line.outlet,
+            outletId: line.outletId,
             component: line.component,
             receiptId: line.receiptId,
             proofPhotos: line.proofPhotos,
           }));
+          // An explicit value from the caller always wins; the carry only fills
+          // in what the HTTP payload cannot express. The venue is resolved AFTER
+          // it, because a carried receipt is one of the things that names it.
+          const withVenues = await this.resolveLineOutletIds(
+            tx,
+            [...lines, ...restored].map((line) =>
+              withCarriedFacts(line, carryable),
+            ),
+            id,
+          );
           const insertedLines =
-            lines.length + restored.length > 0
+            withVenues.length > 0
               ? await tx
                   .insert(PaymentVoucherLineTable)
                   .values(
-                    [...lines, ...restored].map((line, i) =>
-                      prepareLine({
-                        // An explicit value from the caller always wins; this only
-                        // fills in what the HTTP payload cannot express.
-                        ...withCarriedFacts(line, carryable),
-                        voucherId: id,
-                        sortOrder: i,
-                      }),
+                    withVenues.map((line, i) =>
+                      prepareLine({ ...line, voucherId: id, sortOrder: i }),
                     ),
                   )
                   .returning()
@@ -452,7 +639,11 @@ export class PaymentVoucherRepositoryClass {
         .limit(1);
       if (!voucher) return null;
       const lines = await this.getLines(id);
-      return { ...voucher, lines };
+      return {
+        ...voucher,
+        lines,
+        outletName: currentVenueNames(lines) ?? voucher.outlet,
+      };
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getById] Error:', error);
       throw error;
@@ -484,8 +675,12 @@ export class PaymentVoucherRepositoryClass {
   private async getLines(voucherId: string, tx?: DbTransaction) {
     const dbClient = tx ?? db;
     return dbClient
-      .select()
+      .select(LINE_READ_COLUMNS)
       .from(PaymentVoucherLineTable)
+      .leftJoin(
+        OutletTable,
+        eq(OutletTable.id, PaymentVoucherLineTable.outletId),
+      )
       .where(eq(PaymentVoucherLineTable.voucherId, voucherId))
       .orderBy(PaymentVoucherLineTable.sortOrder);
   }
@@ -498,6 +693,7 @@ export class PaymentVoucherRepositoryClass {
     vouchers: (PaymentVoucherType & {
       prNickname: string | null;
       agencyName: string | null;
+      outletName: string | null;
     })[];
     totalCount: number;
   }> {
@@ -505,14 +701,23 @@ export class PaymentVoucherRepositoryClass {
       const { filter, page, pageSize } = params;
       const conditions: SQL[] = [];
       if (filter?.id) conditions.push(eq(PaymentVoucherTable.id, filter.id));
-      if (filter?.agencyId) conditions.push(eq(PaymentVoucherTable.agencyId, filter.agencyId));
-      if (filter?.prId) conditions.push(eq(PaymentVoucherTable.prId, filter.prId));
-      if (filter?.status) conditions.push(eq(PaymentVoucherTable.status, filter.status));
-      if (filter?.prName) conditions.push(ilike(PaymentVoucherTable.prName, `%${filter.prName}%`));
-      if (filter?.fromDate) conditions.push(gte(PaymentVoucherTable.issuedDate, filter.fromDate));
-      if (filter?.toDate) conditions.push(lte(PaymentVoucherTable.issuedDate, filter.toDate));
+      if (filter?.agencyId)
+        conditions.push(eq(PaymentVoucherTable.agencyId, filter.agencyId));
+      if (filter?.prId)
+        conditions.push(eq(PaymentVoucherTable.prId, filter.prId));
+      if (filter?.status)
+        conditions.push(eq(PaymentVoucherTable.status, filter.status));
+      if (filter?.prName)
+        conditions.push(
+          ilike(PaymentVoucherTable.prName, `%${filter.prName}%`),
+        );
+      if (filter?.fromDate)
+        conditions.push(gte(PaymentVoucherTable.issuedDate, filter.fromDate));
+      if (filter?.toDate)
+        conditions.push(lte(PaymentVoucherTable.issuedDate, filter.toDate));
 
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const whereClause =
+        conditions.length > 0 ? and(...conditions) : undefined;
 
       const [countRow] = await db
         .select({ value: sql<number>`count(*)::int` as SQL<number> })
@@ -542,6 +747,9 @@ export class PaymentVoucherRepositoryClass {
           // two different documents. The agency is read through the FK, never
           // copied onto the voucher.
           agencyName: AgencyTable.name,
+          // The venues' CURRENT names, from the lines' outlet_id — the stored
+          // header text only when no line links to one. Same rule as getById.
+          outletName: VOUCHER_VENUE_NAMES_SQL,
         })
         .from(PaymentVoucherTable)
         .leftJoin(UserTable, eq(PaymentVoucherTable.prId, UserTable.id))
@@ -568,6 +776,7 @@ export class PaymentVoucherRepositoryClass {
         ...row.voucher,
         prNickname: row.prNickname ?? null,
         agencyName: row.agencyName ?? null,
+        outletName: row.outletName ?? null,
       }));
 
       return { vouchers, totalCount };
@@ -684,7 +893,10 @@ export class PaymentVoucherRepositoryClass {
   /** Own a voucher by temporary pr.id and/or preferred user_id (0087). */
   private ownershipOf(prId: string, userId?: string | null) {
     return userId
-      ? or(eq(PaymentVoucherTable.prId, prId), eq(PaymentVoucherTable.userId, userId))
+      ? or(
+          eq(PaymentVoucherTable.prId, prId),
+          eq(PaymentVoucherTable.userId, userId),
+        )
       : eq(PaymentVoucherTable.prId, prId);
   }
 
@@ -747,7 +959,10 @@ export class PaymentVoucherRepositoryClass {
       const lines = await this.getLines(voucher.id);
       return { ...voucher, lines };
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.getCurrentWeekDraft] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.getCurrentWeekDraft] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -832,7 +1047,10 @@ export class PaymentVoucherRepositoryClass {
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(AgencyTable.id, PaymentVoucherTable.agencyId))
         .where(
-          and(this.ownershipOf(prId, userId), eq(PaymentVoucherTable.weekStart, weekStart)),
+          and(
+            this.ownershipOf(prId, userId),
+            eq(PaymentVoucherTable.weekStart, weekStart),
+          ),
         )
         .orderBy(asc(PaymentVoucherTable.createdAt));
       return await Promise.all(
@@ -863,13 +1081,16 @@ export class PaymentVoucherRepositoryClass {
     },
   ): Promise<(PaymentVoucherWithLines & AgencyBadge)[]> {
     try {
-      const statuses = opts?.statuses ?? (['signed', 'paid'] as PaymentVoucherStatus[]);
+      const statuses =
+        opts?.statuses ?? (['signed', 'paid'] as PaymentVoucherStatus[]);
       const conditions = [
         this.ownershipOf(prId, opts?.userId),
         inArray(PaymentVoucherTable.status, statuses),
       ];
       if (opts?.excludeWeekStart) {
-        conditions.push(ne(PaymentVoucherTable.weekStart, opts.excludeWeekStart));
+        conditions.push(
+          ne(PaymentVoucherTable.weekStart, opts.excludeWeekStart),
+        );
       }
       /*
        * WHO PAID IT — joined for the same reason `listWeekVouchers` joins it.
@@ -892,7 +1113,10 @@ export class PaymentVoucherRepositoryClass {
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(AgencyTable.id, PaymentVoucherTable.agencyId))
         .where(and(...conditions))
-        .orderBy(desc(PaymentVoucherTable.weekStart), desc(PaymentVoucherTable.createdAt));
+        .orderBy(
+          desc(PaymentVoucherTable.weekStart),
+          desc(PaymentVoucherTable.createdAt),
+        );
 
       const withLines: (PaymentVoucherWithLines & AgencyBadge)[] = [];
       for (const row of vouchers) {
@@ -993,7 +1217,9 @@ export class PaymentVoucherRepositoryClass {
           // straight off the account: name/nickname off `user`/`user_profile`,
           // IC off `user_profile.id_no`, phone off the account (one fact, one
           // table — no more roster copy of any of these).
-          prName: sql<string | null>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+          prName: sql<
+            string | null
+          >`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
           prNickname: UserTable.username,
           prIcNo: UserProfileTable.idNo,
           prPhone: UserTable.phoneNum,
@@ -1156,14 +1382,40 @@ export class PaymentVoucherRepositoryClass {
     try {
       const [row] = await db
         .select({
-          name: sql<string | null>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+          name: sql<
+            string | null
+          >`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
         })
         .from(UserTable)
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
         .where(eq(UserTable.id, userId));
       return row?.name ?? null;
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.getUserDisplayName] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.getUserDisplayName] Error:',
+        error,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * The payee's CURRENT profile IC — read only to compare against the IC the
+   * voucher was issued with (`pr-ic-match.ts`). The caller must not put this
+   * value in a response: the detail read answers "does it still match", never
+   * "what it says now". Null when the account has no profile or no IC on it,
+   * and on a read failure — the comparison then reads "cannot tell", not "fine".
+   */
+  async getProfileIdNo(userId: string): Promise<string | null> {
+    try {
+      const [row] = await db
+        .select({ idNo: UserProfileTable.idNo })
+        .from(UserProfileTable)
+        .where(eq(UserProfileTable.userId, userId))
+        .limit(1);
+      return row?.idNo ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getProfileIdNo] Error:', error);
       return null;
     }
   }
@@ -1261,7 +1513,7 @@ export class PaymentVoucherRepositoryClass {
           reason:
             `This week's payment voucher (${closed.voucherNo ?? closed.id}) has already been ` +
             `${closed.status === 'sent' ? 'sent to you' : closed.status} and can no longer be ` +
-            'added to. Ask your agency to reopen it or record this on next week\'s voucher.',
+            "added to. Ask your agency to reopen it or record this on next week's voucher.",
         };
       }
 
@@ -1336,30 +1588,43 @@ export class PaymentVoucherRepositoryClass {
         logger.warn(
           '[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Could not allocate a voucher number; creating unnumbered',
         );
-        const [voucher] = await tx.insert(PaymentVoucherTable).values(values).returning();
+        const [voucher] = await tx
+          .insert(PaymentVoucherTable)
+          .values(values)
+          .returning();
         return voucher;
       });
       return { ok: true, voucher: created };
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Error:',
+        error,
+      );
       throw error;
     }
   }
 
   /** One line joined to its voucher — used to authorize a PR line op by owner. */
-  async getLineWithVoucher(
-    lineId: string,
-  ): Promise<{ line: PaymentVoucherLineType; voucher: PaymentVoucherType } | null> {
+  async getLineWithVoucher(lineId: string): Promise<{
+    line: PaymentVoucherLineType;
+    voucher: PaymentVoucherType;
+  } | null> {
     try {
       const [row] = await db
         .select({ line: PaymentVoucherLineTable, voucher: PaymentVoucherTable })
         .from(PaymentVoucherLineTable)
-        .innerJoin(PaymentVoucherTable, eq(PaymentVoucherLineTable.voucherId, PaymentVoucherTable.id))
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherLineTable.voucherId, PaymentVoucherTable.id),
+        )
         .where(eq(PaymentVoucherLineTable.id, lineId))
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.getLineWithVoucher] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.getLineWithVoucher] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1394,7 +1659,9 @@ export class PaymentVoucherRepositoryClass {
           weekStart: PaymentVoucherTable.weekStart,
           weekEnd: PaymentVoucherTable.weekEnd,
           prId: PaymentVoucherTable.prId,
-          prName: sql<string | null>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+          prName: sql<
+            string | null
+          >`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
           prNickname: UserTable.username,
         })
         .from(PaymentVoucherReceiptTable)
@@ -1439,7 +1706,10 @@ export class PaymentVoucherRepositoryClass {
         lines: linesByReceipt.get(r.receipt.id) ?? [],
       }));
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.listReceiptsForAgency] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.listReceiptsForAgency] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1453,7 +1723,10 @@ export class PaymentVoucherRepositoryClass {
         .where(eq(PaymentVoucherLineTable.receiptId, receiptId));
       return row?.n ?? 0;
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.countLinesForReceipt] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.countLinesForReceipt] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1482,7 +1755,10 @@ export class PaymentVoucherRepositoryClass {
         .set({ proofPhotos, updatedAt: new Date(), updatedBy: actor })
         .where(eq(PaymentVoucherReceiptTable.id, receiptId));
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.updateReceiptPhotos] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.updateReceiptPhotos] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1492,12 +1768,16 @@ export class PaymentVoucherRepositoryClass {
    * authorized, since a receipt carries no agency of its own (it reaches one
    * only through voucher.agency_id).
    */
-  async getReceiptWithVoucher(
-    receiptId: string,
-  ): Promise<{ receipt: PaymentVoucherReceiptType; voucher: PaymentVoucherType } | null> {
+  async getReceiptWithVoucher(receiptId: string): Promise<{
+    receipt: PaymentVoucherReceiptType;
+    voucher: PaymentVoucherType;
+  } | null> {
     try {
       const [row] = await db
-        .select({ receipt: PaymentVoucherReceiptTable, voucher: PaymentVoucherTable })
+        .select({
+          receipt: PaymentVoucherReceiptTable,
+          voucher: PaymentVoucherTable,
+        })
         .from(PaymentVoucherReceiptTable)
         .innerJoin(
           PaymentVoucherTable,
@@ -1507,7 +1787,10 @@ export class PaymentVoucherRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.getReceiptWithVoucher] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.getReceiptWithVoucher] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1563,9 +1846,16 @@ export class PaymentVoucherRepositoryClass {
    */
   async updateReceiptHeader(
     receiptId: string,
-    patch: { orderNo?: string | null; receiptDate?: string; receiptTime?: string | null },
+    patch: {
+      orderNo?: string | null;
+      receiptDate?: string;
+      receiptTime?: string | null;
+    },
     actor: string,
-  ): Promise<{ receipt: PaymentVoucherReceiptType; movedLines: number } | null> {
+  ): Promise<{
+    receipt: PaymentVoucherReceiptType;
+    movedLines: number;
+  } | null> {
     try {
       return await db.transaction(async (tx) => {
         const [receipt] = await tx
@@ -1578,13 +1868,20 @@ export class PaymentVoucherRepositoryClass {
 
         const moved = await tx
           .update(PaymentVoucherLineTable)
-          .set({ lineDate: patch.receiptDate, updatedAt: new Date(), updatedBy: actor })
+          .set({
+            lineDate: patch.receiptDate,
+            updatedAt: new Date(),
+            updatedBy: actor,
+          })
           .where(eq(PaymentVoucherLineTable.receiptId, receiptId))
           .returning({ id: PaymentVoucherLineTable.id });
         return { receipt, movedLines: moved.length };
       });
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.updateReceiptHeader] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.updateReceiptHeader] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1626,7 +1923,10 @@ export class PaymentVoucherRepositoryClass {
         )
         .returning();
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.approvePendingReceipts] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.approvePendingReceipts] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1666,7 +1966,10 @@ export class PaymentVoucherRepositoryClass {
           ),
         );
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.listPendingReceiptsForAgencyWeek] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.listPendingReceiptsForAgencyWeek] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1715,13 +2018,20 @@ export class PaymentVoucherRepositoryClass {
 
       const rows = await db
         .update(PaymentVoucherReceiptTable)
-        .set({ status: 'verified', updatedAt: new Date(), updatedBy: opts.actor })
+        .set({
+          status: 'verified',
+          updatedAt: new Date(),
+          updatedBy: opts.actor,
+        })
         .where(
           and(
             eq(PaymentVoucherReceiptTable.status, 'approved'),
             inArray(
               PaymentVoucherReceiptTable.voucherId,
-              db.select({ id: PaymentVoucherTable.id }).from(PaymentVoucherTable).where(voucherFilter),
+              db
+                .select({ id: PaymentVoucherTable.id })
+                .from(PaymentVoucherTable)
+                .where(voucherFilter),
             ),
             notExists(
               db
@@ -1729,7 +2039,10 @@ export class PaymentVoucherRepositoryClass {
                 .from(PaymentVoucherDisputeTable)
                 .where(
                   and(
-                    eq(PaymentVoucherDisputeTable.voucherId, PaymentVoucherReceiptTable.voucherId),
+                    eq(
+                      PaymentVoucherDisputeTable.voucherId,
+                      PaymentVoucherReceiptTable.voucherId,
+                    ),
                     isNull(PaymentVoucherDisputeTable.outcome),
                   ),
                 ),
@@ -1739,7 +2052,10 @@ export class PaymentVoucherRepositoryClass {
         .returning({ receiptNo: PaymentVoucherReceiptTable.receiptNo });
       return rows.map((r) => r.receiptNo);
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.verifyApprovedReceipts] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.verifyApprovedReceipts] Error:',
+        error,
+      );
       // Fails soft: an unrolled receipt stays approved and rolls next pass. It
       // must not cost the caller (the Monday job) the work it does afterwards.
       return [];
@@ -1814,7 +2130,10 @@ export class PaymentVoucherRepositoryClass {
       );
       return hit?.receipt ?? null;
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.findReceiptByOrderNo] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.findReceiptByOrderNo] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -1834,7 +2153,10 @@ export class PaymentVoucherRepositoryClass {
    * Non-conforming values (NULL, or anything with no digits) become NULL and
    * are ignored by max(), so one malformed row cannot stall numbering forever.
    */
-  private async nextReceiptNo(tx: DbTransaction, bump: number): Promise<string> {
+  private async nextReceiptNo(
+    tx: DbTransaction,
+    bump: number,
+  ): Promise<string> {
     const [row] = await tx
       .select({
         highest: sql<number>`coalesce(max(nullif(regexp_replace(${PaymentVoucherReceiptTable.receiptNo}, '\\D', '', 'g'), '')::int), 0)`,
@@ -1854,7 +2176,10 @@ export class PaymentVoucherRepositoryClass {
   async createReceiptWithLines(
     receipt: ReceiptInput,
     lines: LineInput[],
-  ): Promise<{ receipt: PaymentVoucherReceiptType; lines: PaymentVoucherLineType[] }> {
+  ): Promise<{
+    receipt: PaymentVoucherReceiptType;
+    lines: PaymentVoucherLineType[];
+  }> {
     try {
       return await db.transaction(async (tx) => {
         let inserted: PaymentVoucherReceiptType | null = null;
@@ -1888,14 +2213,20 @@ export class PaymentVoucherRepositoryClass {
         if (!inserted) throw new Error('Could not allocate a receipt number');
         await this.assertLinesAgreeWithShifts(tx, lines);
         const existing = await this.getLines(receipt.voucherId, tx);
+        // The receipt row was inserted above in THIS transaction, so the
+        // resolver sees it and reads the venue from its shift.
+        const withVenues = await this.resolveLineOutletIds(
+          tx,
+          lines.map((line) => ({ ...line, receiptId: inserted!.id })),
+          receipt.voucherId,
+        );
         const insertedLines = await tx
           .insert(PaymentVoucherLineTable)
           .values(
-            lines.map((line, i) =>
+            withVenues.map((line, i) =>
               prepareLine({
                 ...line,
                 voucherId: receipt.voucherId,
-                receiptId: inserted!.id,
                 sortOrder: existing.length + i,
               }),
             ),
@@ -1905,20 +2236,37 @@ export class PaymentVoucherRepositoryClass {
         return { receipt: inserted, lines: insertedLines };
       });
     } catch (error) {
-      logger.error('[PaymentVoucherRepository.createReceiptWithLines] Error:', error);
+      logger.error(
+        '[PaymentVoucherRepository.createReceiptWithLines] Error:',
+        error,
+      );
       throw error;
     }
   }
 
   /** Appends one line to a voucher and recomputes its totals. */
-  async addLine(voucherId: string, line: LineInput): Promise<PaymentVoucherLineType> {
+  async addLine(
+    voucherId: string,
+    line: LineInput,
+  ): Promise<PaymentVoucherLineType> {
     try {
       return await db.transaction(async (tx) => {
         await this.assertLinesAgreeWithShifts(tx, [line]);
         const existing = await this.getLines(voucherId, tx);
+        const [withVenue] = await this.resolveLineOutletIds(
+          tx,
+          [line],
+          voucherId,
+        );
         const [inserted] = await tx
           .insert(PaymentVoucherLineTable)
-          .values(prepareLine({ ...line, voucherId, sortOrder: existing.length }))
+          .values(
+            prepareLine({
+              ...withVenue,
+              voucherId,
+              sortOrder: existing.length,
+            }),
+          )
           .returning();
         await this.recomputeTotals(voucherId, tx);
         return inserted;
@@ -1950,7 +2298,11 @@ export class PaymentVoucherRepositoryClass {
     line: LineInput,
     isSame: (existing: PaymentVoucherLineType) => boolean,
     options: { voidFinanceSignature?: boolean } = {},
-  ): Promise<{ line: PaymentVoucherLineType; created: boolean; signatureVoided: boolean }> {
+  ): Promise<{
+    line: PaymentVoucherLineType;
+    created: boolean;
+    signatureVoided: boolean;
+  }> {
     try {
       return await db.transaction(async (tx) => {
         const [voucher] = await tx
@@ -1963,7 +2315,9 @@ export class PaymentVoucherRepositoryClass {
           .for('update');
         if (
           !voucher ||
-          !PaymentVoucherRepositoryClass.OPEN_WEEK_STATUSES.includes(voucher.status)
+          !PaymentVoucherRepositoryClass.OPEN_WEEK_STATUSES.includes(
+            voucher.status,
+          )
         ) {
           throw new VoucherConflictError(voucherId);
         }
@@ -1972,14 +2326,26 @@ export class PaymentVoucherRepositoryClass {
         if (same) return { line: same, created: false, signatureVoided: false };
 
         await this.assertLinesAgreeWithShifts(tx, [line]);
+        const [withVenue] = await this.resolveLineOutletIds(
+          tx,
+          [line],
+          voucherId,
+        );
         const [inserted] = await tx
           .insert(PaymentVoucherLineTable)
-          .values(prepareLine({ ...line, voucherId, sortOrder: existing.length }))
+          .values(
+            prepareLine({
+              ...withVenue,
+              voucherId,
+              sortOrder: existing.length,
+            }),
+          )
           .returning();
         await this.recomputeTotals(voucherId, tx);
 
         const signatureVoided =
-          options.voidFinanceSignature === true && voucher.financeHeadSignedAt !== null;
+          options.voidFinanceSignature === true &&
+          voucher.financeHeadSignedAt !== null;
         if (signatureVoided) {
           await tx
             .update(PaymentVoucherTable)
@@ -2031,7 +2397,10 @@ export class PaymentVoucherRepositoryClass {
         receiptPhotos: PaymentVoucherReceiptTable.proofPhotos,
       })
       .from(PaymentVoucherLineTable)
-      .innerJoin(PaymentVoucherTable, eq(PaymentVoucherTable.id, PaymentVoucherLineTable.voucherId))
+      .innerJoin(
+        PaymentVoucherTable,
+        eq(PaymentVoucherTable.id, PaymentVoucherLineTable.voucherId),
+      )
       .leftJoin(
         PaymentVoucherReceiptTable,
         eq(PaymentVoucherReceiptTable.id, PaymentVoucherLineTable.receiptId),
@@ -2087,9 +2456,14 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /** subtotal = Σ line amounts; net = subtotal − deduction. */
-  private async recomputeTotals(voucherId: string, tx: DbTransaction): Promise<void> {
+  private async recomputeTotals(
+    voucherId: string,
+    tx: DbTransaction,
+  ): Promise<void> {
     const [row] = await tx
-      .select({ subtotal: sql<string>`coalesce(sum(${PaymentVoucherLineTable.amount}), 0)::numeric(12,2)` })
+      .select({
+        subtotal: sql<string>`coalesce(sum(${PaymentVoucherLineTable.amount}), 0)::numeric(12,2)`,
+      })
       .from(PaymentVoucherLineTable)
       .where(eq(PaymentVoucherLineTable.voucherId, voucherId));
     const subtotal = Number(row?.subtotal ?? 0);
@@ -2109,7 +2483,9 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /** Every day the agency has acted on for this voucher. Absence = unreviewed. */
-  async listDayReviews(voucherId: string): Promise<PaymentVoucherDayReviewType[]> {
+  async listDayReviews(
+    voucherId: string,
+  ): Promise<PaymentVoucherDayReviewType[]> {
     try {
       return await db
         .select()
@@ -2182,7 +2558,10 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /** Un-review a day: the row goes, and the day reads as never looked at. */
-  async deleteDayReview(voucherId: string, reviewDate: string): Promise<boolean> {
+  async deleteDayReview(
+    voucherId: string,
+    reviewDate: string,
+  ): Promise<boolean> {
     try {
       const rows = await db
         .delete(PaymentVoucherDayReviewTable)

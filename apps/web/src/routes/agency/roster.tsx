@@ -1,4 +1,5 @@
 import { AgencyAttendanceFixPanel } from "@agency-portal/components/agency/AgencyAttendanceFixPanel";
+import "@agency-portal/components/agency/agency-roster-design.css";
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
 import { BackfillPanel } from "@agency-portal/components/agency/BackfillPanel";
 import { RosterAutoAssignBanner } from "@agency-portal/components/agency/RosterAutoAssignBanner";
@@ -40,6 +41,7 @@ import { agencyPathPermission } from "@agency-portal/lib/agency-rbac";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
+import { formatPayrollDay } from "@agency-portal/lib/payroll-display";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
 import { recordRating } from "@agency-portal/lib/pr-rating-summary";
 import {
@@ -462,7 +464,10 @@ function AgencyRoster() {
 	);
 
 	return (
-		<div className="iz-screen iz-roster-page">
+		<div
+			className="iz-screen iz-roster-page agency-roster-design"
+			data-roster-view={viewMode}
+		>
 			<header className="iz-roster-head">
 				<IzPageTitle level={1} icon={Calendar} dateTime>
 					{t.nav.roster}
@@ -491,6 +496,13 @@ function AgencyRoster() {
 						)}
 					</div>
 				)}
+				{canOpenManagePr && (
+					<Link to="/agency/prs" className="iz-roster-pr-link">
+						<Users className="h-3.5 w-3.5" />
+						{t.nav.managePr}
+						<ChevronRight className="h-3.5 w-3.5" />
+					</Link>
+				)}
 			</header>
 
 			<div className="iz-roster-toolbar">
@@ -498,6 +510,7 @@ function AgencyRoster() {
 					<button
 						type="button"
 						className={viewMode === "live" ? "on live" : ""}
+						aria-pressed={viewMode === "live"}
 						onClick={() => setViewMode("live")}
 					>
 						{t.roster.live}
@@ -505,6 +518,7 @@ function AgencyRoster() {
 					<button
 						type="button"
 						className={viewMode === "planning" ? "on plan" : ""}
+						aria-pressed={viewMode === "planning"}
 						onClick={() => setViewMode("planning")}
 					>
 						{t.roster.planning}
@@ -521,10 +535,7 @@ function AgencyRoster() {
 							<span>{t.common.today}</span>
 						</div>
 					) : (
-						// No `flex-1`: the week picker sizes to its content, so the bar's
-						// slack falls between the control and the figures — the same shape
-						// Live has. See `.iz-roster-toolbar .iz-roster-planning-date`.
-						<div className="flex min-w-0 flex-wrap items-center gap-2">
+						<div className="iz-roster-week-control">
 							<RosterPlanningDatePicker
 								value={planningDate}
 								onChange={setPlanningDate}
@@ -536,63 +547,8 @@ function AgencyRoster() {
 						</div>
 					)}
 				</div>
-				{/*
-					The roster's figures, on the bar rather than in a card row beneath
-					it (owner, 10 Sep 2026). The cards spent a full row of height to
-					say four short things, and left the bar with ~900px of nothing
-					between "Today" and Manage PR — while PLANNING had the opposite
-					problem, two cards stretched across a width meant for four. Inline
-					and left-to-right, a shorter list simply ends instead of stretching.
+				{/* The approved summary cards keep the original figures and labels. */}
 
-					⚠️ Labels are the SAME strings the cards used. A chip is tighter, so
-					shorter wording was tempting — but two vocabularies for one figure is
-					how a number comes to be called different things on different screens.
-				*/}
-				<div className="iz-roster-stats">
-					{viewMode === "live" ? (
-						<>
-							<span className="iz-roster-stat">
-								<b>{plannedCount}</b>
-								{t.roster.plannedPrs}
-							</span>
-							<span className="iz-roster-stat">
-								<b>{activeCount}</b>
-								{t.roster.activePrs}
-							</span>
-							<span className="iz-roster-stat">
-								{/* Amber only when there IS someone missing — a permanent
-								    warning colour on a zero is noise that teaches the eye
-								    to skip the one case that matters. */}
-								<b className={unavailableCount > 0 ? "warn" : undefined}>
-									{unavailableCount}
-								</b>
-								{t.roster.unavailablePrs}
-							</span>
-							<span className="iz-roster-stat">
-								<b className="money">{formatRM(estPayoutLive)}</b>
-								{t.roster.estPayout}
-							</span>
-						</>
-					) : (
-						<>
-							<span className="iz-roster-stat">
-								<b>{weekHeadcount.prs}</b>
-								{t.roster.prsRosteredThisWeek}
-								<span aria-hidden="true">·</span>
-								{fill(
-									weekHeadcount.shifts === 1
-										? t.roster.weekShiftCountOne
-										: t.roster.weekShiftCountMany,
-									{ n: weekHeadcount.shifts },
-								)}
-							</span>
-							<span className="iz-roster-stat">
-								<b className="money">{formatRM(estLabour)}</b>
-								{t.roster.estLabourCost}
-							</span>
-						</>
-					)}
-				</div>
 				{/*
 					The one time-critical thing on this page, flagged where the eye
 					already is. The banner below still lists WHO was released and from
@@ -606,13 +562,6 @@ function AgencyRoster() {
 							n: earlyReleasedAvailable.length,
 						})}
 					</span>
-				)}
-				{canOpenManagePr && (
-					<Link to="/agency/prs" className="iz-roster-pr-link">
-						<Users className="h-3.5 w-3.5" />
-						{t.nav.managePr}
-						<ChevronRight className="h-3.5 w-3.5" />
-					</Link>
 				)}
 			</div>
 
@@ -665,6 +614,55 @@ function AgencyRoster() {
 					)}
 				</div>
 			)}
+			<div className="iz-roster-stats">
+				{viewMode === "live" ? (
+					<>
+						<span className="iz-roster-stat">
+							<span>{t.roster.plannedPrs}</span>
+							<b>{plannedCount}</b>
+						</span>
+						<span className="iz-roster-stat">
+							<span>{t.roster.activePrs}</span>
+							<b>{activeCount}</b>
+						</span>
+						<span className="iz-roster-stat">
+							<span>{t.roster.unavailablePrs}</span>
+							{/* Amber only when there IS someone missing — a permanent
+								    warning colour on a zero is noise that teaches the eye
+								    to skip the one case that matters. */}
+							<b className={unavailableCount > 0 ? "warn" : undefined}>
+								{unavailableCount}
+							</b>
+						</span>
+						<span className="iz-roster-stat">
+							<span>{t.roster.estPayout}</span>
+							<b className="money">{formatRM(estPayoutLive)}</b>
+						</span>
+					</>
+				) : (
+					<>
+						<span className="iz-roster-stat">
+							<span>{t.roster.prsRosteredThisWeek}</span>
+							<b>{weekHeadcount.prs}</b>
+							<span className="agency-roster-stat-detail">
+								{fill(
+									weekHeadcount.shifts === 1
+										? t.roster.weekShiftCountOne
+										: t.roster.weekShiftCountMany,
+									{ n: weekHeadcount.shifts },
+								)}
+							</span>
+						</span>
+						<span className="iz-roster-stat">
+							<span>{t.roster.estLabourCost}</span>
+							<b className="money">{formatRM(estLabour)}</b>
+						</span>
+					</>
+				)}
+			</div>
+			{viewMode === "live" && canAssign && (
+				<RosterAutoAssignBanner dateIso={liveDateIso} />
+			)}
 
 			{viewMode === "planning" && (
 				<div className="iz-roster-planning">
@@ -706,15 +704,12 @@ function AgencyRoster() {
 								return created;
 							}}
 							todayIso={DEFAULT_ROSTER_DATE_ISO}
-							/* Under Open demand, above the grid (owner, 3 Sep 2026): the
-							   banner offers to fill the very seats the band just listed,
-							   so it reads as the answer to it rather than a header over
-							   it. Backend plan + confirm sheet, shared with the home card;
-							   the demo store's one-PR action lives on inside it, for demo
-							   sessions only. */
 							afterOpenDemand={
 								canAssign ? (
-									<RosterAutoAssignBanner dateIso={planningDate} />
+									<details className="agency-roster-planning-helper">
+										<summary>{t.agencyHome.aiSuggestion}</summary>
+										<RosterAutoAssignBanner dateIso={planningDate} />
+									</details>
 								) : null
 							}
 						/>
@@ -727,9 +722,9 @@ function AgencyRoster() {
 
 			{/* Released slots (cancel / approved leave) still short-staffed — pick a
 			    ranked free PR to refill via the normal assign mutation. */}
-			<BackfillPanel canAct={canAssign} />
+			{viewMode === "live" && <BackfillPanel canAct={canAssign} />}
 
-			{canAssign && pendingPrSwaps.length > 0 && (
+			{viewMode === "live" && canAssign && pendingPrSwaps.length > 0 && (
 				<OutletSection
 					title={t.roster.prSwapRequests}
 					iconKey="PR swap requests"
@@ -802,7 +797,11 @@ function AgencyRoster() {
 				<OutletSection
 					title={t.roster.shifts}
 					iconKey="Shifts"
-					hint={t.roster.shiftsHint}
+					hint={
+						canAssign
+							? t.roster.shiftsHint
+							: t.rosterGrid.liveBackendRosterViewOnly
+					}
 					className="!mt-4"
 				>
 					<RosterShiftFilters
@@ -1097,7 +1096,7 @@ function EditRosterModal({
 					</span>
 					<span className="iz-sheet-meta-pill">
 						<Calendar className="h-3 w-3" />
-						{slot.date}
+						{formatPayrollDay(slot.dateIso, t)}
 					</span>
 					<span className="iz-sheet-meta-pill">
 						{t.rosterGrid.releasedEarly}
@@ -1197,7 +1196,7 @@ function EditRosterModal({
 					</span>
 					<span className="iz-sheet-meta-pill">
 						<Calendar className="h-3 w-3" />
-						{slot.date}
+						{formatPayrollDay(slot.dateIso, t)}
 					</span>
 				</div>
 

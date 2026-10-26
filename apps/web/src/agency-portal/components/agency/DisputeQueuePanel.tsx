@@ -7,12 +7,20 @@ import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
+	formatPayrollDay,
+	olderStripDays,
+} from "@agency-portal/lib/payroll-display";
+import {
 	disputeMatchesKinds,
 	type KindSelection,
 	MONEY_KINDS,
 	type MoneyKind,
 } from "@agency-portal/lib/payroll-kind-day";
 import { dayBelongsToWeekTab } from "@agency-portal/lib/payroll-week-scope";
+import {
+	disputeQueueIntro,
+	queueElsewhereLine,
+} from "@agency-portal/lib/queue-read-only-copy";
 import {
 	DISPUTE_COMPONENT_LABEL,
 	receiptsForDispute,
@@ -293,6 +301,7 @@ function DisputeRow({
 	onResolve,
 	busy,
 	receipts,
+	canResolve,
 }: {
 	dispute: PaymentVoucherDispute;
 	onResolve: (
@@ -301,6 +310,11 @@ function DisputeRow({
 	) => Promise<void> | void;
 	busy: boolean;
 	receipts: AgencyReceipt[];
+	/**
+	 * May this lane DECIDE the claim, as against read it. The queue is open to
+	 * the whole agency; `POST /disputes/:id/resolve` is not — see the panel.
+	 */
+	canResolve: boolean;
 }) {
 	const { t, locale } = usePortalLocale();
 	const [note, setNote] = useState("");
@@ -358,8 +372,8 @@ function DisputeRow({
 							{formatDay(dispute.disputeDate, locale)}
 							{dispute.voucher.weekStart && dispute.voucher.weekEnd
 								? ` · ${fill(t.agencyQueues.weekFromTo, {
-										from: dispute.voucher.weekStart,
-										to: dispute.voucher.weekEnd,
+										from: formatPayrollDay(dispute.voucher.weekStart, t),
+										to: formatPayrollDay(dispute.voucher.weekEnd, t),
 									})}`
 								: ""}
 						</p>
@@ -498,6 +512,13 @@ function DisputeRow({
 								{dispute.resolutionNote}
 							</p>
 						)
+					) : !canResolve ? (
+						// Read is open to the whole agency; deciding is not. Naming who
+						// holds it beats an Accept button that can only come back 403 —
+						// the same sentence shape the Overtime queue uses.
+						<p className="iz-tiny iz-muted2 mt-3">
+							{t.agencyQueues.onlyOwnerFinanceDecideDisputes}
+						</p>
 					) : (
 						<>
 							<textarea
@@ -640,6 +661,20 @@ export function DisputeQueuePanel({
 	} = useAgencyDisputes(false);
 	const [scope, setScope] = useState<DisputeScope>("open");
 	const [search, setSearch] = useState("");
+	/*
+	 * WHO MAY DECIDE. `POST /payment-voucher/disputes/:id/resolve` carries
+	 * `agencyOwnerOrFinance` — `requirePermission('payment_voucher', 'update')` —
+	 * while the queue itself is readable by every lane. The rows offered Accept
+	 * and Reject to all of them, so a Director's click came back 403.
+	 *
+	 * `raisePv` (payment_voucher:create) rather than `overrideSignedPv` (the
+	 * literal :update): it is what every sibling on this tab asks for the same
+	 * guard — day review, receipts, overtime — and the two verbs are held by
+	 * exactly the same lanes in `role_permission` (owner, guarantor, finance).
+	 * If the two verbs are ever granted apart, every gate on this tab moves
+	 * together rather than this one row drifting alone.
+	 */
+	const canResolve = useAgencyCan()("raisePv");
 
 	/**
 	 * The selected week's disputes — what every count, chip and empty state below
@@ -657,6 +692,20 @@ export function DisputeQueuePanel({
 				disputeInWeek(d, weekStartIso, weekEndIso, includesOlder),
 			),
 		[allDisputes, weekStartIso, weekEndIso, includesOlder],
+	);
+
+	// The payment week also holds older open claims; give their contested days
+	// chips of their own, as the Receipts strip does, instead of seven greyed
+	// chips for a list that sits entirely before them.
+	const olderDays = useMemo(
+		() =>
+			includesOlder
+				? olderStripDays(
+						weekDisputes.map((d) => d.disputeDate),
+						weekStartIso,
+					)
+				: [],
+		[includesOlder, weekDisputes, weekStartIso],
 	);
 
 	const openCount = weekDisputes.filter(isOpenDispute).length;
@@ -817,33 +866,37 @@ export function DisputeQueuePanel({
 				)}
 
 				{!isLoading && weekDisputes.length > 0 && (
-					<div className="mb-2.5 flex flex-wrap items-center gap-1.5">
-						{(
-							[
-								["open", t.payroll.open, openCount],
-								["resolved", t.agencyQueues.scopeResolved, resolvedCount],
-								["all", t.common.all, weekDisputes.length],
-							] as [DisputeScope, string, number][]
-						).map(([value, label, count]) => (
-							// Same chip as the Payment Vouchers filter above — one filter
-							// idiom on one screen, not two that merely look alike.
-							<button
-								key={value}
-								type="button"
-								className={`iz-filter-chip${scope === value ? " on" : ""}`}
-								onClick={() => setScope(value)}
-							>
-								{label}
-								<span className="iz-filter-chip__count">({count})</span>
-							</button>
-						))}
+					<div className="iz-payroll-queue-filters">
 						<input
-							className="iz-field-input ml-auto !h-8 !w-48 !text-[12px]"
+							type="search"
+							className="iz-payroll-queue-search"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 							placeholder={t.payroll.searchDisputesPlaceholder}
 							aria-label={t.payroll.searchDisputes}
 						/>
+						<div className="iz-payroll-queue-status">
+							{(
+								[
+									["open", t.payroll.open, openCount],
+									["resolved", t.agencyQueues.scopeResolved, resolvedCount],
+									["all", t.common.all, weekDisputes.length],
+								] as [DisputeScope, string, number][]
+							).map(([value, label, count]) => (
+								// Same chip as the Payment Vouchers filter above — one filter
+								// idiom on one screen, not two that merely look alike.
+								<button
+									key={value}
+									type="button"
+									className="iz-receipt-status-chip"
+									aria-pressed={scope === value}
+									onClick={() => setScope(value)}
+								>
+									{label}
+									<span className="iz-receipt-status-count">({count})</span>
+								</button>
+							))}
+						</div>
 					</div>
 				)}
 
@@ -864,6 +917,7 @@ export function DisputeQueuePanel({
 						kindCounts={kindCounts}
 						dayCounts={dayCounts}
 						allDaysCount={inKinds.length}
+						olderDays={olderDays}
 					/>
 				)}
 
@@ -889,14 +943,11 @@ export function DisputeQueuePanel({
 						{t.payroll.nothingDisputedThisWeek}
 					</p>
 				)}
+				{/* "…to decide it" only for a lane that can; a Director is told to
+				    look, not to decide. */}
 				{!isLoading && openElsewhere > 0 && (
 					<p className="iz-tiny mt-1 text-[var(--iz-amber)]">
-						{fill(
-							openElsewhere === 1
-								? t.agencyQueues.openDisputesElsewhereOne
-								: t.agencyQueues.openDisputesElsewhereMany,
-							{ n: openElsewhere },
-						)}
+						{queueElsewhereLine("dispute", openElsewhere, canResolve, t)}
 					</p>
 				)}
 				{!isLoading && weekDisputes.length > 0 && disputes.length === 0 && (
@@ -938,7 +989,7 @@ export function DisputeQueuePanel({
 				{disputes.length > 0 && (
 					<>
 						<p className="iz-tiny iz-muted">
-							{t.agencyQueues.acceptingRecordsDecision}
+							{disputeQueueIntro(canResolve, t)}
 						</p>
 						{/* Two columns from `xl`, same as the Receipts feed. `items-start`
 						    so an expanded claim does not stretch the settled one beside it;
@@ -951,6 +1002,7 @@ export function DisputeQueuePanel({
 									dispute={d}
 									busy={isResolving}
 									receipts={receipts}
+									canResolve={canResolve}
 									onResolve={(outcome, note) => handle(d, outcome, note)}
 								/>
 							))}

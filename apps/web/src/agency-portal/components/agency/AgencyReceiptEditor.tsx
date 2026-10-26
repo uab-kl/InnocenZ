@@ -1,4 +1,4 @@
-import { IzSelect } from "@agency-portal/components/iz/ui";
+import { formatRM, IzSelect } from "@agency-portal/components/iz/ui";
 import { useAgencyReceiptEdit } from "@agency-portal/hooks/use-agency-receipt-edit";
 import { useReceiptCatalogue } from "@agency-portal/hooks/use-receipt-catalogue";
 import { Plus } from "lucide-react";
@@ -408,7 +408,7 @@ export function AgencyReceiptEditor({
 							: t.agencyReceipts.itemCountMany,
 						{ n: lines.length },
 					)}{" "}
-					· RM {linesTotal.toFixed(2)}
+					· {formatRM(linesTotal)}
 				</p>
 			</div>
 
@@ -422,9 +422,7 @@ export function AgencyReceiptEditor({
 				<summary className="cursor-pointer select-none text-[var(--iz-gold-l,#d9b97a)]">
 					{t.agencyReceipts.whatThatMeans}
 				</summary>
-				<span className="mt-1 block">
-					{t.agencyReceipts.editCostExplainer}
-				</span>
+				<span className="mt-1 block">{t.agencyReceipts.editCostExplainer}</span>
 			</details>
 
 			{problem && (
@@ -466,9 +464,7 @@ export function AgencyReceiptEditor({
 					>
 						<span>{t.agencyReceipts.colItem}</span>
 						<span className="text-center">{t.agencyReceipts.colQty}</span>
-						<span className="text-right">
-							{t.agencyReceipts.colCommission}
-						</span>
+						<span className="text-right">{t.agencyReceipts.colCommission}</span>
 						<span />
 					</div>
 					{lines.map((line) => {

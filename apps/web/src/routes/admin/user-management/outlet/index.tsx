@@ -150,7 +150,7 @@ function OutletOrgsPage() {
 	});
 
 	return (
-		<PageShell>
+		<PageShell className="iz-admin-management">
 			<PageHeader
 				icon={type.icon}
 				title={adminNavLabel(`sidebar-user-${type.key}`, type.title, t)}

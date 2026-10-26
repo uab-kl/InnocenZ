@@ -55,7 +55,7 @@ export function SourceToggle<T extends SourceValue>({
 	const options = ALL_OPTIONS.filter((option) => sources.includes(option.key));
 	return (
 		<div
-			className={`inline-flex items-center gap-1 rounded-lg border border-(--lavender-soft)/30 bg-muted/30 p-1 ${className ?? ""}`}
+			className={`iz-admin-source-tabs inline-flex items-center gap-1 rounded-lg border border-(--lavender-soft)/30 bg-muted/30 p-1 ${className ?? ""}`}
 		>
 			{options.map((option) => {
 				const isActive = value === option.key;

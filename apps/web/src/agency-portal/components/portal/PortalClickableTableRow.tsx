@@ -31,7 +31,7 @@ type RowTarget =
 	| {
 			to: "/agency/pending";
 			search?: {
-				tab?: "signups" | "cutlost" | "leaves" | "outlet-linking";
+				tab?: "signups" | "cutlost" | "leaves" | "outlet-linking" | "members";
 			};
 	  }
 	| { to: "/agency/roster" };

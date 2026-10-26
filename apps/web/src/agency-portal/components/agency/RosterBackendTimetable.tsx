@@ -20,6 +20,7 @@ import {
 	shiftBlockedFor,
 	tierLabel,
 } from "@agency-portal/lib/auto-assign";
+import { formatPayrollDay } from "@agency-portal/lib/payroll-display";
 import {
 	busyFrameOn,
 	busyOverShift,
@@ -210,7 +211,25 @@ const DONE_CELL = {
 	label: (t: PortalTranslations) => t.roster.checkedOut,
 };
 
-function toneFor(slot: Pick<AgencyRosterSlot, "status" | "checkedOutAt">) {
+/**
+ * A booking the PR never turned up for.
+ *
+ * `rosterStatusFromAssignment` folds `no_show` into "unavailable" alongside a
+ * cancel and an excused MC — right for the PLAN (none of them is a person on
+ * the floor, so the week's headcount and wage bill skip all three), wrong for
+ * the WORD: the PR's own profile and the shift table call this one "No-show",
+ * and the grid read "Unavailable" about the same night. Same off-plan tone,
+ * the specific word.
+ */
+const NO_SHOW_CELL = {
+	className: "iz-roster-week-cell--off",
+	label: (t: PortalTranslations) => t.rosterGrid.noShow,
+};
+
+export function toneFor(
+	slot: Pick<AgencyRosterSlot, "status" | "checkedOutAt" | "noShowFlag">,
+) {
+	if (slot.status === "unavailable" && slot.noShowFlag) return NO_SHOW_CELL;
 	// Stamped out wins over the status — EXCEPT when the row was cancelled or
 	// no-showed, where "Off" is the more important fact about the slot and a
 	// stamp may exist from before the decision.
@@ -1135,8 +1154,13 @@ export function RosterBackendTimetable({
 						<p className="iz-heading text-sm font-bold text-[var(--iz-txt)]">
 							{fill(t.rosterGrid.weekOf, { label: weekLabel })}
 						</p>
+						{/* The instruction only for a lane that can follow it. A
+						    Director's every cell is disabled, so "tap a free cell to
+						    assign" pointed at a button that does nothing. */}
 						<p className="iz-tiny iz-muted2">
-							{t.rosterGrid.liveBackendRoster}
+							{canAssign
+								? t.rosterGrid.liveBackendRoster
+								: t.rosterGrid.liveBackendRosterViewOnly}
 						</p>
 					</div>
 					<button
@@ -1149,7 +1173,12 @@ export function RosterBackendTimetable({
 					</button>
 				</div>
 
-				<div className="iz-roster-week-scroll">
+				<section
+					className="iz-roster-week-scroll"
+					aria-label={fill(t.rosterGrid.weekOf, { label: weekLabel })}
+					// biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users must be able to focus and horizontally scroll the full week schedule.
+					tabIndex={0}
+				>
 					<table className="iz-roster-week-table">
 						<colgroup>
 							<col className="iz-roster-week-col-pr" />
@@ -1363,7 +1392,7 @@ export function RosterBackendTimetable({
 																			{
 																				name: pr.name,
 																				outlet: slot.outlet,
-																				date: dateIso,
+																				date: formatPayrollDay(dateIso, t),
 																			},
 																		)}
 																	>
@@ -1429,7 +1458,10 @@ export function RosterBackendTimetable({
 																	}
 																	aria-label={fill(
 																		t.rosterGrid.assignAnotherShift,
-																		{ name: pr.name, date: dateIso },
+																		{
+																			name: pr.name,
+																			date: formatPayrollDay(dateIso, t),
+																		},
 																	)}
 																	title={
 																		hasOpen
@@ -1472,13 +1504,13 @@ export function RosterBackendTimetable({
 																				t.rosterGrid.markedUnavailableReason,
 																				{
 																					name: pr.name,
-																					date: dateIso,
+																					date: formatPayrollDay(dateIso, t),
 																					reason,
 																				},
 																			)
 																		: fill(t.rosterGrid.markedUnavailable, {
 																				name: pr.name,
-																				date: dateIso,
+																				date: formatPayrollDay(dateIso, t),
 																			})
 																}
 															>
@@ -1504,7 +1536,7 @@ export function RosterBackendTimetable({
 															}
 															aria-label={fill(t.rosterGrid.assignPrOn, {
 																name: pr.name,
-																date: dateIso,
+																date: formatPayrollDay(dateIso, t),
 															})}
 															title={
 																canAssign && !hasOpen
@@ -1596,7 +1628,7 @@ export function RosterBackendTimetable({
 							)}
 						</tbody>
 					</table>
-				</div>
+				</section>
 			</div>
 
 			{demandShift && demandDetail && (
@@ -1968,7 +2000,9 @@ function AssignBackendCellSheet({
 			<div className="iz-sheet-head">
 				<div>
 					<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-						{fill(t.rosterGrid.planningOn, { date: dateIso })}
+						{fill(t.rosterGrid.planningOn, {
+							date: formatPayrollDay(dateIso, t),
+						})}
 					</p>
 					{/* Same spelling as the row that opened this sheet, and as the
 					    voucher that eventually pays the shift — see formatPayeeLabel. */}

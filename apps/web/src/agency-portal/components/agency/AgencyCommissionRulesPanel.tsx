@@ -1,4 +1,5 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
+import { fillPriceRange } from "@agency-portal/components/outlet/price-range";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
 import { useAgencyOutletWorkspace } from "@agency-portal/hooks/use-agency-outlet-workspace";
 import { formatTierWageRange } from "@agency-portal/lib/agency-demo";
@@ -105,11 +106,13 @@ export function AgencyCommissionRulesPanel({
 					    from the one key — two spellings of "{n} drinks · RM x–y" is how
 					    the two portals start disagreeing about the same menu. */}
 					<p className="iz-tiny iz-muted mb-2">
-						{fill(t.workspace.drinksSummary, {
-							n: drinkMenu.length,
-							min: drinkRange.min,
-							max: drinkRange.max,
-						})}
+						{fillPriceRange(
+							drinkMenu.length === 1
+								? t.workspace.drinksSummaryOne
+								: t.workspace.drinksSummary,
+							drinkRange,
+							{ n: drinkMenu.length },
+						)}
 					</p>
 					<div className="flex flex-wrap gap-1.5">
 						{drinkMenu.map((drink) => (

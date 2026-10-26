@@ -57,7 +57,9 @@ function lineToRow(line: PaymentVoucherLine): PrPvRow {
 		i: line.sortOrder,
 		date: line.lineDate ?? "",
 		day: "",
-		outlet: line.outlet ?? "",
+		// The venue's CURRENT name (through outlet_id) — a renamed venue must not
+		// keep its old name on every voucher. The stored text is the fallback.
+		outlet: line.outletName ?? line.outlet ?? "",
 		desc: line.description,
 		qty: line.quantity,
 		amt: num(line.amount),
@@ -80,7 +82,7 @@ function summaryRow(pv: PaymentVoucher): PrPvRow[] {
 			i: 0,
 			date: pv.issuedDate ?? "",
 			day: "",
-			outlet: pv.outlet ?? "",
+			outlet: pv.outletName ?? pv.outlet ?? "",
 			desc: "Weekly earnings — open voucher for line items",
 			qty: 1,
 			amt: subtotal,
@@ -104,7 +106,7 @@ function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 		// voucher to her own record could only be attempted by name.
 		prId: pv.prId ?? undefined,
 		prIc: pv.prIc ?? undefined,
-		outlet: pv.outlet ?? "",
+		outlet: pv.outletName ?? pv.outlet ?? "",
 		cycle: pv.cycle ?? "",
 		issued: pv.issuedDate ?? "",
 		due: pv.dueDate ?? "",
@@ -147,7 +149,11 @@ export function managedPvFromBackendDetail(
 		.slice()
 		.sort((a, b) => a.sortOrder - b.sortOrder)
 		.map(lineToRow);
-	return baseVoucher(pv, rows.length ? rows : summaryRow(pv));
+	const voucher = baseVoucher(pv, rows.length ? rows : summaryRow(pv));
+	// Only a definite "no" warns — null means one side has no IC to compare.
+	return pv.prIcMatchesProfile === false
+		? { ...voucher, prIcMismatch: true }
+		: voucher;
 }
 
 /** Demo edit rows → backend line inputs (dispute-resolution edit path). */

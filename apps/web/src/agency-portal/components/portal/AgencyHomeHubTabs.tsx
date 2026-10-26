@@ -278,6 +278,7 @@ export function AgencyHomeHubTabs({
 		cutlostRequests,
 		leaveRequests,
 		outletLinkRequests,
+		pendingMemberRows = [],
 	} = approvals;
 	const pendingReview = prPaymentVouchers.filter(
 		(p) => p.status === "PENDING_REVIEW",
@@ -304,13 +305,14 @@ export function AgencyHomeHubTabs({
 	if (tabs.length === 0) return null;
 
 	return (
-		<section className="iz-portal-panel iz-agency-home-hub">
+		<section className="iz-agency-home-hub">
 			<div className="iz-agency-home-tabs">
 				{tabs.map((tabItem) => (
 					<button
 						key={tabItem.id}
 						type="button"
 						className={`iz-agency-home-tab${activeTab === tabItem.id ? " on" : ""}`}
+						aria-pressed={activeTab === tabItem.id}
 						onClick={() => setTab(tabItem.id)}
 					>
 						{/* The label carries the colour too — see
@@ -349,408 +351,452 @@ export function AgencyHomeHubTabs({
 				))}
 			</div>
 
-			{activeTab === "on-duty" && showWorkforce && (
-				<LiveWorkforceTable embedded linkPrProfiles />
-			)}
+			<div className="iz-portal-panel iz-approved-queue-panel">
+				{activeTab === "on-duty" && showWorkforce && (
+					<LiveWorkforceTable embedded linkPrProfiles />
+				)}
 
-			{activeTab === "approvals" && showApprovals && (
-				<>
-					<div className="iz-portal-panel-head">
-						<h3 className="iz-heading text-base font-bold">
-							{t.agencyHub.pendingApprovalsTitle}
-						</h3>
-						<HubPanelLink
-							to="/agency/pending"
-							label={t.agencyHub.openApprovals}
-						/>
-					</div>
-					{approvals.total === 0 ? (
-						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							{approvals.isLoading
-								? t.agencyHub.loadingApprovals
-								: t.agencyHub.nothingAwaitingApproval}
-						</p>
-					) : (
-						<div className="iz-portal-table-wrap">
-							<table className="iz-portal-table">
-								<thead>
-									<tr>
-										<th>{t.table.outletOrPr}</th>
-										<th>{t.table.type}</th>
-										<th>{t.table.details}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{signups.map((p) => (
-										<PortalClickableTableRow
-											key={p.id}
-											target={{ to: "/agency/pending" }}
-										>
-											<td>
-												<div className="iz-portal-table-pr">
-													{/* A pending sign-up is not on the roster yet, so the
+				{activeTab === "approvals" && showApprovals && (
+					<>
+						<div className="iz-portal-panel-head">
+							<h3 className="iz-heading text-base font-bold">
+								{t.agencyHub.pendingApprovalsTitle}
+							</h3>
+							<HubPanelLink
+								to="/agency/pending"
+								label={t.agencyHub.openApprovals}
+							/>
+						</div>
+						{approvals.total === 0 ? (
+							<p className="iz-tiny iz-muted px-4 py-6 text-center">
+								{approvals.isLoading
+									? t.agencyHub.loadingApprovals
+									: t.agencyHub.nothingAwaitingApproval}
+							</p>
+						) : (
+							<div className="iz-portal-table-wrap">
+								<table className="iz-portal-table">
+									<thead>
+										<tr>
+											<th>{t.table.outletOrPr}</th>
+											<th>{t.table.type}</th>
+											<th>{t.table.details}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{pendingMemberRows.map((member) => (
+											<PortalClickableTableRow
+												key={`member-${member.id}`}
+												target={{
+													to: "/agency/pending",
+													search: { tab: "members" },
+												}}
+											>
+												<td>
+													<div className="iz-portal-table-pr">
+														<PortalTableAvatar
+															name={
+																member.username ||
+																member.email ||
+																member.memberCode ||
+																"—"
+															}
+															photo={member.profileImage}
+														/>
+														<span className="iz-portal-table-name">
+															{member.username ||
+																member.email ||
+																member.memberCode ||
+																"—"}
+														</span>
+													</div>
+												</td>
+												<td className="iz-portal-table-meta">
+													{t.portalUi.newMembers}
+												</td>
+												<td className="iz-portal-table-meta">
+													{member.subRole} ·{" "}
+													{member.email || member.phoneNum || "—"}
+												</td>
+											</PortalClickableTableRow>
+										))}
+										{signups.map((p) => (
+											<PortalClickableTableRow
+												key={p.id}
+												target={{ to: "/agency/pending" }}
+											>
+												<td>
+													<div className="iz-portal-table-pr">
+														{/* A pending sign-up is not on the roster yet, so the
 													    lookup cannot see her — but the Approvals payload
 													    already carries her own photos, resolved. Her selfie
 													    IS the account's profile photo. */}
-													<PortalTableAvatar
-														name={p.name}
-														photo={
-															p.selfiePhoto ??
-															p.comcardImageUrl ??
-															p.portfolioPhotos?.find(Boolean)
-														}
-													/>
-													<span className="iz-portal-table-name">{p.name}</span>
-												</div>
-											</td>
-											<td className="iz-portal-table-meta">
-												{t.agencyHub.newSignup}
-											</td>
-											<td className="iz-portal-table-meta">
-												{p.languages || p.mobile}
-											</td>
-										</PortalClickableTableRow>
-									))}
-									{linkRequests.map((l) => (
-										<PortalClickableTableRow
-											key={l.id}
-											target={{ to: "/agency/pending" }}
-										>
-											<td>
-												<div className="iz-portal-table-pr">
-													<PortalTableAvatar
-														name={l.prName}
-														photo={prPhoto(l.prId, l.prName)}
-													/>
-													<span className="iz-portal-table-name">
-														{l.prName}
-													</span>
-												</div>
-											</td>
-											<td className="iz-portal-table-meta">
-												{t.agencyHub.linkRequest}
-											</td>
-											<td className="iz-portal-table-meta">
-												{t.agencyHub.wantsToLink} · {l.requestedAt}
-											</td>
-										</PortalClickableTableRow>
-									))}
-									{leaveRequests.map((req) => {
-										const prName = req.prName ?? "PR";
-										return (
+														<PortalTableAvatar
+															name={p.name}
+															photo={
+																p.selfiePhoto ??
+																p.comcardImageUrl ??
+																p.portfolioPhotos?.find(Boolean)
+															}
+														/>
+														<span className="iz-portal-table-name">
+															{p.name}
+														</span>
+													</div>
+												</td>
+												<td className="iz-portal-table-meta">
+													{t.agencyHub.newSignup}
+												</td>
+												<td className="iz-portal-table-meta">
+													{p.languages || p.mobile}
+												</td>
+											</PortalClickableTableRow>
+										))}
+										{linkRequests.map((l) => (
+											<PortalClickableTableRow
+												key={l.id}
+												target={{ to: "/agency/pending" }}
+											>
+												<td>
+													<div className="iz-portal-table-pr">
+														<PortalTableAvatar
+															name={l.prName}
+															photo={prPhoto(l.prId, l.prName)}
+														/>
+														<span className="iz-portal-table-name">
+															{l.prName}
+														</span>
+													</div>
+												</td>
+												<td className="iz-portal-table-meta">
+													{t.agencyHub.linkRequest}
+												</td>
+												<td className="iz-portal-table-meta">
+													{t.agencyHub.wantsToLink} · {l.requestedAt}
+												</td>
+											</PortalClickableTableRow>
+										))}
+										{leaveRequests.map((req) => {
+											const prName = req.prName ?? "PR";
+											return (
+												<PortalClickableTableRow
+													key={req.id}
+													target={{
+														to: "/agency/pending",
+														search: { tab: "leaves" },
+													}}
+												>
+													<td>
+														<div className="iz-portal-table-pr">
+															<PortalTableAvatar
+																name={prName}
+																photo={prPhoto(req.prId, req.prName)}
+															/>
+															<span className="iz-portal-table-name">
+																{prName}
+															</span>
+														</div>
+													</td>
+													<td className="iz-portal-table-meta">
+														{t.agencyHub.mcLeave}
+													</td>
+													<td className="iz-portal-table-meta">
+														{req.outletName ?? t.table.outlet} ·{" "}
+														{req.shiftDate ?? "—"}
+													</td>
+												</PortalClickableTableRow>
+											);
+										})}
+										{cutlostRequests.map((req) => (
 											<PortalClickableTableRow
 												key={req.id}
 												target={{
 													to: "/agency/pending",
-													search: { tab: "leaves" },
+													search: { tab: "cutlost" },
 												}}
 											>
 												<td>
 													<div className="iz-portal-table-pr">
+														{/* An OUTLET, not a PR — so NOT `prPhoto`, which would
+													    be the wrong source for a venue. The row carries the
+													    venue's own logo (`outletLogo`), which is the only
+													    picture that can be right here. */}
 														<PortalTableAvatar
-															name={prName}
-															photo={prPhoto(req.prId, req.prName)}
+															name={req.outletName}
+															photo={req.outletLogo}
 														/>
 														<span className="iz-portal-table-name">
-															{prName}
+															{req.outletName}
 														</span>
 													</div>
 												</td>
 												<td className="iz-portal-table-meta">
-													{t.agencyHub.mcLeave}
+													{t.agencyHub.cutlostRequest}
 												</td>
 												<td className="iz-portal-table-meta">
-													{req.outletName ?? t.table.outlet} ·{" "}
-													{req.shiftDate ?? "—"}
+													{cutlostRequestTitle(req)} · ~RM{" "}
+													{Math.round(req.estimatedSavings).toLocaleString(
+														"en-MY",
+													)}
 												</td>
 											</PortalClickableTableRow>
-										);
-									})}
-									{cutlostRequests.map((req) => (
-										<PortalClickableTableRow
-											key={req.id}
-											target={{
-												to: "/agency/pending",
-												search: { tab: "cutlost" },
-											}}
-										>
-											<td>
-												<div className="iz-portal-table-pr">
-													{/* An OUTLET, not a PR — so NOT `prPhoto`, which would
-													    be the wrong source for a venue. The row carries the
-													    venue's own logo (`outletLogo`), which is the only
-													    picture that can be right here. */}
-													<PortalTableAvatar
-														name={req.outletName}
-														photo={req.outletLogo}
-													/>
-													<span className="iz-portal-table-name">
-														{req.outletName}
-													</span>
-												</div>
-											</td>
-											<td className="iz-portal-table-meta">
-												{t.agencyHub.cutlostRequest}
-											</td>
-											<td className="iz-portal-table-meta">
-												{cutlostRequestTitle(req)} · ~RM{" "}
-												{Math.round(req.estimatedSavings).toLocaleString(
-													"en-MY",
-												)}
-											</td>
-										</PortalClickableTableRow>
-									))}
-									{/* Venues asking to be let in (0123). Added alongside the
+										))}
+										{/* Venues asking to be let in (0123). Added alongside the
 									    count in `total`, never on its own — a tile that counts a
 									    row it does not render is worse than one that ignores it,
 									    because the operator can see there is work and cannot see
 									    what it is. Deep-links straight to the right tab. */}
-									{outletLinkRequests.map((link) => (
-										<PortalClickableTableRow
-											key={link.id}
-											target={{
-												to: "/agency/pending",
-												search: { tab: "outlet-linking" },
-											}}
-										>
-											<td>
-												<div className="iz-portal-table-pr">
-													{/* A venue, so its own logo — the same reasoning as
+										{outletLinkRequests.map((link) => (
+											<PortalClickableTableRow
+												key={link.id}
+												target={{
+													to: "/agency/pending",
+													search: { tab: "outlet-linking" },
+												}}
+											>
+												<td>
+													<div className="iz-portal-table-pr">
+														{/* A venue, so its own logo — the same reasoning as
 													    the cutlost rows above. */}
-													<PortalTableAvatar
-														name={link.outletName}
-														photo={link.logoImage}
-													/>
-													<span className="iz-portal-table-name">
-														{link.outletName}
-													</span>
-												</div>
-											</td>
-											<td className="iz-portal-table-meta">
-												{t.agencyHub.outletLinkRequest}
-											</td>
-											<td className="iz-portal-table-meta">
-												{[link.city, link.state].filter(Boolean).join(", ") ||
-													"—"}
-											</td>
-										</PortalClickableTableRow>
-									))}
-								</tbody>
-							</table>
-						</div>
-					)}
-				</>
-			)}
+														<PortalTableAvatar
+															name={link.outletName}
+															photo={link.logoImage}
+														/>
+														<span className="iz-portal-table-name">
+															{link.outletName}
+														</span>
+													</div>
+												</td>
+												<td className="iz-portal-table-meta">
+													{t.agencyHub.outletLinkRequest}
+												</td>
+												<td className="iz-portal-table-meta">
+													{[link.city, link.state].filter(Boolean).join(", ") ||
+														"—"}
+												</td>
+											</PortalClickableTableRow>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</>
+				)}
 
-			{activeTab === "review" && showPayroll && (
-				<>
-					<div className="iz-portal-panel-head">
-						<h3 className="iz-heading text-base font-bold">
-							{t.agencyHub.pvPendingReviewTitle}
-						</h3>
-						<HubPanelLink
-							to="/agency/pv"
-							search={{ status: "PENDING_REVIEW" }}
-							label={t.agencyHub.openPayroll}
-						/>
-					</div>
-					{pendingReview.length === 0 ? (
-						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							{t.agencyHub.noPvsAwaitingReview}
-						</p>
-					) : (
-						<div className="iz-portal-table-wrap">
-							<table className="iz-portal-table">
-								<thead>
-									<tr>
-										<th>{t.table.pr}</th>
-										<th>{t.table.outlet}</th>
-										<th>{t.table.net}</th>
-										<th>{t.table.status}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{pendingReview.map((pv) => (
-										<PortalClickableTableRow
-											key={pv.id}
-											target={{
-												to: "/agency/pv",
-												search: { pv: pv.id, status: "PENDING_REVIEW" },
-											}}
-										>
-											<td>
-												<div className="iz-portal-table-pr">
-													<PortalTableAvatar
-														name={pv.prName}
-														photo={prPhoto(pv.prId, pv.prNickname ?? pv.prName)}
-													/>
-													<span className="iz-portal-table-name">
-														{pv.prName}
-													</span>
-												</div>
-											</td>
-											<td className="iz-portal-table-meta">{pv.outlet}</td>
-											<td className="iz-portal-table-meta">
-												{formatRM(pv.net)}
-											</td>
-											<td className="iz-portal-table-status">
-												<IzPill
-													variant={pvStatusPillVariant(pv.status)}
-													className="!py-0.5 !text-[9px]"
-												>
-													{agencyPvStatusLabel(pv.status, t)}
-												</IzPill>
-											</td>
-										</PortalClickableTableRow>
-									))}
-								</tbody>
-							</table>
+				{activeTab === "review" && showPayroll && (
+					<>
+						<div className="iz-portal-panel-head">
+							<h3 className="iz-heading text-base font-bold">
+								{t.agencyHub.pvPendingReviewTitle}
+							</h3>
+							<HubPanelLink
+								to="/agency/pv"
+								search={{ status: "PENDING_REVIEW" }}
+								label={t.agencyHub.openPayroll}
+							/>
 						</div>
-					)}
-				</>
-			)}
+						{pendingReview.length === 0 ? (
+							<p className="iz-tiny iz-muted px-4 py-6 text-center">
+								{t.agencyHub.noPvsAwaitingReview}
+							</p>
+						) : (
+							<div className="iz-portal-table-wrap">
+								<table className="iz-portal-table">
+									<thead>
+										<tr>
+											<th>{t.table.pr}</th>
+											<th>{t.table.outlet}</th>
+											<th>{t.table.net}</th>
+											<th>{t.table.status}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{pendingReview.map((pv) => (
+											<PortalClickableTableRow
+												key={pv.id}
+												target={{
+													to: "/agency/pv",
+													search: { pv: pv.id, status: "PENDING_REVIEW" },
+												}}
+											>
+												<td>
+													<div className="iz-portal-table-pr">
+														<PortalTableAvatar
+															name={pv.prName}
+															photo={prPhoto(
+																pv.prId,
+																pv.prNickname ?? pv.prName,
+															)}
+														/>
+														<span className="iz-portal-table-name">
+															{pv.prName}
+														</span>
+													</div>
+												</td>
+												<td className="iz-portal-table-meta">{pv.outlet}</td>
+												<td className="iz-portal-table-meta">
+													{formatRM(pv.net)}
+												</td>
+												<td className="iz-portal-table-status">
+													<IzPill
+														variant={pvStatusPillVariant(pv.status)}
+														className="!py-0.5 !text-[9px]"
+													>
+														{agencyPvStatusLabel(pv.status, t)}
+													</IzPill>
+												</td>
+											</PortalClickableTableRow>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</>
+				)}
 
-			{activeTab === "disputes" && showPayroll && (
-				<>
-					<div className="iz-portal-panel-head">
-						<h3 className="iz-heading text-base font-bold">
-							{t.agencyHub.openDisputesTitle}
-						</h3>
-						{/* `?tab=disputes`, NOT `?status=DISPUTED`. The claim's voucher is
+				{activeTab === "disputes" && showPayroll && (
+					<>
+						<div className="iz-portal-panel-head">
+							<h3 className="iz-heading text-base font-bold">
+								{t.agencyHub.openDisputesTitle}
+							</h3>
+							{/* `?tab=disputes`, NOT `?status=DISPUTED`. The claim's voucher is
 						    usually still SENT, so a status link filtered the voucher list to
 						    nothing and told the agency there was no dispute — on the very
 						    row it was launched from. */}
-						<HubPanelLink
-							to="/agency/pv"
-							search={{ tab: "disputes" }}
-							label={t.agencyHub.openPayroll}
-						/>
-					</div>
-					{openDisputes.length === 0 ? (
-						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							{disputesLoading
-								? t.agencyHub.loadingDisputes
-								: t.agencyHub.noOpenDisputes}
-						</p>
-					) : (
-						<div className="iz-portal-table-wrap">
-							<table className="iz-portal-table">
-								<thead>
-									<tr>
-										<th>{t.table.pr}</th>
-										{/* The day and the bucket, because that is what a dispute IS
+							<HubPanelLink
+								to="/agency/pv"
+								search={{ tab: "disputes" }}
+								label={t.agencyHub.openPayroll}
+							/>
+						</div>
+						{openDisputes.length === 0 ? (
+							<p className="iz-tiny iz-muted px-4 py-6 text-center">
+								{disputesLoading
+									? t.agencyHub.loadingDisputes
+									: t.agencyHub.noOpenDisputes}
+							</p>
+						) : (
+							<div className="iz-portal-table-wrap">
+								<table className="iz-portal-table">
+									<thead>
+										<tr>
+											<th>{t.table.pr}</th>
+											{/* The day and the bucket, because that is what a dispute IS
 										    — one claim about one component of one day. A voucher-level
 										    row could not say which. */}
-										<th>{t.table.day}</th>
-										<th>{t.table.component}</th>
-										<th>{t.table.voucherSays}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{openDisputes.map((d) => {
-										const prName =
-											d.voucher?.prNickname?.trim() ||
-											d.voucher?.prName?.trim() ||
-											"PR";
-										return (
-											<PortalClickableTableRow
-												key={d.id}
-												target={{
-													to: "/agency/pv",
-													search: { tab: "disputes" },
-												}}
-											>
-												<td>
-													<div className="iz-portal-table-pr">
-														<PortalTableAvatar
-															name={prName}
-															photo={prPhoto(d.voucher?.prId, prName)}
-														/>
-														<span className="iz-portal-table-name">
-															{prName}
-														</span>
-													</div>
-												</td>
-												<td className="iz-portal-table-meta">
-													{formatDisputeDay(d.disputeDate, t)}
-												</td>
-												<td className="iz-portal-table-meta">
-													{disputeComponentLabel(d.component, t)}
-												</td>
-												<td className="iz-portal-table-meta">
-													{formatRM(Number(d.disputedAmount ?? 0))}
-												</td>
-											</PortalClickableTableRow>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
-					)}
-				</>
-			)}
+											<th>{t.table.day}</th>
+											<th>{t.table.component}</th>
+											<th>{t.table.voucherSays}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{openDisputes.map((d) => {
+											const prName =
+												d.voucher?.prNickname?.trim() ||
+												d.voucher?.prName?.trim() ||
+												"PR";
+											return (
+												<PortalClickableTableRow
+													key={d.id}
+													target={{
+														to: "/agency/pv",
+														search: { tab: "disputes" },
+													}}
+												>
+													<td>
+														<div className="iz-portal-table-pr">
+															<PortalTableAvatar
+																name={prName}
+																photo={prPhoto(d.voucher?.prId, prName)}
+															/>
+															<span className="iz-portal-table-name">
+																{prName}
+															</span>
+														</div>
+													</td>
+													<td className="iz-portal-table-meta">
+														{formatDisputeDay(d.disputeDate, t)}
+													</td>
+													<td className="iz-portal-table-meta">
+														{disputeComponentLabel(d.component, t)}
+													</td>
+													<td className="iz-portal-table-meta">
+														{formatRM(Number(d.disputedAmount ?? 0))}
+													</td>
+												</PortalClickableTableRow>
+											);
+										})}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</>
+				)}
 
-			{activeTab === "receipts" && showPayroll && (
-				<>
-					<div className="iz-portal-panel-head">
-						<h3 className="iz-heading text-base font-bold">
-							{t.agencyHub.receiptsWaitingTitle}
-						</h3>
-						<HubPanelLink
-							to="/agency/pv"
-							search={{ tab: "receipts" }}
-							label={t.agencyHub.openPayroll}
-						/>
-					</div>
-					{pendingReceipts.length === 0 ? (
-						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							{receiptsLoading
-								? t.agencyHub.loadingReceipts
-								: t.agencyHub.noReceiptsAwaiting}
-						</p>
-					) : (
-						<div className="iz-portal-table-wrap">
-							<table className="iz-portal-table">
-								<thead>
-									<tr>
-										<th>{t.table.pr}</th>
-										<th>{t.table.receipt}</th>
-										<th>{t.table.shiftDay}</th>
-										<th>{t.table.logged}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{pendingReceipts.map((r) => {
-										const prName =
-											r.prNickname?.trim() || r.prName?.trim() || "PR";
-										return (
-											<PortalClickableTableRow
-												key={r.id}
-												// Carry the receipt id, not just the sub-tab. The
-												// receipts list is scoped to the SELECTED WEEK, so
-												// `tab=receipts` alone landed on whichever week the
-												// page defaults to and showed a list this receipt was
-												// not in — which reads as a broken link. The id lets
-												// the page open the week that holds it and scroll to
-												// the row.
-												target={{
-													to: "/agency/pv",
-													search: { tab: "receipts", receipt: r.id },
-												}}
-											>
-												<td>
-													<div className="iz-portal-table-pr">
-														<PortalTableAvatar
-															name={prName}
-															photo={prPhoto(r.prId, prName)}
-														/>
-														<span className="iz-portal-table-name">
-															{prName}
-														</span>
-													</div>
-												</td>
-												<td className="iz-portal-table-meta">{r.receiptNo}</td>
-												{/* The working day the money belongs to — the SAME rule
+				{activeTab === "receipts" && showPayroll && (
+					<>
+						<div className="iz-portal-panel-head">
+							<h3 className="iz-heading text-base font-bold">
+								{t.agencyHub.receiptsWaitingTitle}
+							</h3>
+							<HubPanelLink
+								to="/agency/pv"
+								search={{ tab: "receipts" }}
+								label={t.agencyHub.openPayroll}
+							/>
+						</div>
+						{pendingReceipts.length === 0 ? (
+							<p className="iz-tiny iz-muted px-4 py-6 text-center">
+								{receiptsLoading
+									? t.agencyHub.loadingReceipts
+									: t.agencyHub.noReceiptsAwaiting}
+							</p>
+						) : (
+							<div className="iz-portal-table-wrap">
+								<table className="iz-portal-table">
+									<thead>
+										<tr>
+											<th>{t.table.pr}</th>
+											<th>{t.table.receipt}</th>
+											<th>{t.table.shiftDay}</th>
+											<th>{t.table.logged}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{pendingReceipts.map((r) => {
+											const prName =
+												r.prNickname?.trim() || r.prName?.trim() || "PR";
+											return (
+												<PortalClickableTableRow
+													key={r.id}
+													// Carry the receipt id, not just the sub-tab. The
+													// receipts list is scoped to the SELECTED WEEK, so
+													// `tab=receipts` alone landed on whichever week the
+													// page defaults to and showed a list this receipt was
+													// not in — which reads as a broken link. The id lets
+													// the page open the week that holds it and scroll to
+													// the row.
+													target={{
+														to: "/agency/pv",
+														search: { tab: "receipts", receipt: r.id },
+													}}
+												>
+													<td>
+														<div className="iz-portal-table-pr">
+															<PortalTableAvatar
+																name={prName}
+																photo={prPhoto(r.prId, prName)}
+															/>
+															<span className="iz-portal-table-name">
+																{prName}
+															</span>
+														</div>
+													</td>
+													<td className="iz-portal-table-meta">
+														{r.receiptNo}
+													</td>
+													{/* The working day the money belongs to — the SAME rule
 												    the Payroll receipts panel uses (`workingDayIso`:
 												    line date, then the printed date, then logged-at).
 												    Reading `receiptDate` directly printed a different
@@ -758,103 +804,104 @@ export function AgencyHomeHubTabs({
 												    `receipt_date` = 16 Jun against lines dated 6 and
 												    10 Aug, so this row said "Tue 16 Jun" while Payroll
 												    filed it under "Mon 10 Aug". */}
-												<td className="iz-portal-table-meta">
-													{formatDisputeDay(workingDayIso(r), t)}
-												</td>
-												<td className="iz-portal-table-status">
-													<IzPill
-														variant="amber"
-														className="!py-0.5 !text-[9px]"
-													>
-														{r.source === "manual"
-															? t.agencyHub.selfLog
-															: t.agencyHub.scanned}
-													</IzPill>
-												</td>
-											</PortalClickableTableRow>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
-					)}
-				</>
-			)}
+													<td className="iz-portal-table-meta">
+														{formatDisputeDay(workingDayIso(r), t)}
+													</td>
+													<td className="iz-portal-table-status">
+														<IzPill
+															variant="amber"
+															className="!py-0.5 !text-[9px]"
+														>
+															{r.source === "manual"
+																? t.agencyHub.selfLog
+																: t.agencyHub.scanned}
+														</IzPill>
+													</td>
+												</PortalClickableTableRow>
+											);
+										})}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</>
+				)}
 
-			{activeTab === "overtime" && showPayroll && (
-				<>
-					<div className="iz-portal-panel-head">
-						<h3 className="iz-heading text-base font-bold">
-							{t.agencyHub.overtimeAwaitingTitle}
-						</h3>
-						<HubPanelLink
-							to="/agency/pv"
-							search={{ tab: "overtime" }}
-							label={t.agencyHub.openPayroll}
-						/>
-					</div>
-					{pendingOvertime.length === 0 ? (
-						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							{overtimeLoading
-								? t.agencyHub.loadingOvertime
-								: t.agencyHub.noOvertimeAwaiting}
-						</p>
-					) : (
-						<div className="iz-portal-table-wrap">
-							<table className="iz-portal-table">
-								<thead>
-									<tr>
-										<th>{t.table.pr}</th>
-										<th>{t.table.outlet}</th>
-										<th>{t.table.shiftDay}</th>
-										{/* Priced server-side. Never recomputed from the minutes, or
+				{activeTab === "overtime" && showPayroll && (
+					<>
+						<div className="iz-portal-panel-head">
+							<h3 className="iz-heading text-base font-bold">
+								{t.agencyHub.overtimeAwaitingTitle}
+							</h3>
+							<HubPanelLink
+								to="/agency/pv"
+								search={{ tab: "overtime" }}
+								label={t.agencyHub.openPayroll}
+							/>
+						</div>
+						{pendingOvertime.length === 0 ? (
+							<p className="iz-tiny iz-muted px-4 py-6 text-center">
+								{overtimeLoading
+									? t.agencyHub.loadingOvertime
+									: t.agencyHub.noOvertimeAwaiting}
+							</p>
+						) : (
+							<div className="iz-portal-table-wrap">
+								<table className="iz-portal-table">
+									<thead>
+										<tr>
+											<th>{t.table.pr}</th>
+											<th>{t.table.outlet}</th>
+											<th>{t.table.shiftDay}</th>
+											{/* Priced server-side. Never recomputed from the minutes, or
 										    the tile could name one figure while another lands on
 										    the voucher. */}
-										<th>{t.table.pays}</th>
-									</tr>
-								</thead>
-								<tbody>
-									{pendingOvertime.map((c) => {
-										const prName = c.prName?.trim() || "PR";
-										return (
-											<PortalClickableTableRow
-												key={c.assignmentId}
-												target={{
-													to: "/agency/pv",
-													search: { tab: "overtime" },
-												}}
-											>
-												<td>
-													<div className="iz-portal-table-pr">
-														<PortalTableAvatar
-															name={prName}
-															photo={prPhoto(c.prId, prName)}
-														/>
-														<span className="iz-portal-table-name">
-															{prName}
-														</span>
-													</div>
-												</td>
-												<td className="iz-portal-table-meta">
-													{c.outletName ?? t.table.outlet}
-												</td>
-												<td className="iz-portal-table-meta">
-													{c.shiftDate
-														? formatDisputeDay(c.shiftDate.slice(0, 10), t)
-														: "—"}
-												</td>
-												<td className="iz-portal-table-meta">
-													{formatRM(Number(c.amount ?? 0))}
-												</td>
-											</PortalClickableTableRow>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
-					)}
-				</>
-			)}
+											<th>{t.table.pays}</th>
+										</tr>
+									</thead>
+									<tbody>
+										{pendingOvertime.map((c) => {
+											const prName = c.prName?.trim() || "PR";
+											return (
+												<PortalClickableTableRow
+													key={c.assignmentId}
+													target={{
+														to: "/agency/pv",
+														search: { tab: "overtime" },
+													}}
+												>
+													<td>
+														<div className="iz-portal-table-pr">
+															<PortalTableAvatar
+																name={prName}
+																photo={prPhoto(c.prId, prName)}
+															/>
+															<span className="iz-portal-table-name">
+																{prName}
+															</span>
+														</div>
+													</td>
+													<td className="iz-portal-table-meta">
+														{c.outletName ?? t.table.outlet}
+													</td>
+													<td className="iz-portal-table-meta">
+														{c.shiftDate
+															? formatDisputeDay(c.shiftDate.slice(0, 10), t)
+															: "—"}
+													</td>
+													<td className="iz-portal-table-meta">
+														{formatRM(Number(c.amount ?? 0))}
+													</td>
+												</PortalClickableTableRow>
+											);
+										})}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</>
+				)}
+			</div>
 		</section>
 	);
 }

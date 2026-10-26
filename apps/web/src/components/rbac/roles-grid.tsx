@@ -8,6 +8,7 @@ import {
 	Shield,
 	XCircle,
 } from "lucide-react";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,6 +90,8 @@ const PORTAL_GROUPS: {
 ];
 
 function formatRoleName(name: string) {
+	// The row is CSS-capitalised, which made the acronym `pr` read "Pr".
+	if (name.trim().toLowerCase() === "pr") return "PR";
 	return name.replace(/_/g, " ");
 }
 
@@ -123,26 +126,28 @@ export function RolesGrid({
 	})).filter((g) => g.roles.length > 0);
 
 	return (
-		<div className="space-y-5">
-			<div className="flex flex-wrap items-center justify-end gap-2">
+		<div className="admin-roles-design space-y-5">
+			<div className="admin-rbac-toolbar flex flex-wrap items-center justify-end gap-3">
 				{isFetching && (
 					<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 				)}
-				<Select
-					value={statusFilter}
-					onValueChange={(value) =>
-						onStatusFilterChange(value as RoleStatusFilter)
-					}
-				>
-					<SelectTrigger className="w-36" aria-label={t.rbac.filterByStatus}>
-						<SelectValue placeholder={t.rbac.statusPlaceholder} />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value="all">{t.rbac.allStatus}</SelectItem>
-						<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
-						<SelectItem value="inactive">{t.rbac.statusInactive}</SelectItem>
-					</SelectContent>
-				</Select>
+				<AdminFilters className="admin-role-filters">
+					<Select
+						value={statusFilter}
+						onValueChange={(value) =>
+							onStatusFilterChange(value as RoleStatusFilter)
+						}
+					>
+						<SelectTrigger className="w-36" aria-label={t.rbac.filterByStatus}>
+							<SelectValue placeholder={t.rbac.statusPlaceholder} />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">{t.rbac.allStatus}</SelectItem>
+							<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
+							<SelectItem value="inactive">{t.rbac.statusInactive}</SelectItem>
+						</SelectContent>
+					</Select>
+				</AdminFilters>
 				<Button onClick={onCreateClick} className="shrink-0">
 					<Plus className="mr-2 h-4 w-4" />
 					{t.rbac.createRole}
@@ -176,15 +181,15 @@ export function RolesGrid({
 					<span className="text-sm">{t.rbac.noRolesYet}</span>
 				</div>
 			) : (
-				<div className="space-y-4">
+				<div className="admin-role-groups">
 					{groups.map((group) => (
 						<section
 							key={group.key}
-							className="overflow-hidden rounded-2xl border border-(--lavender-soft)/30 bg-card"
+							className="admin-role-group overflow-hidden rounded-2xl border border-(--lavender-soft)/30 bg-card"
 						>
 							<div
 								className={cn(
-									"flex items-center justify-between gap-3 border-b border-(--lavender-soft)/20 bg-gradient-to-r px-5 py-3.5",
+									"admin-role-group-header flex items-center justify-between gap-3 px-5 py-5",
 									group.accent,
 								)}
 							>
@@ -205,9 +210,7 @@ export function RolesGrid({
 										</p>
 									</div>
 								</div>
-								<span className="rounded-full border border-border/60 bg-background/50 px-3 py-1 text-sm font-medium text-muted-foreground tabular-nums">
-									{group.roles.length}
-								</span>
+								<span className="admin-role-count">{group.roles.length}</span>
 							</div>
 
 							{group.roles.length === 0 ? (
@@ -222,7 +225,7 @@ export function RolesGrid({
 												type="button"
 												onClick={() => onRoleClick(role)}
 												className={cn(
-													"group flex w-full items-center gap-3.5 px-5 py-4 text-left",
+													"admin-role-row group flex w-full items-center gap-3.5 px-5 py-4 text-left",
 													"transition-colors hover:bg-[color:var(--lavender-soft)]/25",
 													"focus-visible:outline-none focus-visible:bg-[color:var(--lavender-soft)]/30",
 												)}
@@ -230,7 +233,7 @@ export function RolesGrid({
 												<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--lavender-soft)/35 bg-background/60 text-lavender">
 													<Shield className="h-5 w-5" />
 												</span>
-												<span className="min-w-0 flex-1 truncate text-lg font-semibold capitalize tracking-tight text-foreground">
+												<span className="admin-role-name min-w-0 flex-1 font-semibold capitalize text-foreground">
 													{formatRoleName(role.roleName)}
 												</span>
 												<Badge
@@ -259,7 +262,7 @@ export function RolesGrid({
 			)}
 
 			{pagination && pagination.totalCount > 0 && (
-				<div className="flex items-center justify-between text-sm text-muted-foreground">
+				<div className="admin-rbac-pagination flex items-center justify-between text-sm text-muted-foreground">
 					<div>
 						{fill(t.rbac.showingRoles, {
 							from: (pagination.page - 1) * pageSize + 1,

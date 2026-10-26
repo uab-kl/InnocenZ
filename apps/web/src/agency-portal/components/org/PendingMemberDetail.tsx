@@ -42,6 +42,29 @@ const APPROVABLE: Record<OrgKind, readonly string[]> = {
 };
 
 /**
+ * Is this the organisation's LAST active owner?
+ *
+ * ⚠️ The read-only twin of the server's `guardMemberChange`
+ * (apps/backend/src/util/member-change-guard.ts), which refuses — 409 "Cannot
+ * remove the last active owner" — any removal, demotion or deactivation that
+ * would leave the organisation with no active owner. The pane used to offer
+ * Deactivate on that row anyway, so the button could only ever collect the
+ * refusal. With a SECOND active owner the server allows it, and so does this.
+ *
+ * `members` must be the whole membership list, as the server's count is — a
+ * filtered list would under-count the other owners.
+ */
+export function isLastActiveOwner(
+	members: readonly Pick<OrgMember, "id" | "subRole" | "status">[],
+	target: Pick<OrgMember, "id" | "subRole" | "status">,
+): boolean {
+	const activeOwner = (m: Pick<OrgMember, "subRole" | "status">) =>
+		m.subRole === "owner" && m.status === "active";
+	if (!activeOwner(target)) return false;
+	return !members.some((m) => m.id !== target.id && activeOwner(m));
+}
+
+/**
  * A membership id that has not been earned yet (migration 0161).
  *
  * The server's `isPendingOrgCode` is the authority; this is the read-only twin
@@ -237,6 +260,18 @@ export function PendingMemberDetail({
 		picked: choice?.id === member.id ? choice.value : null,
 		approvable: APPROVABLE[kind],
 	});
+	/*
+	 * ⚠️ AN OWNER OR GUARANTOR ROW SHOWS ITS TITLE, NEVER A PICKER.
+	 *
+	 * The picker's options are `APPROVABLE`, which withholds both top lanes, so
+	 * a select over an Owner row displayed "Financial Head" — the first option —
+	 * and one click on Save would have posted it. The Team screen renders the
+	 * owner's row as text for the same reason; the top lane is handed over from
+	 * there, never from this queue.
+	 */
+	const roleEditable = APPROVABLE[kind].includes(member.subRole);
+	// Mirrors the server's last-owner refusal — see `isLastActiveOwner`.
+	const lastOwner = isLastActiveOwner(members, member);
 	const shownError = error?.id === member.id ? error.message : "";
 	// Armed for THIS person, or armed for nobody — see the note on the state.
 	const confirming = confirmingId === member.id;
@@ -483,6 +518,11 @@ export function PendingMemberDetail({
 								))}
 							</select>
 						</label>
+						{!canDecide ? (
+							<p className="mt-1 text-muted-foreground text-xs">
+								{t.portalUi.onlyOwnerDecides}
+							</p>
+						) : null}
 						<button
 							type="button"
 							disabled={busy || !canDecide || reactivation.lane === null}
@@ -542,7 +582,23 @@ export function PendingMemberDetail({
 						 * Hidden while the removal confirmation is open: two decisions about
 						 * the same person on screen at once is how the wrong one gets clicked.
 						 */}
-						{!confirming ? (
+						{!confirming && !roleEditable ? (
+							<div className="mb-4">
+								<p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+									{t.portalUi.currentRole}
+								</p>
+								<p className="mt-1.5 font-semibold text-foreground text-sm">
+									{portalRoleLabel(member.subRole, t)}
+								</p>
+								<p className="mt-1 text-muted-foreground text-xs">
+									{t.portalUi.roleFixedHere}
+								</p>
+								{shownError ? (
+									<p className="mt-3 text-red-500 text-sm">{shownError}</p>
+								) : null}
+							</div>
+						) : null}
+						{!confirming && roleEditable ? (
 							<div className="mb-4">
 								<label className="flex flex-col gap-1.5">
 									<span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
@@ -564,6 +620,13 @@ export function PendingMemberDetail({
 										))}
 									</select>
 								</label>
+								{/* A greyed picker with no reason reads as a broken page
+								    (an Ops Head opening Finance's row). */}
+								{!canDecide ? (
+									<p className="mt-1 text-muted-foreground text-xs">
+										{t.portalUi.onlyOwnerDecides}
+									</p>
+								) : null}
 								{picked !== member.subRole ? (
 									<button
 										type="button"
@@ -661,7 +724,15 @@ export function PendingMemberDetail({
 							   own button was dead. Offering a destructive act to somebody the
 							   server refuses is worse than not offering it: it reads as the
 							   product being broken rather than as a rule. */
-							canDecide && (
+							/* ⚠️ `!lastOwner` — the server refuses removing the last active
+							   owner (409), so the button is replaced by the reason rather
+							   than offered to fail. */
+							canDecide &&
+							(lastOwner ? (
+								<p className="text-muted-foreground text-xs">
+									{t.portalUi.lastOwnerStays}
+								</p>
+							) : (
 								<button
 									type="button"
 									onClick={() => setConfirmingId(member.id)}
@@ -670,7 +741,7 @@ export function PendingMemberDetail({
 									<UserX className="h-4 w-4 shrink-0" />
 									{t.portalUi.deactivateMember}
 								</button>
-							)
+							))
 						)}
 					</div>
 				</section>
@@ -707,6 +778,11 @@ export function PendingMemberDetail({
 								))}
 							</select>
 						</label>
+						{!canDecide ? (
+							<p className="mt-1 text-muted-foreground text-xs">
+								{t.portalUi.onlyOwnerDecides}
+							</p>
+						) : null}
 
 						{shownError ? (
 							<p className="mt-3 text-red-500 text-sm">{shownError}</p>

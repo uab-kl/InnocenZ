@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { addDays, format, parse } from "date-fns";
@@ -352,7 +353,7 @@ export function InvoicePaymentSheet({
 	};
 
 	return (
-		<div className="flex h-full flex-col gap-5 overflow-y-auto">
+		<div className="admin-invoice-detail flex h-full flex-col gap-5 overflow-y-auto">
 			<SheetHeader className="space-y-1 p-0">
 				<SheetTitle>{t.admin.navPlanPayment}</SheetTitle>
 				<SheetDescription>{t.adminService.paymentPanelIntro}</SheetDescription>

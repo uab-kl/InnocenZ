@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { useForm } from "@tanstack/react-form";
 import { AlertCircle, CreditCard, Loader2 } from "lucide-react";
 import { useEffect } from "react";
@@ -127,16 +128,35 @@ export function SubscriptionFormSheet({
 			form.reset();
 			return;
 		}
+		// Again on OPEN: closing the sheet blurs the focused Plan Name AFTER the
+		// close-time reset, so a reopened sheet came back with it already touched.
+		form.reset();
 
-		form.setFieldValue("name", editTarget?.name ?? "");
-		form.setFieldValue("price", editTarget ? Number(editTarget.price) : 0);
-		form.setFieldValue("billingCycle", editTarget?.billingCycle ?? "monthly");
+		/*
+		 * `dontUpdateMeta`: seeding is not the admin touching a field. Without it
+		 * every field opened already "touched", so "Plan name is required" showed
+		 * before anything was typed. Errors now wait for a change, a blur or a
+		 * submit (`handleSubmit` touches every field itself).
+		 */
+		const seed = { dontUpdateMeta: true };
+		form.setFieldValue("name", editTarget?.name ?? "", seed);
+		form.setFieldValue(
+			"price",
+			editTarget ? Number(editTarget.price) : 0,
+			seed,
+		);
+		form.setFieldValue(
+			"billingCycle",
+			editTarget?.billingCycle ?? "monthly",
+			seed,
+		);
 		form.setFieldValue(
 			"subscriptionType",
 			editTarget?.subscriptionType ?? "outlet",
+			seed,
 		);
-		form.setFieldValue("status", editTarget?.status ?? "active");
-		form.setFieldValue("coverage", editTarget?.coverage ?? "");
+		form.setFieldValue("status", editTarget?.status ?? "active", seed);
+		form.setFieldValue("coverage", editTarget?.coverage ?? "", seed);
 	}, [open, editTarget]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const handleOpenChange = (nextOpen: boolean) => {
@@ -146,7 +166,7 @@ export function SubscriptionFormSheet({
 
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>
-			<SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+			<SheetContent className="admin-finance-sheet flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
 				<SheetHeader className="shrink-0 border-b border-border">
 					<div className="flex items-start gap-3 pr-8">
 						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--lavender-soft)/50 bg-(--lavender-soft)/20 text-lavender">
@@ -159,9 +179,21 @@ export function SubscriptionFormSheet({
 									: t.adminSubscription.createPlan}
 							</SheetTitle>
 							<SheetDescription>
-								{isEditing
-									? t.adminSubscription.editPlanHint
-									: t.adminSubscription.createPlanHint}
+								{/* Follows the Audience field — it said "for agencies"
+								    while the field defaulted to Outlet. */}
+								{isEditing ? (
+									t.adminSubscription.editPlanHint
+								) : (
+									<form.Subscribe
+										selector={(state) => state.values.subscriptionType}
+									>
+										{(audience) =>
+											audience === "agency"
+												? t.adminSubscription.createPlanHint
+												: t.adminSubscription.createPlanHintOutlet
+										}
+									</form.Subscribe>
+								)}
 							</SheetDescription>
 						</div>
 					</div>
@@ -179,8 +211,12 @@ export function SubscriptionFormSheet({
 						<FieldGroup className="gap-4">
 							<form.Field name="name">
 								{(field) => {
+									// Edited or a save attempted — not merely focused: the field
+									// opens focused, so leaving it for Audience blurred it.
 									const isInvalid =
-										field.state.meta.isTouched && !field.state.value.trim();
+										(field.state.meta.isDirty ||
+											form.state.submissionAttempts > 0) &&
+										!field.state.value.trim();
 									return (
 										<Field data-invalid={isInvalid}>
 											<FieldLabel htmlFor="sub-name">

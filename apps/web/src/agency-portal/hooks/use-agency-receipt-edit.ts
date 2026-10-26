@@ -40,7 +40,7 @@ export function useAgencyReceiptEdit() {
 		Promise.all([
 			queryClient.invalidateQueries({ queryKey: agencyReceiptsKey }),
 			// ⚠️ TWO payment-voucher keys, and neither is a prefix of the other:
-			// `useAgencyPvDetail` reads ["agency","payment-voucher", id] while the
+			// the old `useAgencyPvDetail` read ["agency","payment-voucher", id] while the
 			// evidence read is ["agency","payment-voucher","evidence", id]. Both are
 			// on screen together, so refreshing only the evidence left the voucher
 			// document beside it quoting the pre-edit figures.

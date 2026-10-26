@@ -1,5 +1,5 @@
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
-import { IzPill } from "@agency-portal/components/iz/ui";
+import { formatRM, IzPill } from "@agency-portal/components/iz/ui";
 // import { OutletSealReview } from "@agency-portal/components/outlet/OutletSealReview";
 import {
 	OUTLET_OPEN_CUTLOST_EVENT,
@@ -12,6 +12,10 @@ import {
 	OutletStatChip,
 	OutletTargetActualCard,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
+import {
+	fillPriceRange,
+	formatMenuPriceRm,
+} from "@agency-portal/components/outlet/price-range";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
 import { useOutletShiftActions } from "@agency-portal/hooks/use-outlet-shift-actions";
 import { useOutletShiftSales } from "@agency-portal/hooks/use-outlet-shift-sales";
@@ -23,7 +27,6 @@ import type {
 import { resolveOutletShiftDateIso } from "@agency-portal/lib/agency-outlet-shifts";
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import {
-	formatOutletPriceRm,
 	formatOutletShiftMetricAmount,
 	formatShiftEventTypeSummary,
 	OUTLET_DRINKS_PRICE_SECTION_ID,
@@ -144,6 +147,8 @@ export function OutletShiftDetailPanel({
 	variant = "future",
 	hideLogSales = false,
 	hideCutlost = false,
+	summaryOnly = false,
+	hideSummary = false,
 	staffingAgency,
 	roster: rosterOverride,
 	agencyPrs: agencyPrsOverride,
@@ -153,6 +158,8 @@ export function OutletShiftDetailPanel({
 	hideLogSales?: boolean;
 	/** Home page renders cutlost at page bottom — hide inline block here. */
 	hideCutlost?: boolean;
+	summaryOnly?: boolean;
+	hideSummary?: boolean;
 	/** When set, show linked agency instead of destination labels. */
 	staffingAgency?: string;
 	/**
@@ -396,6 +403,69 @@ export function OutletShiftDetailPanel({
 			?.scrollIntoView({ behavior: "smooth", block: "start" });
 	};
 
+	const summary = (
+		<div className="iz-outlet-shift-kpi-row">
+			<OutletStatChip
+				label={t.calendar.demandSupplied}
+				value={`${staffingDemand} / ${supplied}`}
+				tone={demandTone}
+				onClick={() => {
+					document
+						.getElementById(OUTLET_PR_TONIGHT_SECTION_ID)
+						?.scrollIntoView({ behavior: "smooth", block: "start" });
+				}}
+			/>
+			<OutletTargetActualCard
+				label={t.today.sales}
+				target={targetSales}
+				actual={displaySales}
+				onClick={hideCutlost ? scrollToOutletLiveSales : undefined}
+			/>
+			<OutletTargetActualCard
+				label={t.today.laborCost}
+				target={targetCost}
+				actual={actualCost}
+				lowerIsBetter
+				onClick={hideCutlost ? scrollToOutletLaborCostReport : undefined}
+			/>
+			<OutletStatChip
+				label={t.today.cutlost}
+				value={formatOutletShiftMetricAmount(cutLoss)}
+				tone={cutLoss > 0 ? "danger" : "neutral"}
+				onClick={scrollToCutlost}
+			/>
+		</div>
+	);
+	if (summaryOnly)
+		return (
+			<div className="iz-approved-live-metrics">
+				<section>
+					<p>{t.approvedDesign.staffedDemand}</p>
+					<strong>
+						{supplied} / {staffingDemand}
+					</strong>
+				</section>
+				<button type="button" onClick={scrollToOutletLiveSales}>
+					<p>{t.today.sales}</p>
+					<strong>{formatRM(displaySales)}</strong>
+					<span>
+						{t.today.target} {formatRM(targetSales)}
+					</span>
+				</button>
+				<button type="button" onClick={scrollToOutletLaborCostReport}>
+					<p>{t.today.laborCost}</p>
+					<strong>{formatRM(actualCost)}</strong>
+					<span>
+						{t.today.target} {formatRM(targetCost)}
+					</span>
+				</button>
+				<button type="button" onClick={scrollToCutlost}>
+					<p>{t.today.cutlost}</p>
+					<strong>{formatRM(cutLoss)}</strong>
+				</button>
+			</div>
+		);
+
 	return (
 		<>
 			<div className="px-3.5 pb-3.5 pt-2">
@@ -483,14 +553,11 @@ export function OutletShiftDetailPanel({
 										</Link>
 									)}
 									<span className="text-[var(--iz-muted)]"> · </span>
-									{fill(
+									{fillPriceRange(
 										prices.eventSpecific
 											? t.postJob.pricesEventSpecific
 											: t.postJob.pricesWorkspace,
-										{
-											min: formatOutletPriceRm(group.minRm),
-											max: formatOutletPriceRm(group.maxRm),
-										},
+										{ min: group.minRm, max: group.maxRm },
 									)}
 								</p>
 								{shift.eventKind === "special" && (
@@ -503,7 +570,7 @@ export function OutletShiftDetailPanel({
 														d.changed ? "text-[var(--iz-gold)]" : undefined
 													}
 												>
-													{d.name} RM {formatOutletPriceRm(d.priceRm)}
+													{d.name} RM {formatMenuPriceRm(d.priceRm)}
 												</span>
 											</span>
 										))}
@@ -548,39 +615,7 @@ export function OutletShiftDetailPanel({
 					</p>
 				)}
 
-				<div className="mt-3">
-					<div className="iz-outlet-shift-kpi-row">
-						<OutletStatChip
-							label={t.calendar.demandSupplied}
-							value={`${staffingDemand} / ${supplied}`}
-							tone={demandTone}
-							onClick={() => {
-								document
-									.getElementById(OUTLET_PR_TONIGHT_SECTION_ID)
-									?.scrollIntoView({ behavior: "smooth", block: "start" });
-							}}
-						/>
-						<OutletTargetActualCard
-							label={t.today.sales}
-							target={targetSales}
-							actual={displaySales}
-							onClick={hideCutlost ? scrollToOutletLiveSales : undefined}
-						/>
-						<OutletTargetActualCard
-							label={t.today.laborCost}
-							target={targetCost}
-							actual={actualCost}
-							lowerIsBetter
-							onClick={hideCutlost ? scrollToOutletLaborCostReport : undefined}
-						/>
-						<OutletStatChip
-							label={t.today.cutlost}
-							value={formatOutletShiftMetricAmount(cutLoss)}
-							tone={cutLoss > 0 ? "danger" : "neutral"}
-							onClick={scrollToCutlost}
-						/>
-					</div>
-				</div>
+				<div className="mt-3">{!hideSummary && summary}</div>
 
 				{(adjustmentsLabel || bestEffortSaved > 0) && (
 					<p className="iz-tiny iz-muted2 mt-2 text-center">

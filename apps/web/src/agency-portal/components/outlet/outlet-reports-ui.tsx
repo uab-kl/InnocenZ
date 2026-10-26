@@ -3,13 +3,33 @@ import { cn } from "@agency-portal/lib/utils";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
+/**
+ * "RM 12k" / "−RM 1.5k" — a loss night compacts like a good one, with the
+ * sign in front of the currency as `formatRM` prints it.
+ */
 export function formatCompactRm(value: number): string {
-	if (value >= 1000) {
-		const k = value / 1000;
+	if (Math.abs(value) >= 1000) {
+		const k = Math.abs(value) / 1000;
 		const rounded = k >= 10 ? Math.round(k) : Math.round(k * 10) / 10;
-		return `RM ${rounded}k`;
+		return `${value < 0 ? "−" : ""}RM ${rounded}k`;
 	}
 	return formatRM(value);
+}
+
+/**
+ * A share of floor sales as a whole percent, or NULL when there were no sales
+ * to share — a percentage of nothing has no value. Velvet 23 has wages on
+ * every night and no floor sales at all, and the screen printed "PR spend 0%"
+ * beside RM 5,075 of PR spend. Callers render null as no percentage.
+ */
+export function pctOfSales(part: number, sales: number): number | null {
+	return sales > 0 ? Math.round((part / sales) * 100) : null;
+}
+
+/** A P&L bar segment's width: its share of sales, held to 0–100%. */
+export function pnlBarPct(part: number, sales: number): number {
+	if (!(sales > 0)) return 0;
+	return Math.min(100, Math.max(0, (part / sales) * 100));
 }
 
 export function OutletReportTopPrCard({

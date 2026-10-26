@@ -1,5 +1,6 @@
 import {
 	effectiveShiftDrinkMenu,
+	isOutletTipsRow,
 	type OutletDrinkCategory,
 	type OutletDrinkPrice,
 	outletDrinkCategory,
@@ -60,15 +61,20 @@ export function shiftPriceGroups(
 
 	const groups: ShiftPriceGroup[] = [];
 	for (const category of ["drink", "service"] as const) {
-		const lines = sortOutletDrinkMenuByPrice(
+		const items = sortOutletDrinkMenuByPrice(
 			menu.filter((d) => outletDrinkCategory(d) === category),
-		).map((d) => ({
+		);
+		const lines = items.map((d) => ({
 			name: d.name,
 			priceRm: d.priceRm,
 			changed: eventSpecific && workspacePrice.get(d.id) !== d.priceRm,
 		}));
 		if (lines.length === 0) continue;
-		const prices = lines.map((l) => l.priceRm);
+		// Tips stays LISTED (it is priced here, as on Workspace) but is not a
+		// service, so it stays out of the range — the rule Workspace and Post Job
+		// use for "N services · RM x–y". A list holding only Tips keeps its price.
+		const ranged = items.filter((d) => !isOutletTipsRow(d));
+		const prices = (ranged.length ? ranged : items).map((d) => d.priceRm);
 		groups.push({
 			category,
 			lines,

@@ -44,8 +44,6 @@ import {
 	Clock,
 	Contact,
 	Image,
-	Mail,
-	Phone,
 	Sparkles,
 	Store,
 	TrendingDown,
@@ -68,6 +66,8 @@ import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import type { AgencyOutletApproveStatus } from "@/services/agency-outlet";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import type { ShiftAssignment } from "@/services/shift-assignment";
+import "./agency-management-design.css";
+import "./agency-approvals-design.css";
 
 /**
  * Every image on this screen goes through the PR photo resolver.
@@ -375,33 +375,6 @@ function pendingStandingLabel(p: PendingPR, t: PortalTranslations) {
 	if (p.status === "rejected")
 		return isLeave ? t.approvals.departureRejected : t.approvals.joinRejected;
 	return isLeave ? t.approvals.leaveRequest : t.approvals.joinRequest;
-}
-
-function VerificationBadge({
-	ok,
-	label,
-	count,
-	variant,
-}: {
-	ok: boolean;
-	label: string;
-	count?: number;
-	variant?: "gallery" | "comcard";
-}) {
-	return (
-		<span
-			className={cn(
-				"iz-approvals-verify-badge",
-				variant === "comcard" && (ok ? "comcard" : "bad"),
-				variant !== "comcard" &&
-					(count !== undefined ? "gallery" : ok ? "ok" : "bad"),
-			)}
-		>
-			{label}
-			{ok ? " ✓" : " ✕"}
-			{count !== undefined && count > 0 ? ` · ${count}` : ""}
-		</span>
-	);
 }
 
 function RejectSheet({
@@ -975,17 +948,6 @@ function SignupDetailPanel({
 						<h2 className="iz-approvals-detail-name">
 							{pendingFloorNickname(signup)}
 						</h2>
-						{pendingLegalIcName(signup) && (
-							<p className="iz-approvals-detail-meta">
-								{t.agencyPending.legal} · {pendingLegalIcName(signup)}
-							</p>
-						)}
-						<p className="iz-approvals-detail-meta">
-							{pendingLanguagesLabel(signup, t)}
-							{signup.submittedAt
-								? fill(t.approvals.appliedOn, { date: signup.submittedAt })
-								: ""}
-						</p>
 						{signup.source === "owner-invite" && (
 							<IzPill variant="amber" className="mt-1.5">
 								{t.agencyPending.ownerInvite}
@@ -1012,78 +974,40 @@ function SignupDetailPanel({
 				    request happens through a fresh request, not by editing history.
 				    `canDecide` is the second reason there is nothing to press: a
 				    view-only lane reads the request in full and answers none. */}
-				{!decided && canDecide && (
-					<div className="iz-approvals-detail-actions">
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary !py-2 !text-xs"
-							onClick={onApprove}
-						>
-							{isLeave ? t.approvals.approveDeparture : t.common.approve}
-						</button>
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft !py-2 !text-xs"
-							onClick={() => setRejectOpen(true)}
-						>
-							{t.common.reject}
-						</button>
-					</div>
-				)}
 			</div>
 
-			<div className="iz-approvals-info-grid">
-				<div className="iz-approvals-info-card">
-					<h3 className="iz-approvals-info-title">
-						{t.approvals.personalInfo}
-					</h3>
-					<div className="iz-approvals-info-chips">
-						{/* The stored race code is the FILTER's value on Manage PR — only
-						    the rendered word changes, via the shared resolver. */}
-						{signup.race && (
-							<IzPill variant="violet">{raceLabel(signup.race, t)}</IzPill>
-						)}
-						{signup.age && (
-							<IzPill variant="violet">
-								{fill(t.managePr.ageLabel, { n: signup.age })}
-							</IzPill>
-						)}
-						{signup.height && (
-							<IzPill variant="violet">{signup.height} cm</IzPill>
-						)}
-						{signup.weight && (
-							<IzPill variant="violet">{signup.weight} kg</IzPill>
-						)}
-					</div>
-					{signup.ic && (
-						<p className="iz-approvals-info-line">
-							<Calendar className="h-3.5 w-3.5 shrink-0" />
-							{t.agencyPending.icNumber} {signup.ic}
-						</p>
-					)}
-					{pendingLegalIcName(signup) && (
-						<p className="iz-approvals-info-line">
-							<Contact className="h-3.5 w-3.5 shrink-0" />
-							{pendingLegalIcName(signup)}
-						</p>
-					)}
-				</div>
-				<div className="iz-approvals-info-card">
-					<h3 className="iz-approvals-info-title">{t.approvals.contact}</h3>
-					{signup.email && (
-						<p className="iz-approvals-info-line">
-							<Mail className="h-3.5 w-3.5 shrink-0" />
-							{signup.email}
-						</p>
-					)}
-					{signup.mobile && (
-						<p className="iz-approvals-info-line">
-							<Phone className="h-3.5 w-3.5 shrink-0" />
-							{signup.mobile}
-						</p>
-					)}
-				</div>
-			</div>
+			<section className="iz-approvals-personal">
+				<h3>{t.approvedDesign.personalInformation}</h3>
+				<dl className="iz-approved-data-grid">
+					{[
+						[t.agencyPending.legal, pendingLegalIcName(signup)],
+						[t.agencyPending.icNumber, signup.ic],
+						[
+							t.approvedDesign.race,
+							signup.race ? raceLabel(signup.race, t) : null,
+						],
+						[t.approvedDesign.floorName, pendingFloorNickname(signup)],
+						[t.approvedDesign.languages, pendingLanguagesLabel(signup, t)],
+						[t.approvedDesign.age, signup.age],
+						[
+							t.approvedDesign.height,
+							signup.height ? signup.height + " cm" : null,
+						],
+						[
+							t.approvedDesign.weight,
+							signup.weight ? signup.weight + " kg" : null,
+						],
+						[t.approvedDesign.email, signup.email],
+						[t.approvedDesign.mobile, signup.mobile],
+						[t.approvals.requestedOn, signup.submittedAt],
+					].map(([label, value]) => (
+						<div key={label}>
+							<dt>{label}</dt>
+							<dd>{value || "—"}</dd>
+						</div>
+					))}
+				</dl>
+			</section>
 
 			<section className="iz-approvals-docs">
 				<h3 className="iz-approvals-info-title">{t.approvals.documents}</h3>
@@ -1106,8 +1030,56 @@ function SignupDetailPanel({
 					gallerySlots={gallerySlots}
 					onPreview={setPreview}
 				/>
+				{!decided && canDecide && (
+					<div className="iz-approvals-detail-actions">
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary !py-2 !text-xs"
+							onClick={onApprove}
+						>
+							{isLeave ? t.approvals.approveDeparture : t.common.approve}
+						</button>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !py-2 !text-xs"
+							onClick={() => setRejectOpen(true)}
+						>
+							{t.common.reject}
+						</button>
+					</div>
+				)}
 			</section>
-
+			<section className="iz-approvals-completeness">
+				<h3>{t.approvedDesign.documentCompleteness}</h3>
+				<dl>
+					{[
+						[
+							t.approvals.icFront,
+							signup.icPhotoFront ? t.approvals.verified : t.approvals.missing,
+						],
+						[
+							t.approvals.icBack,
+							signup.icPhotoBack ? t.approvals.verified : t.approvals.missing,
+						],
+						[
+							t.approvals.profilePicture,
+							signup.hasSelfie ? t.approvals.verified : t.approvals.missing,
+						],
+						[
+							t.approvals.gallery,
+							galleryCount
+								? fill(t.approvals.photoCount, { n: galleryCount })
+								: t.approvals.missing,
+						],
+						[t.approvals.comcard, comcardMeta.label],
+					].map(([label, value]) => (
+						<div key={String(label)}>
+							<dt>{label}</dt>
+							<dd>{value}</dd>
+						</div>
+					))}
+				</dl>
+			</section>
 			<RejectSheet
 				open={rejectOpen}
 				title={
@@ -1638,6 +1610,8 @@ function AgencyPending() {
 	 * already had once, and the fix was to filter at the reader.
 	 */
 	const memberOrgId = useMemo(() => getAgencyIdentity()?.agencyId ?? null, []);
+	const [queueFilterContainer, setQueueFilterContainer] =
+		useState<HTMLDivElement | null>(null);
 	const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 	const pendingMembersQuery = useOrgMembersQuery("agency", memberOrgId);
 	/*
@@ -1811,41 +1785,64 @@ function AgencyPending() {
 					</p>
 				</IzCard>
 			)}
-			<div className="iz-approvals-layout">
-				<aside className="iz-approvals-sidebar">
-					<header className="iz-approvals-sidebar-head">
-						<IzPageTitle level={1} dateTime>
-							{t.approvals.title}
-						</IzPageTitle>
-					</header>
+			<header className="iz-approvals-page-head">
+				<div>
+					<IzPageTitle level={1} icon={null}>
+						{t.approvals.title}
+					</IzPageTitle>
+					<p className="iz-approved-description">
+						{t.approvedDesign.approvalsDescription}
+					</p>
+				</div>
+				{tab === "signups" && canApprovePrSignups && (
+					<button
+						type="button"
+						className="iz-btn iz-btn-primary"
+						onClick={() => {
+							setInviteError(null);
+							setAddOpen(true);
+						}}
+					>
+						<UserPlus className="h-3.5 w-3.5" />
+						{t.approvals.addPr}
+					</button>
+				)}
+			</header>
+			{/* Two groups first, their queues underneath — so the reader picks
+			    WHO they are answering before WHICH request. A group's count is
+			    the work waiting across its queues, and shows "…" while any of
+			    them is still loading: a premature "(0)" claims there is nothing
+			    to do, which is a different statement from "not known yet". */}
+			<div className="iz-approvals-groups" role="tablist">
+				{(["pr", "outlet", "member"] as const).map((g) => (
+					<button
+						key={g}
+						type="button"
+						role="tab"
+						aria-selected={group === g}
+						className={cn("iz-approvals-group", group === g && "on")}
+						onClick={() => setTab(GROUP_FIRST_TAB[g])}
+					>
+						{g === "pr"
+							? t.approvals.groupPr
+							: g === "outlet"
+								? t.approvals.groupOutlet
+								: t.portalUi.newMembers}
+						<span className="iz-approvals-group__count">
+							{groupCounts[g].loading ? "…" : groupCounts[g].count}
+						</span>
+					</button>
+				))}
+			</div>
 
-					{/* Two groups first, their queues underneath — so the reader picks
-					    WHO they are answering before WHICH request. A group's count is
-					    the work waiting across its queues, and shows "…" while any of
-					    them is still loading: a premature "(0)" claims there is nothing
-					    to do, which is a different statement from "not known yet". */}
-					<div className="iz-approvals-groups" role="tablist">
-						{(["pr", "outlet", "member"] as const).map((g) => (
-							<button
-								key={g}
-								type="button"
-								role="tab"
-								aria-selected={group === g}
-								className={cn("iz-approvals-group", group === g && "on")}
-								onClick={() => setTab(GROUP_FIRST_TAB[g])}
-							>
-								{g === "pr"
-									? t.approvals.groupPr
-									: g === "outlet"
-										? t.approvals.groupOutlet
-										: t.portalUi.newMembers}
-								<span className="iz-approvals-group__count">
-									{groupCounts[g].loading ? "…" : groupCounts[g].count}
-								</span>
-							</button>
-						))}
-					</div>
-
+			<div className="iz-approvals-workbench">
+				<div className="iz-approvals-toolbar">
+					{(tab === "members" || tab === "outlet-linking") && (
+						<div
+							className="iz-approvals-filter-host"
+							ref={setQueueFilterContainer}
+						/>
+					)}
 					<div className="iz-approvals-tabs">
 						{group === "pr" ? (
 							<>
@@ -1919,539 +1916,504 @@ function AgencyPending() {
 						 */
 						null}
 					</div>
-
-					{/* Inviting a PR is itself an approvals write, so it goes with the
-					    decision buttons rather than with the queue. */}
-					{tab === "signups" && canApprovePrSignups && (
-						<button
-							type="button"
-							className="iz-approvals-add-btn"
-							onClick={() => {
-								setInviteError(null);
-								setAddOpen(true);
-							}}
-						>
-							<UserPlus className="h-3.5 w-3.5" />
-							{t.approvals.addPr}
-						</button>
+					{(tab === "signups" || tab === "cancel") && (
+						<div className="iz-approvals-subfilter">
+							{(
+								[
+									[
+										"pending",
+										`${t.approvals.current} (${
+											tab === "cancel"
+												? tiedCounts.leaveCurrent
+												: tiedCounts.joinCurrent + agencyLinkRequests.length
+										})`,
+									],
+									[
+										"approved",
+										`${t.approvals.approved} (${tiedCounts.approved})`,
+									],
+									[
+										"rejected",
+										`${t.approvals.rejected} (${tiedCounts.rejected})`,
+									],
+									[
+										"all",
+										// Two tabs, one tuple-map: on Cancel Agency every row is a
+										// settled departure, so the chip is the record and reads
+										// "History". Agency-Tied keeps "All" — its list still holds
+										// live members the agency acts on, which is not history.
+										`${tab === "cancel" ? t.approvals.history : t.common.all} (${
+											(
+												tab === "cancel"
+													? tiedCounts.leaveCurrent
+													: tiedCounts.joinCurrent + agencyLinkRequests.length
+											) +
+											tiedCounts.approved +
+											tiedCounts.rejected
+										})`,
+									],
+								] as const
+							).map(([value, label]) => (
+								<button
+									key={value}
+									type="button"
+									className={cn(
+										"iz-chip iz-tiny",
+										tiedFilter === value && "on",
+									)}
+									onClick={() => setTiedFilter(value)}
+								>
+									{label}
+								</button>
+							))}
+						</div>
 					)}
+					{tab === "leaves" && (
+						<div className="iz-approvals-subfilter">
+							{(
+								[
+									[
+										"pending",
+										`${t.approvals.current} (${leaveRequests.length})`,
+									],
+									["approved", `${t.approvals.approved} (${approvedCount})`],
+									["rejected", `${t.approvals.rejected} (${rejectedCount})`],
+									[
+										"all",
+										`${t.approvals.history} (${leaveRequests.length + leaveHistory.length})`,
+									],
+								] as const
+							).map(([value, label]) => (
+								<button
+									key={value}
+									type="button"
+									className={cn(
+										"iz-chip iz-tiny",
+										leaveFilter === value && "on",
+									)}
+									onClick={() => setLeaveFilter(value)}
+								>
+									{label}
+								</button>
+							))}
+						</div>
+					)}
+				</div>
+				<div className="iz-approvals-layout">
+					<aside className="iz-approvals-sidebar">
+						<div className="iz-approvals-queue-heading">
+							<h2>{t.approvedDesign.requests}</h2>
+						</div>
+						{/* Inviting a PR is itself an approvals write, so it goes with the
+					    decision buttons rather than with the queue. */}
 
-					{/* Hidden for outlet-linking: the chain below ends in a cutlost
+						{/* Hidden for outlet-linking: the chain below ends in a cutlost
 					    `else`, so an unhandled tab would silently render the cutlost
 					    queue under an Outlet-Linking heading. */}
-					{tab === "outlet-linking" && (
-						<div className="iz-approvals-list">
-							<OutletLinkingList
-								filter={outletLinkFilter}
-								onFilterChange={(next) => {
-									setOutletLinkFilter(next);
-									// The selected venue almost certainly is not in the new
-									// filter, and a detail pane showing a row the list no longer
-									// contains is how a screen starts lying about its own state.
-									setSelectedOutletLinkId(null);
-								}}
-								selectedOutletId={selectedOutletLinkId}
-								onSelect={setSelectedOutletLinkId}
-							/>
+						{tab === "outlet-linking" && (
+							<div className="iz-approvals-list">
+								<OutletLinkingList
+									filterContainer={queueFilterContainer}
+									filter={outletLinkFilter}
+									onFilterChange={(next) => {
+										setOutletLinkFilter(next);
+										// The selected venue almost certainly is not in the new
+										// filter, and a detail pane showing a row the list no longer
+										// contains is how a screen starts lying about its own state.
+										setSelectedOutletLinkId(null);
+									}}
+									selectedOutletId={selectedOutletLinkId}
+									onSelect={setSelectedOutletLinkId}
+								/>
+							</div>
+						)}
+
+						{/*
+						 * PEOPLE ASKING TO JOIN THE AGENCY, from the member sign-up. The
+						 * approve action is `updateMember` — the same write the Team screen
+						 * uses — so there is one place the portal-role grant can be got
+						 * right or wrong, not two.
+						 */}
+						{tab === "members" && (
+							<div className="iz-approvals-list">
+								<PendingMembersPanel
+									filterContainer={queueFilterContainer}
+									kind="agency"
+									orgId={memberOrgId}
+									selectedId={selectedMemberId}
+									onSelect={setSelectedMemberId}
+								/>
+							</div>
+						)}
+
+						{/*
+						 * ⚠️ `members` joins `outlet-linking` in this guard for the reason
+						 * stated above it: the chain below ends in a cutlost `else`, so a
+						 * tab it does not know about renders the CUTLOST queue under this
+						 * tab's heading rather than nothing.
+						 */}
+						<div
+							className="iz-approvals-list"
+							hidden={tab === "outlet-linking" || tab === "members"}
+						>
+							{tab === "signups" || tab === "cancel" ? (
+								<>
+									{/* Same tuple-map as the MC/Leaves chips below — Current is
+								    the work queue, the rest is the record. Counts are scoped
+								    to THIS tab's direction. */}
+
+									{tiedList.length === 0 &&
+									(tab === "cancel" ||
+										(tiedFilter !== "pending" && tiedFilter !== "all") ||
+										agencyLinkRequests.length === 0) ? (
+										<p className="iz-tiny iz-muted px-1 py-4 text-center">
+											{tiedFilter !== "pending"
+												? t.approvals.noRecordsHere
+												: tab === "cancel"
+													? t.approvals.noDepartureRequests
+													: t.approvals.noPendingSignups}
+										</p>
+									) : (
+										<>
+											{tiedList.map((p) => {
+												const floorName = pendingFloorNickname(p);
+												return (
+													<button
+														key={p.cardKey}
+														type="button"
+														className={cn(
+															"iz-approvals-list-item",
+															selectedSignupId === p.cardKey && "on",
+														)}
+														onClick={() => setSelectedSignupId(p.cardKey)}
+													>
+														<div className="min-w-0 flex-1">
+															<span className="name">{floorName}</span>
+															<span className="sub">
+																{pendingStandingLabel(p, t)}
+															</span>
+															<span className="sub">
+																{p.submittedAt || "—"}
+															</span>
+															<span
+																className={cn(
+																	"iz-approved-request-status",
+																	p.status,
+																)}
+															>
+																{p.status === "approved"
+																	? t.approvals.approved
+																	: p.status === "rejected"
+																		? t.approvals.rejected
+																		: t.approvals.awaitingDecision}
+															</span>
+														</div>
+													</button>
+												);
+											})}
+											{/* Demo link requests are CURRENT work (join semantics, no
+										    leave analog) — join tab only, never under history chips. */}
+											{tab === "signups" &&
+												(tiedFilter === "pending" || tiedFilter === "all") &&
+												agencyLinkRequests.map((l) => (
+													<button
+														key={l.id}
+														type="button"
+														className={cn(
+															"iz-approvals-list-item",
+															selectedSignupId === l.id && "on",
+														)}
+														onClick={() => setSelectedSignupId(l.id)}
+													>
+														<ApprovalsAvatar
+															name={l.prName}
+															id={l.id}
+															photo={prPhotoById(l.prId, l.prName)}
+															size="sm"
+														/>
+														<div className="min-w-0 flex-1">
+															<span className="name">{l.prName}</span>
+															<span className="sub">
+																{t.approvals.wantsToLink} · {l.requestedAt}
+															</span>
+															<span className="badges">
+																<span className="iz-approvals-verify-badge gallery">
+																	{t.approvals.linkRequest}
+																</span>
+															</span>
+														</div>
+													</button>
+												))}
+										</>
+									)}
+								</>
+							) : tab === "leaves" ? (
+								<>
+									{/* Current vs history. Counts come from the two queries, so
+								    "Pending" is work-to-do and the rest is the record. */}
+
+									{queue.leaveIsLoading || queue.leaveHistoryIsLoading ? (
+										<p className="iz-tiny iz-muted px-1 py-4 text-center">
+											{t.agencyPending.loadingLeaveRequests}
+										</p>
+									) : leaveList.length === 0 ? (
+										<p className="iz-tiny iz-muted px-1 py-4 text-center">
+											{leaveFilter === "pending"
+												? t.approvals.noLeaveRequestsWaiting
+												: t.approvals.noLeaveRecordsHere}
+										</p>
+									) : (
+										leaveList.map((req) => (
+											<button
+												key={req.id}
+												type="button"
+												className={cn(
+													"iz-approvals-list-item",
+													selectedLeaveId === req.id && "on",
+												)}
+												onClick={() => setSelectedLeaveId(req.id)}
+											>
+												<ApprovalsAvatar
+													name={req.prName ?? "PR"}
+													id={req.id}
+													photo={prPhotoById(req.prId, req.prName)}
+													size="sm"
+												/>
+												<div className="min-w-0 flex-1">
+													<span className="name">{req.prName ?? "PR"}</span>
+													<span className="sub">
+														{leaveOutletName(req)} · {req.shiftDate ?? "—"}
+													</span>
+													<span className="badges">
+														<span
+															className={cn(
+																"iz-approvals-verify-badge",
+																req.leaveStatus === "approved"
+																	? "ok"
+																	: req.leaveStatus === "rejected"
+																		? "bad"
+																		: "gallery",
+															)}
+														>
+															{req.leaveStatus === "approved"
+																? t.approvals.approved
+																: req.leaveStatus === "rejected"
+																	? t.approvals.rejected
+																	: t.approvals.awaitingDecision}
+														</span>
+														{req.leaveDecidedAt ? (
+															<span className="iz-tiny iz-muted">
+																{/* The portal's language, not the browser's — same
+															    reason as the decided-at stamp on the detail
+															    panel. */}
+																{new Date(
+																	req.leaveDecidedAt,
+																).toLocaleDateString(dateLocaleTag(locale), {
+																	day: "2-digit",
+																	month: "short",
+																})}
+															</span>
+														) : null}
+													</span>
+												</div>
+											</button>
+										))
+									)}
+								</>
+							) : cutlostRequests.length === 0 ? (
+								<p className="iz-tiny iz-muted px-1 py-4 text-center">
+									{t.agencyPending.noCutlostRequests}
+								</p>
+							) : (
+								cutlostRequests.map((req) => (
+									<button
+										key={req.id}
+										type="button"
+										className={cn(
+											"iz-approvals-list-item",
+											selectedCutlostId === req.id && "on",
+										)}
+										onClick={() => setSelectedCutlostId(req.id)}
+									>
+										<span className="iz-approvals-cutlost-icon sm">
+											{req.kind === "best_effort" ? (
+												<Sparkles className="h-3.5 w-3.5" />
+											) : req.kind === "release_prs" ? (
+												<UserMinus className="h-3.5 w-3.5" />
+											) : (
+												<TrendingDown className="h-3.5 w-3.5" />
+											)}
+										</span>
+										<div className="min-w-0 flex-1">
+											<span className="name">{req.outletName}</span>
+											<span className="sub">{cutlostRequestTitle(req)}</span>
+											<span className="badges">
+												<span className="iz-approvals-verify-badge gallery">
+													~RM{" "}
+													{Math.round(req.estimatedSavings).toLocaleString(
+														"en-MY",
+													)}
+												</span>
+											</span>
+										</div>
+									</button>
+								))
+							)}
 						</div>
+					</aside>
+
+					{/* Same reason as the list above — this chain also ends in a cutlost
+				    `else`, so it must be hidden rather than left to fall through. The
+				    Outlet-Linking panel carries its own detail inline. */}
+					{tab === "outlet-linking" && (
+						<main className="iz-approvals-detail">
+							<OutletLinkingDetail
+								filter={outletLinkFilter}
+								selectedOutletId={selectedOutletLinkId}
+								onDecided={() => setSelectedOutletLinkId(null)}
+							/>
+						</main>
 					)}
 
 					{/*
-					 * PEOPLE ASKING TO JOIN THE AGENCY, from the member sign-up. The
-					 * approve action is `updateMember` — the same write the Team screen
-					 * uses — so there is one place the portal-role grant can be got
-					 * right or wrong, not two.
+					 * THE PERSON ASKING TO JOIN, in full (owner, 11 Sep 2026: "right hand
+					 * side can see the info of the new members if selected").
+					 *
+					 * This pane used to be suppressed, because the queue approved inline and
+					 * an unhandled tab falls through to the CUTLOST pane. That fall-through
+					 * is still real — which is why this is its OWN main, exactly as
+					 * outlet-linking is, and why `members` stays in the guard below rather
+					 * than being taken out of it.
 					 */}
 					{tab === "members" && (
-						<div className="iz-approvals-list">
-							<PendingMembersPanel
+						<main className="iz-approvals-detail">
+							<PendingMemberDetail
 								kind="agency"
 								orgId={memberOrgId}
-								selectedId={selectedMemberId}
-								onSelect={setSelectedMemberId}
+								memberId={selectedMemberId}
+								// A decided row leaves the Waiting filter, and a pane showing a
+								// row the list no longer holds is how a screen starts lying
+								// about its own state.
+								onDecided={() => setSelectedMemberId(null)}
 							/>
-						</div>
+						</main>
 					)}
 
 					{/*
-					 * ⚠️ `members` joins `outlet-linking` in this guard for the reason
-					 * stated above it: the chain below ends in a cutlost `else`, so a
-					 * tab it does not know about renders the CUTLOST queue under this
-					 * tab's heading rather than nothing.
+					 * ⚠️ `members` hides this pane for the same reason `outlet-linking`
+					 * does, and the symptom was visible on the owner's screenshot: the
+					 * New-member tab rendered the cutlost pane's empty state, so half the
+					 * screen read "Select a cutlost request to review" beside a list of
+					 * people asking to join. The member queue approves INLINE — it has no
+					 * detail to select into, so it should offer no pane.
 					 */}
-					<div
-						className="iz-approvals-list"
+					<main
+						className="iz-approvals-detail"
 						hidden={tab === "outlet-linking" || tab === "members"}
 					>
 						{tab === "signups" || tab === "cancel" ? (
-							<>
-								{/* Same tuple-map as the MC/Leaves chips below — Current is
-								    the work queue, the rest is the record. Counts are scoped
-								    to THIS tab's direction. */}
-								<div className="iz-approvals-subfilter">
-									{(
-										[
-											[
-												"pending",
-												`${t.approvals.current} (${
-													tab === "cancel"
-														? tiedCounts.leaveCurrent
-														: tiedCounts.joinCurrent + agencyLinkRequests.length
-												})`,
-											],
-											[
-												"approved",
-												`${t.approvals.approved} (${tiedCounts.approved})`,
-											],
-											[
-												"rejected",
-												`${t.approvals.rejected} (${tiedCounts.rejected})`,
-											],
-											[
-												"all",
-												// Two tabs, one tuple-map: on Cancel Agency every row is a
-												// settled departure, so the chip is the record and reads
-												// "History". Agency-Tied keeps "All" — its list still holds
-												// live members the agency acts on, which is not history.
-												`${tab === "cancel" ? t.approvals.history : t.common.all} (${
-													(
-														tab === "cancel"
-															? tiedCounts.leaveCurrent
-															: tiedCounts.joinCurrent +
-																agencyLinkRequests.length
-													) +
-													tiedCounts.approved +
-													tiedCounts.rejected
-												})`,
-											],
-										] as const
-									).map(([value, label]) => (
-										<button
-											key={value}
-											type="button"
-											className={cn(
-												"iz-chip iz-tiny",
-												tiedFilter === value && "on",
-											)}
-											onClick={() => setTiedFilter(value)}
-										>
-											{label}
-										</button>
-									))}
-								</div>
-								{tiedList.length === 0 &&
-								(tab === "cancel" ||
-									(tiedFilter !== "pending" && tiedFilter !== "all") ||
-									agencyLinkRequests.length === 0) ? (
-									<p className="iz-tiny iz-muted px-1 py-4 text-center">
-										{tiedFilter !== "pending"
-											? t.approvals.noRecordsHere
-											: tab === "cancel"
-												? t.approvals.noDepartureRequests
-												: t.approvals.noPendingSignups}
+							selectedSignup ? (
+								<SignupDetailPanel
+									signup={selectedSignup}
+									canDecide={canApprovePrSignups}
+									onApprove={() =>
+										backend.backed
+											? backend.approve(selectedSignup.id, {
+													// The server's OWN sentence, both ways — "Departure
+													// approved", or the settlement gate's 409 listing
+													// what is still unsettled. Never silence.
+													onSuccess: (m) => toast(m, "success"),
+													onError: (m) => toast(m, "warn"),
+												})
+											: approvePendingPR(selectedSignup.id)
+									}
+									onReject={(reason) =>
+										backend.backed
+											? backend.reject(selectedSignup.id, reason, {
+													onSuccess: (m) => toast(m, "success"),
+													onError: (m) => toast(m, "warn"),
+												})
+											: rejectPendingPR(selectedSignup.id, reason)
+									}
+								/>
+							) : selectedLink ? (
+								<LinkRequestDetailPanel
+									link={selectedLink}
+									canDecide={canApprovePrSignups}
+									onApprove={() => approveAgencyLink(selectedLink.id)}
+									onReject={() => rejectAgencyLink(selectedLink.id)}
+								/>
+							) : (
+								<div className="iz-approvals-empty">
+									<p className="iz-sm iz-muted">
+										{tab === "cancel"
+											? t.approvals.selectDepartureToReview
+											: t.approvals.selectSignupToReview}
 									</p>
-								) : (
-									<>
-										{tiedList.map((p) => {
-											const galleryCount = portfolioFilledCount(
-												p.portfolioPhotos ?? [],
-											);
-											const comcardReady = comcardTabMeta(p, t).ready;
-											const floorName = pendingFloorNickname(p);
-											const legalName = pendingLegalIcName(p);
-											return (
-												<button
-													key={p.cardKey}
-													type="button"
-													className={cn(
-														"iz-approvals-list-item",
-														selectedSignupId === p.cardKey && "on",
-													)}
-													onClick={() => setSelectedSignupId(p.cardKey)}
-												>
-													<ApprovalsAvatar
-														name={floorName}
-														id={p.id}
-														photo={pendingPrPhoto(p)}
-														size="sm"
-													/>
-													<div className="min-w-0 flex-1">
-														<span className="name">{floorName}</span>
-														<span className="sub">
-															{legalName
-																? `${t.agencyPending.legal} · ${legalName} · `
-																: ""}
-															{pendingLanguagesLabel(p, t)}
-														</span>
-														<span className="badges">
-															{/* WHICH WAY the request runs — approving a
-														    join takes the PR under the agency;
-														    approving a leave lets them go. The two
-														    must never look alike. */}
-															<span
-																className={cn(
-																	"iz-approvals-verify-badge",
-																	p.requestKind === "leave"
-																		? "missing"
-																		: "gallery",
-																)}
-															>
-																{pendingStandingLabel(p, t)}
-															</span>
-															<VerificationBadge
-																ok={!!p.hasIcPhotos}
-																label={t.approvals.icPhotos}
-															/>
-															<VerificationBadge
-																ok={!!p.hasSelfie}
-																label={t.approvals.profilePicture}
-															/>
-															<VerificationBadge
-																ok={galleryCount > 0}
-																label={t.approvals.gallery}
-																count={galleryCount}
-															/>
-															<VerificationBadge
-																ok={comcardReady}
-																label={t.approvals.comcard}
-																variant="comcard"
-															/>
-														</span>
-													</div>
-												</button>
-											);
-										})}
-										{/* Demo link requests are CURRENT work (join semantics, no
-										    leave analog) — join tab only, never under history chips. */}
-										{tab === "signups" &&
-											(tiedFilter === "pending" || tiedFilter === "all") &&
-											agencyLinkRequests.map((l) => (
-												<button
-													key={l.id}
-													type="button"
-													className={cn(
-														"iz-approvals-list-item",
-														selectedSignupId === l.id && "on",
-													)}
-													onClick={() => setSelectedSignupId(l.id)}
-												>
-													<ApprovalsAvatar
-														name={l.prName}
-														id={l.id}
-														photo={prPhotoById(l.prId, l.prName)}
-														size="sm"
-													/>
-													<div className="min-w-0 flex-1">
-														<span className="name">{l.prName}</span>
-														<span className="sub">
-															{t.approvals.wantsToLink} · {l.requestedAt}
-														</span>
-														<span className="badges">
-															<span className="iz-approvals-verify-badge gallery">
-																{t.approvals.linkRequest}
-															</span>
-														</span>
-													</div>
-												</button>
-											))}
-									</>
-								)}
-							</>
+								</div>
+							)
 						) : tab === "leaves" ? (
-							<>
-								{/* Current vs history. Counts come from the two queries, so
-								    "Pending" is work-to-do and the rest is the record. */}
-								<div className="iz-approvals-subfilter">
-									{(
-										[
-											[
-												"pending",
-												`${t.approvals.current} (${leaveRequests.length})`,
-											],
-											[
-												"approved",
-												`${t.approvals.approved} (${approvedCount})`,
-											],
-											[
-												"rejected",
-												`${t.approvals.rejected} (${rejectedCount})`,
-											],
-											[
-												"all",
-												`${t.approvals.history} (${leaveRequests.length + leaveHistory.length})`,
-											],
-										] as const
-									).map(([value, label]) => (
-										<button
-											key={value}
-											type="button"
-											className={cn(
-												"iz-chip iz-tiny",
-												leaveFilter === value && "on",
-											)}
-											onClick={() => setLeaveFilter(value)}
-										>
-											{label}
-										</button>
-									))}
+							selectedLeave ? (
+								<LeaveDetailPanel
+									req={selectedLeave}
+									outletName={leaveOutletName(selectedLeave)}
+									busy={leaveBusy}
+									canDecide={canApprovePrSignups}
+									onApprove={() =>
+										rosterMut.approveLeave.mutate(selectedLeave.id)
+									}
+									onReject={() =>
+										rosterMut.rejectLeave.mutate(selectedLeave.id)
+									}
+								/>
+							) : (
+								<div className="iz-approvals-empty">
+									<p className="iz-sm iz-muted">
+										{t.agencyPending.selectLeaveToReview}
+									</p>
 								</div>
-								{queue.leaveIsLoading || queue.leaveHistoryIsLoading ? (
-									<p className="iz-tiny iz-muted px-1 py-4 text-center">
-										{t.agencyPending.loadingLeaveRequests}
-									</p>
-								) : leaveList.length === 0 ? (
-									<p className="iz-tiny iz-muted px-1 py-4 text-center">
-										{leaveFilter === "pending"
-											? t.approvals.noLeaveRequestsWaiting
-											: t.approvals.noLeaveRecordsHere}
-									</p>
-								) : (
-									leaveList.map((req) => (
-										<button
-											key={req.id}
-											type="button"
-											className={cn(
-												"iz-approvals-list-item",
-												selectedLeaveId === req.id && "on",
-											)}
-											onClick={() => setSelectedLeaveId(req.id)}
-										>
-											<ApprovalsAvatar
-												name={req.prName ?? "PR"}
-												id={req.id}
-												photo={prPhotoById(req.prId, req.prName)}
-												size="sm"
-											/>
-											<div className="min-w-0 flex-1">
-												<span className="name">{req.prName ?? "PR"}</span>
-												<span className="sub">
-													{leaveOutletName(req)} · {req.shiftDate ?? "—"}
-												</span>
-												<span className="badges">
-													<span
-														className={cn(
-															"iz-approvals-verify-badge",
-															req.leaveStatus === "approved"
-																? "ok"
-																: req.leaveStatus === "rejected"
-																	? "bad"
-																	: "gallery",
-														)}
-													>
-														{req.leaveStatus === "approved"
-															? t.approvals.approved
-															: req.leaveStatus === "rejected"
-																? t.approvals.rejected
-																: t.approvals.awaitingDecision}
-													</span>
-													{req.leaveDecidedAt ? (
-														<span className="iz-tiny iz-muted">
-															{/* The portal's language, not the browser's — same
-															    reason as the decided-at stamp on the detail
-															    panel. */}
-															{new Date(req.leaveDecidedAt).toLocaleDateString(
-																dateLocaleTag(locale),
-																{ day: "2-digit", month: "short" },
-															)}
-														</span>
-													) : null}
-												</span>
-											</div>
-										</button>
-									))
-								)}
-							</>
-						) : cutlostRequests.length === 0 ? (
-							<p className="iz-tiny iz-muted px-1 py-4 text-center">
-								{t.agencyPending.noCutlostRequests}
-							</p>
+							)
+						) : selectedCutlost ? (
+							<CutlostDecisionPanel
+								req={selectedCutlost}
+								canDecide={canApprovePrSignups}
+								// The live decide call is in flight: both buttons wait, so a
+								// second press cannot fire a second decision behind the first.
+								busy={liveCutlost.backed && liveCutlost.isDeciding}
+								// Approving is what RELEASES people — it seals a pro-rated wage
+								// on every named PR — so on a real session it must reach the
+								// server. The store actions stay for the demo logins.
+								onApprove={() => {
+									if (liveCutlost.backed) {
+										void liveCutlost.decide({
+											id: selectedCutlost.id,
+											decision: "approve",
+										});
+										return;
+									}
+									approveCutlostRequest(selectedCutlost.id);
+								}}
+								onReject={(reason) => {
+									if (liveCutlost.backed) {
+										void liveCutlost.decide({
+											id: selectedCutlost.id,
+											decision: "reject",
+											reason,
+										});
+										return;
+									}
+									rejectCutlostRequest(selectedCutlost.id, reason);
+								}}
+							/>
 						) : (
-							cutlostRequests.map((req) => (
-								<button
-									key={req.id}
-									type="button"
-									className={cn(
-										"iz-approvals-list-item",
-										selectedCutlostId === req.id && "on",
-									)}
-									onClick={() => setSelectedCutlostId(req.id)}
-								>
-									<span className="iz-approvals-cutlost-icon sm">
-										{req.kind === "best_effort" ? (
-											<Sparkles className="h-3.5 w-3.5" />
-										) : req.kind === "release_prs" ? (
-											<UserMinus className="h-3.5 w-3.5" />
-										) : (
-											<TrendingDown className="h-3.5 w-3.5" />
-										)}
-									</span>
-									<div className="min-w-0 flex-1">
-										<span className="name">{req.outletName}</span>
-										<span className="sub">{cutlostRequestTitle(req)}</span>
-										<span className="badges">
-											<span className="iz-approvals-verify-badge gallery">
-												~RM{" "}
-												{Math.round(req.estimatedSavings).toLocaleString(
-													"en-MY",
-												)}
-											</span>
-										</span>
-									</div>
-								</button>
-							))
+							<div className="iz-approvals-empty">
+								<p className="iz-sm iz-muted">
+									{t.agencyPending.selectCutlostToReview}
+								</p>
+							</div>
 						)}
-					</div>
-				</aside>
-
-				{/* Same reason as the list above — this chain also ends in a cutlost
-				    `else`, so it must be hidden rather than left to fall through. The
-				    Outlet-Linking panel carries its own detail inline. */}
-				{tab === "outlet-linking" && (
-					<main className="iz-approvals-detail">
-						<OutletLinkingDetail
-							filter={outletLinkFilter}
-							selectedOutletId={selectedOutletLinkId}
-							onDecided={() => setSelectedOutletLinkId(null)}
-						/>
 					</main>
-				)}
-
-				{/*
-				 * THE PERSON ASKING TO JOIN, in full (owner, 11 Sep 2026: "right hand
-				 * side can see the info of the new members if selected").
-				 *
-				 * This pane used to be suppressed, because the queue approved inline and
-				 * an unhandled tab falls through to the CUTLOST pane. That fall-through
-				 * is still real — which is why this is its OWN main, exactly as
-				 * outlet-linking is, and why `members` stays in the guard below rather
-				 * than being taken out of it.
-				 */}
-				{tab === "members" && (
-					<main className="iz-approvals-detail">
-						<PendingMemberDetail
-							kind="agency"
-							orgId={memberOrgId}
-							memberId={selectedMemberId}
-							// A decided row leaves the Waiting filter, and a pane showing a
-							// row the list no longer holds is how a screen starts lying
-							// about its own state.
-							onDecided={() => setSelectedMemberId(null)}
-						/>
-					</main>
-				)}
-
-				{/*
-				 * ⚠️ `members` hides this pane for the same reason `outlet-linking`
-				 * does, and the symptom was visible on the owner's screenshot: the
-				 * New-member tab rendered the cutlost pane's empty state, so half the
-				 * screen read "Select a cutlost request to review" beside a list of
-				 * people asking to join. The member queue approves INLINE — it has no
-				 * detail to select into, so it should offer no pane.
-				 */}
-				<main
-					className="iz-approvals-detail"
-					hidden={tab === "outlet-linking" || tab === "members"}
-				>
-					{tab === "signups" || tab === "cancel" ? (
-						selectedSignup ? (
-							<SignupDetailPanel
-								signup={selectedSignup}
-								canDecide={canApprovePrSignups}
-								onApprove={() =>
-									backend.backed
-										? backend.approve(selectedSignup.id, {
-												// The server's OWN sentence, both ways — "Departure
-												// approved", or the settlement gate's 409 listing
-												// what is still unsettled. Never silence.
-												onSuccess: (m) => toast(m, "success"),
-												onError: (m) => toast(m, "warn"),
-											})
-										: approvePendingPR(selectedSignup.id)
-								}
-								onReject={(reason) =>
-									backend.backed
-										? backend.reject(selectedSignup.id, reason, {
-												onSuccess: (m) => toast(m, "success"),
-												onError: (m) => toast(m, "warn"),
-											})
-										: rejectPendingPR(selectedSignup.id, reason)
-								}
-							/>
-						) : selectedLink ? (
-							<LinkRequestDetailPanel
-								link={selectedLink}
-								canDecide={canApprovePrSignups}
-								onApprove={() => approveAgencyLink(selectedLink.id)}
-								onReject={() => rejectAgencyLink(selectedLink.id)}
-							/>
-						) : (
-							<div className="iz-approvals-empty">
-								<p className="iz-sm iz-muted">
-									{tab === "cancel"
-										? t.approvals.selectDepartureToReview
-										: t.approvals.selectSignupToReview}
-								</p>
-							</div>
-						)
-					) : tab === "leaves" ? (
-						selectedLeave ? (
-							<LeaveDetailPanel
-								req={selectedLeave}
-								outletName={leaveOutletName(selectedLeave)}
-								busy={leaveBusy}
-								canDecide={canApprovePrSignups}
-								onApprove={() =>
-									rosterMut.approveLeave.mutate(selectedLeave.id)
-								}
-								onReject={() => rosterMut.rejectLeave.mutate(selectedLeave.id)}
-							/>
-						) : (
-							<div className="iz-approvals-empty">
-								<p className="iz-sm iz-muted">
-									{t.agencyPending.selectLeaveToReview}
-								</p>
-							</div>
-						)
-					) : selectedCutlost ? (
-						<CutlostDecisionPanel
-							req={selectedCutlost}
-							canDecide={canApprovePrSignups}
-							// The live decide call is in flight: both buttons wait, so a
-							// second press cannot fire a second decision behind the first.
-							busy={liveCutlost.backed && liveCutlost.isDeciding}
-							// Approving is what RELEASES people — it seals a pro-rated wage
-							// on every named PR — so on a real session it must reach the
-							// server. The store actions stay for the demo logins.
-							onApprove={() => {
-								if (liveCutlost.backed) {
-									void liveCutlost.decide({
-										id: selectedCutlost.id,
-										decision: "approve",
-									});
-									return;
-								}
-								approveCutlostRequest(selectedCutlost.id);
-							}}
-							onReject={(reason) => {
-								if (liveCutlost.backed) {
-									void liveCutlost.decide({
-										id: selectedCutlost.id,
-										decision: "reject",
-										reason,
-									});
-									return;
-								}
-								rejectCutlostRequest(selectedCutlost.id, reason);
-							}}
-						/>
-					) : (
-						<div className="iz-approvals-empty">
-							<p className="iz-sm iz-muted">
-								{t.agencyPending.selectCutlostToReview}
-							</p>
-						</div>
-					)}
-				</main>
+				</div>
 			</div>
 
 			{addOpen && (

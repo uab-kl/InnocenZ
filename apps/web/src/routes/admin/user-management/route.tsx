@@ -1,3 +1,4 @@
+import "@/components/admin/admin-management-design.css";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AdminNotFoundPage } from "@/components/layout/admin-not-found";
 

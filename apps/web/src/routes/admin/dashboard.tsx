@@ -14,6 +14,8 @@ import {
 	UserPlus,
 } from "lucide-react";
 import { useState } from "react";
+import { AGENCY_SERVICES_ENABLED } from "@/agency-portal/lib/phase-flags";
+import "@/components/admin/admin-overview-design.css";
 import { Button } from "@/components/ui/button";
 import { DonutChart, type DonutSlice } from "@/components/ui/donut-chart";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -315,6 +317,7 @@ function DashboardComponent() {
 		queryKey: ["dashboard", "pending-jobs-list"],
 		queryFn: () => fetchAdminPendingJobs({ page: 1, pageSize: 5 }, logout),
 		staleTime: 30_000,
+		enabled: AGENCY_SERVICES_ENABLED,
 	});
 
 	const activeAgenciesQuery = useQuery({
@@ -364,6 +367,7 @@ function DashboardComponent() {
 		queryKey: ["dashboard", "jobs-summary"],
 		queryFn: () => fetchSpecialServiceSummary(logout),
 		staleTime: 60_000,
+		enabled: AGENCY_SERVICES_ENABLED,
 	});
 
 	const recentAgenciesQuery = useQuery({
@@ -394,7 +398,9 @@ function DashboardComponent() {
 	const outletCount = pendingOutletsQuery.data?.pagination.totalCount ?? 0;
 	const requestCount =
 		pendingRequestsCountQuery.data?.pagination.totalCount ?? 0;
-	const jobCount = pendingJobsQuery.data?.pagination.totalCount ?? 0;
+	const jobCount = AGENCY_SERVICES_ENABLED
+		? (pendingJobsQuery.data?.pagination.totalCount ?? 0)
+		: 0;
 	const activeAgencyCount =
 		activeAgenciesQuery.data?.pagination.totalCount ?? 0;
 	const activeOutletCount = activeOutletsQuery.data?.pagination.totalCount ?? 0;
@@ -512,7 +518,7 @@ function DashboardComponent() {
 		pendingAgenciesQuery,
 		pendingOutletsQuery,
 		pendingRequestsCountQuery,
-		pendingJobsQuery,
+		...(AGENCY_SERVICES_ENABLED ? [pendingJobsQuery] : []),
 	].some((q) => q.isError);
 
 	const cards: KpiCardProps[] = [
@@ -587,7 +593,7 @@ function DashboardComponent() {
 		pendingOutletsQuery.isLoading ||
 		openRequestsQuery.isLoading ||
 		contactedRequestsQuery.isLoading ||
-		pendingJobsQuery.isLoading;
+		(AGENCY_SERVICES_ENABLED && pendingJobsQuery.isLoading);
 
 	const todos: TodoItem[] = [
 		...(pendingAgenciesQuery.data?.data ?? []).map(
@@ -640,7 +646,7 @@ function DashboardComponent() {
 				priority: "medium",
 			}),
 		),
-		...(pendingJobsQuery.data?.data ?? []).map(
+		...(AGENCY_SERVICES_ENABLED ? (pendingJobsQuery.data?.data ?? []) : []).map(
 			(job: SpecialService): TodoItem => ({
 				id: `job-${job.id}`,
 				title: fill(t.admin.todoReviewJob, { title: job.title }),
@@ -738,7 +744,7 @@ function DashboardComponent() {
 	const activityItems = activityQuery.data?.query ?? [];
 
 	return (
-		<div className="flex flex-col gap-6 p-6 md:p-8">
+		<div className="admin-overview-design admin-dashboard-design flex flex-col gap-6 p-6 md:p-8">
 			{/* Page head */}
 			<div className="flex flex-wrap items-end justify-between gap-5">
 				<div>
@@ -784,10 +790,12 @@ function DashboardComponent() {
 			</div>
 
 			{/* KPI cards */}
-			<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-				{cards.map((card) => (
-					<KpiCard key={card.id} {...card} />
-				))}
+			<div className="admin-dashboard-kpis">
+				{cards
+					.filter((card) => card.id !== "jobs" || AGENCY_SERVICES_ENABLED)
+					.map((card) => (
+						<KpiCard key={card.id} {...card} />
+					))}
 			</div>
 
 			{/* Platform breakdown — status distribution donuts */}
@@ -800,27 +808,35 @@ function DashboardComponent() {
 						{t.admin.dashPlatformBreakdownHint}
 					</p>
 				</div>
-				<div className="grid grid-cols-1 divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">
-					{breakdowns.map((b) => (
-						<div key={b.id} className="px-6 py-6">
-							<h3 className="mb-4 text-[13.5px] font-bold text-foreground">
-								{b.title}
-							</h3>
-							{b.isLoading ? (
-								<div className="flex h-[168px] items-center gap-2 text-sm text-muted-foreground">
-									<Loader2 className="h-4 w-4 animate-spin" />
-									{t.admin.dashLoading}
-								</div>
-							) : (
-								<DonutChart slices={b.slices} centerLabel={b.centerLabel} />
-							)}
-						</div>
-					))}
+				<div className="admin-dashboard-breakdowns">
+					{breakdowns
+						.filter((item) => item.id !== "jobs" || AGENCY_SERVICES_ENABLED)
+						.map((b) => (
+							<div key={b.id} className="px-6 py-6">
+								<h3 className="mb-4 text-[13.5px] font-bold text-foreground">
+									{b.title}
+								</h3>
+								{b.isLoading ? (
+									<div className="flex h-[168px] items-center gap-2 text-sm text-muted-foreground">
+										<Loader2 className="h-4 w-4 animate-spin" />
+										{t.admin.dashLoading}
+									</div>
+								) : (
+									<DonutChart
+										className="admin-dashboard-chart"
+										size={116}
+										thickness={14}
+										slices={b.slices}
+										centerLabel={b.centerLabel}
+									/>
+								)}
+							</div>
+						))}
 				</div>
 			</section>
 
 			{/* Middle: action items + right rail */}
-			<div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:grid-rows-[auto_auto]">
+			<div className="admin-dashboard-details grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:grid-rows-[auto_auto]">
 				{/* Action items — left column, row 1 */}
 				<section className="overflow-hidden rounded-2xl border bg-card xl:col-start-1 xl:row-start-1">
 					<div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-5">
@@ -1002,7 +1018,7 @@ function DashboardComponent() {
 								{t.admin.dashLatestRegistrationsHint}
 							</p>
 						</div>
-						<div className="flex gap-2">
+						<div className="flex flex-wrap gap-2">
 							{(
 								[
 									{ key: "all", label: t.admin.dashFilterAll },
@@ -1016,6 +1032,7 @@ function DashboardComponent() {
 										key={f.key}
 										type="button"
 										onClick={() => setRegFilter(f.key)}
+										aria-pressed={active}
 										className={`rounded-lg px-3.5 py-1.5 text-[12.5px] font-bold transition-colors ${
 											active
 												? "bg-[image:var(--gradient-royal)] text-[#1a1726]"

@@ -5,20 +5,13 @@ import {
 	isOtherSpecialEvent,
 	type ShiftEventKind,
 } from "@agency-portal/lib/outlet-demo";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-	ImagePlus,
-	Pencil,
-	Plus,
-	Sparkles,
-	Trash2,
-	ZoomIn,
-} from "lucide-react";
+import { ImagePlus, Pencil, Sparkles, Trash2, ZoomIn } from "lucide-react";
 import { useRef, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
-import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import {
@@ -67,8 +60,15 @@ export function EventTemplatePicker({
 	return (
 		<div className="iz-event-picker">
 			<div className="iz-event-picker__head">
-				<p className="iz-event-picker__title">{t.postJob.chooseAnEvent}</p>
-				<button type="button" className="iz-chip" onClick={onBlank}>
+				<div>
+					<h2 className="iz-event-picker__title">{t.postJob.chooseAnEvent}</h2>
+					<p className="iz-muted">{t.approvedDesign.templateHint}</p>
+				</div>
+				<button
+					type="button"
+					className="iz-btn iz-btn-primary"
+					onClick={onBlank}
+				>
 					{t.postJob.blankStartFresh}
 				</button>
 			</div>
@@ -83,6 +83,7 @@ export function EventTemplatePicker({
 							kindTab === tab && "is-active",
 						)}
 						onClick={() => setKindTab(tab)}
+						aria-pressed={kindTab === tab}
 					>
 						{tab === "all"
 							? t.postJob.allEvents
@@ -150,7 +151,14 @@ function TemplateRow({
 	const canWriteTemplates = useOutletCan()("postJob");
 	return (
 		<section className="iz-event-picker__section">
-			<p className="iz-event-picker__kind">{label}</p>
+			<div className="iz-event-picker__section-head">
+				<h3 className="iz-event-picker__kind">{label}</h3>
+				{canWriteTemplates && (
+					<button type="button" className="iz-btn iz-btn-ghost" onClick={onNew}>
+						{t.postJob.newTemplate}
+					</button>
+				)}
+			</div>
 			<div className="iz-event-picker__row">
 				{templates.map((tpl) => (
 					<TemplateCard
@@ -160,25 +168,6 @@ function TemplateRow({
 						onEdit={onEdit}
 					/>
 				))}
-				{/*
-				  * ⚠️ THIS FILE HAD NO PERMISSION CHECK ANYWHERE. Creating, editing and
-				  * deleting an event template all write `/shift-template`, which the
-				  * server gates on `booking:create` — so the outlet DIRECTOR, who holds
-				  * `booking:read` alone, was shown all three and collected a 403 from
-				  * each. `postJob` is that same grant on the portal side.
-				  */}
-				{canWriteTemplates && (
-				<button
-					type="button"
-					className="iz-event-card iz-event-card--new"
-					onClick={onNew}
-				>
-					<span className="iz-event-card__new-icon">
-						<Plus className="h-5 w-5" aria-hidden />
-					</span>
-					{t.postJob.newTemplate}
-				</button>
-				)}
 			</div>
 		</section>
 	);
@@ -225,7 +214,8 @@ function TemplateCard({
 					aria-label={fill(t.outletPanels.editNamed, { name: template.name })}
 					onClick={() => onEdit(template)}
 				>
-					<Pencil className="h-3 w-3" aria-hidden />
+					<Pencil size={16} aria-hidden />
+					<span>{t.postJob.editTemplate}</span>
 				</button>
 			)}
 		</div>
@@ -310,7 +300,7 @@ function TemplateEditorSheet({
 
 	return (
 		<IzSheet open onClose={onClose} variant="dialog">
-			<div className="iz-event-editor">
+			<div className="iz-event-editor outlet-job-template-editor">
 				<div className="iz-event-editor__bar">
 					<p className="iz-event-editor__title">
 						{template ? t.postJob.editTemplate : t.postJob.newTemplate}
@@ -327,7 +317,7 @@ function TemplateEditorSheet({
 							? t.postJob.specialEvent
 							: t.postJob.normalEvent}
 					</span>
-					<div className="flex items-center gap-2">
+					<div className="iz-event-editor__actions">
 						{template && canWriteTemplates && (
 							<button
 								type="button"
@@ -344,7 +334,7 @@ function TemplateEditorSheet({
 						</button>
 						<button
 							type="button"
-							className="iz-chip text-[var(--iz-gold)]"
+							className="iz-btn iz-btn-primary"
 							onClick={() => saveMut.mutate()}
 							disabled={!canSave}
 						>

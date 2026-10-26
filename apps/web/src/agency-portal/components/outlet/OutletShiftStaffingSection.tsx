@@ -3,12 +3,14 @@ import {
 	TierBadge,
 	TrafficPill,
 } from "@agency-portal/components/iz/ui";
+import { shiftHasClosed } from "@agency-portal/components/outlet/outlet-shift-ended";
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
 } from "@agency-portal/lib/agency-demo";
 import { resolveOutletShiftDateIso } from "@agency-portal/lib/agency-outlet-shifts";
+import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import {
 	agencyNameForShift,
 	buildShiftStaffRows,
@@ -279,12 +281,21 @@ export function OutletShiftStaffingSection({
 				</p>
 				{booked.length === 0 ? (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-3 py-4 text-center">
-						{fill(t.outletPanels.noPrsBookedYet, {
-							detail:
-								pendingCount > 0
-									? fill(t.today.waitingReview, { n: pendingCount })
-									: t.outletPanels.openForApplications,
-						})}
+						{/* A shift that has ended is not "open for applications". */}
+						{shiftHasClosed({
+							dateIso,
+							slot: shift.shift,
+							status: shift.status,
+							now: new Date(),
+							todayIso: getLiveTodayIso(),
+						})
+							? t.outletPanels.noPrsBookedEnded
+							: fill(t.outletPanels.noPrsBookedYet, {
+									detail:
+										pendingCount > 0
+											? fill(t.today.waitingReview, { n: pendingCount })
+											: t.outletPanels.openForApplications,
+								})}
 					</p>
 				) : (
 					<div className="mt-2 space-y-1.5">

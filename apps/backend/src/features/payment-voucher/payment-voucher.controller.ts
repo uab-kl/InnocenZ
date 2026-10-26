@@ -146,6 +146,7 @@ import {
   refPacksKind,
   resolveComponent,
 } from './payment-voucher-component.js';
+import { prIcMatchesProfile } from './pr-ic-match.js';
 import {
   type ResolvedDrinkItem,
   ShiftAssignmentRepositoryClass,
@@ -297,7 +298,6 @@ function todayIso(): string {
 function r2PublicBase(): string | null {
   return env.R2_PUBLIC_URL?.replace(/\/$/, '') ?? null;
 }
-
 
 // A receipt line's kind/source/gross-sale/dedupe don't have their own columns —
 // the reused payment_voucher_line stores them packed into `ref`. `amount` holds
@@ -935,7 +935,11 @@ export class PaymentVoucherControllerClass {
    */
   private async resolvePricingAssignment(
     pr: PrType,
-    opts: { assignmentRef?: string | null; lineDate?: string | null; agencyId: string },
+    opts: {
+      assignmentRef?: string | null;
+      lineDate?: string | null;
+      agencyId: string;
+    },
   ): Promise<{
     id: string;
     shiftId: string;
@@ -950,7 +954,10 @@ export class PaymentVoucherControllerClass {
       held = await this.shiftAssignmentRepository.listForPr(prKey);
     } catch (error) {
       // A pricing lookup must never be the reason a PR cannot log their money.
-      logger.error('[PaymentVoucherController.resolvePricingAssignment] Error:', error);
+      logger.error(
+        '[PaymentVoucherController.resolvePricingAssignment] Error:',
+        error,
+      );
       return null;
     }
     const owned = held.filter((a) => a.agencyId === opts.agencyId);
@@ -1126,6 +1133,37 @@ export class PaymentVoucherControllerClass {
     }
   }
 
+  /**
+   * The payee's CURRENT profile IC, read only to compare against the voucher's
+   * own `prIc` — and only for a payee on THIS voucher's agency's roster.
+   *
+   * `prId` is client-supplied on create/update and `prIc` is free text, so
+   * without the roster check an agency could point a voucher at another
+   * agency's PR, type a guess into `prIc`, and read `prIcMatchesProfile` back
+   * as a yes/no oracle on a stranger's identity number. An `agency_pr` row in
+   * ANY status counts: a PR who has since left is still paid for past weeks.
+   *
+   * Null = "cannot tell". A failed roster read is logged by the repository and
+   * answered the same way — never as a match.
+   */
+  private async payeeProfileIcForVoucher(voucher: {
+    agencyId: string;
+    userId: string | null;
+    prId: string | null;
+  }): Promise<string | null> {
+    const payeeId = voucher.userId ?? voucher.prId;
+    if (!payeeId) return null;
+    let rosterAgencyIds: string[];
+    try {
+      rosterAgencyIds =
+        await this.prRepository.listMembershipAgencyIds(payeeId);
+    } catch {
+      return null;
+    }
+    if (!rosterAgencyIds.includes(voucher.agencyId)) return null;
+    return this.paymentVoucherRepository.getProfileIdNo(payeeId);
+  }
+
   async getById(req: Request, res: Response) {
     try {
       // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
@@ -1162,11 +1200,19 @@ export class PaymentVoucherControllerClass {
       );
       const dayReviews = buildDayReviewView(voucher.lines, reviews);
 
+      // Does the IC this voucher was issued with still match the payee's
+      // profile? A boolean only — the profile's IC itself never leaves the
+      // server on this route (the voucher's own `prIc`, already in the row, is
+      // the only IC it carries). Null = cannot tell (no IC on one side, or a
+      // payee who was never on this agency's roster — see the helper).
+      const profileIc = await this.payeeProfileIcForVoucher(voucher);
+
       res.status(200).json({
         success: true,
         message: 'OK',
         data: {
           ...voucher,
+          prIcMatchesProfile: prIcMatchesProfile(voucher.prIc, profileIc),
           receipts,
           dayReviews,
           allDaysReviewed: allDaysReviewed(dayReviews),
@@ -1252,9 +1298,11 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.getPayeeBank] Error:', error);
-      return res
-        .status(500)
-        .json({ success: false, message: 'Failed to read payee bank details', data: null });
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to read payee bank details',
+        data: null,
+      });
     }
   }
 
@@ -2081,8 +2129,10 @@ export class PaymentVoucherControllerClass {
         return res.status(409).json({
           success: false,
           message:
-            voucherDeleteRefusal({ status: error.status, financeHeadSignedAt: null }) ??
-            error.message,
+            voucherDeleteRefusal({
+              status: error.status,
+              financeHeadSignedAt: null,
+            }) ?? error.message,
           data: null,
         });
       }
@@ -2588,7 +2638,8 @@ export class PaymentVoucherControllerClass {
       if (error instanceof VoucherConflictError) {
         return res.status(409).json({
           success: false,
-          message: 'This voucher changed while you were signing — reload it and sign again.',
+          message:
+            'This voucher changed while you were signing — reload it and sign again.',
           data: null,
         });
       }
@@ -3353,7 +3404,10 @@ export class PaymentVoucherControllerClass {
         },
       });
     } catch (error) {
-      logger.error('[PaymentVoucherController.approveAllReceipts] Error:', error);
+      logger.error(
+        '[PaymentVoucherController.approveAllReceipts] Error:',
+        error,
+      );
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -3884,13 +3938,14 @@ export class PaymentVoucherControllerClass {
     // prices"), otherwise the venue's Workspace list — an outlet with no
     // workspace or an empty menu simply has no items, which is the "nothing
     // configured" signal the caller must report honestly.
-    const menus = await this.shiftAssignmentRepository.resolveDrinkMenusForShifts([
-      {
-        shiftId: outlet.shiftId,
-        outletId: outlet.outletId,
-        eventKind: outlet.eventKind,
-      },
-    ]);
+    const menus =
+      await this.shiftAssignmentRepository.resolveDrinkMenusForShifts([
+        {
+          shiftId: outlet.shiftId,
+          outletId: outlet.outletId,
+          eventKind: outlet.eventKind,
+        },
+      ]);
     return {
       outletId: outlet.outletId,
       outlet: outlet.outletName,
@@ -3955,8 +4010,7 @@ export class PaymentVoucherControllerClass {
         };
       }
       const listed = offered.find(
-        (i) =>
-          i.name.trim().toLowerCase() === check.description.toLowerCase(),
+        (i) => i.name.trim().toLowerCase() === check.description.toLowerCase(),
       );
       if (!listed) {
         return {

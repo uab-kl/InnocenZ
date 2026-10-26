@@ -110,6 +110,14 @@ describe("OvertimeQueuePanel week scoping", () => {
 		expect(screen.queryByText(/agencyQueues.overtimeElsewhere/)).toBeNull();
 	});
 
+	it("prints the amount with a thousands separator and the week as a date", () => {
+		// Reported 22 Oct 2026: "RM 3550.00" and "Onto the week of 2026-08-16".
+		renderPanel([claim({ amount: "3550.00" })], true);
+		expect(screen.getByText("RM 3,550.00")).toBeTruthy();
+		expect(screen.queryByText("2026-08-16")).toBeNull();
+		expect(screen.getByText(/^16 dates\.monShortAug 2026$/)).toBeTruthy();
+	});
+
 	it("does not drag a LATER week's claim onto the catch-all week", () => {
 		// Last Week still has a tab of its own to hold it; showing it here too
 		// would put one claim under two tabs.

@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,7 @@ export function RefundsDueCard({
 		return (
 			<div
 				role="alert"
-				className="flex items-center gap-3 rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-300"
+				className="flex flex-wrap items-center gap-3 rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm text-red-300"
 			>
 				<AlertTriangle className="h-4 w-4 shrink-0" />
 				<span className="mr-auto">{t.adminService.refundsDueLoadFailed}</span>
@@ -78,7 +79,10 @@ export function RefundsDueCard({
 
 	return (
 		<>
-			<Card role="alert" className="gap-4 border-red-400/40 bg-red-400/10">
+			<Card
+				role="alert"
+				className="admin-refunds-card gap-4 border-red-400/40 bg-red-400/10"
+			>
 				<CardHeader>
 					<CardTitle className="flex items-center gap-2 text-red-300">
 						<AlertTriangle className="h-5 w-5 shrink-0" />

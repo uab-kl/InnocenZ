@@ -1,4 +1,8 @@
-import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import {
+	formatRM,
+	IzCard,
+	IzSectionLabel,
+} from "@agency-portal/components/iz/ui";
 import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-review";
 import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
@@ -8,7 +12,8 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PaymentVoucherDayReview } from "@/services/payment-voucher";
 
-const moneyFromCents = (cents: number) => `RM ${(cents / 100).toFixed(2)}`;
+// The shared formatter — "RM 1,234.50" — so a day total reads like every other figure.
+const moneyFromCents = (cents: number) => formatRM(cents / 100);
 
 /** yyyy-MM-dd -> "Tue 21 Jul", the same shape the dispute queue uses. */
 function formatDay(iso: string): string {

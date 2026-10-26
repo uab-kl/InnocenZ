@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { AGENCY_SERVICES_ENABLED } from "@/agency-portal/lib/phase-flags";
 import { useAuth } from "@/lib/auth-context";
 import { fetchPendingCount } from "@/services/admin-request";
 import { fetchAgencies } from "@/services/agency";
@@ -28,15 +29,17 @@ export function useSidebarBadges(): Record<string, number> {
 	});
 
 	// Plan changes live on their own page, so the Plan Request badge excludes
-	// them and the Plan Change badge counts only pending outlet switches.
+	// them and the Plan Change badge counts only pending outlet switches. Keyed
+	// under "admin-requests" — the prefix both pages invalidate after a decision
+	// — so the badges (and the header bell, which shares them) drop at once.
 	const pendingRequests = useQuery({
-		queryKey: ["dashboard", "pending-requests-count", "without-plan-changes"],
+		queryKey: ["admin-requests", "pending-count", "without-plan-changes"],
 		queryFn: () => fetchPendingCount(logout, { excludeType: "plan_change" }),
 		staleTime: 30_000,
 	});
 
 	const pendingPlanChanges = useQuery({
-		queryKey: ["dashboard", "pending-plan-changes-count"],
+		queryKey: ["admin-requests", "pending-count", "plan-change"],
 		queryFn: () => fetchPendingCount(logout, { type: "plan_change" }),
 		staleTime: 30_000,
 	});
@@ -45,6 +48,7 @@ export function useSidebarBadges(): Record<string, number> {
 		queryKey: ["dashboard", "pending-jobs-list"],
 		queryFn: () => fetchAdminPendingJobs({ page: 1, pageSize: 5 }, logout),
 		staleTime: 30_000,
+		enabled: AGENCY_SERVICES_ENABLED,
 	});
 
 	return {
@@ -52,6 +56,8 @@ export function useSidebarBadges(): Record<string, number> {
 		"sidebar-user-outlet": pendingOutlets.data?.pagination.totalCount ?? 0,
 		"sidebar-service-requests": pendingRequests.data?.pending ?? 0,
 		"sidebar-service-plan-changes": pendingPlanChanges.data?.pending ?? 0,
-		"sidebar-service-other": pendingJobs.data?.pagination.totalCount ?? 0,
+		"sidebar-service-other": AGENCY_SERVICES_ENABLED
+			? (pendingJobs.data?.pagination.totalCount ?? 0)
+			: 0,
 	};
 }

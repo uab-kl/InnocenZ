@@ -2,6 +2,7 @@ import { AgencyOutletDetailView } from "@agency-portal/components/agency/AgencyO
 import { AgencyOutletFilters } from "@agency-portal/components/agency/AgencyOutletFilters";
 import { ManageOutletGridCard } from "@agency-portal/components/agency/ManageOutletGridCard";
 import { IzCard, IzPageTitle } from "@agency-portal/components/iz/ui";
+import { OutletMobileFilters } from "@agency-portal/components/outlet/OutletMobileFilters";
 import { useAgencyEndedOutlets } from "@agency-portal/hooks/use-agency-ended-outlets";
 import { useAgencyOutletDemand } from "@agency-portal/hooks/use-agency-outlet-demand";
 import { useAgencyOutletLogos } from "@agency-portal/hooks/use-agency-outlet-logos";
@@ -22,6 +23,7 @@ import { MousePointerClick, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import "./agency-management-design.css";
 
 export const Route = createFileRoute("/agency/outlets")({
 	component: AgencyManageOutlets,
@@ -207,18 +209,20 @@ function AgencyManageOutlets() {
 
 			{/* The bar draws its own frame, so it is no longer wrapped in an IzCard
 			    that drew a second one around it. */}
-			<AgencyOutletFilters
-				filters={filters}
-				onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
-				shiftDateIsos={shiftDateIsos}
-				// The venues actually on this page — deduped and sorted where it is
-				// defined above. Left to a default the dropdown listed a demo
-				// constant instead: venues this agency never onboarded, so picking
-				// one emptied the page.
-				outletNames={outletFilterNames}
-				resultCount={filtered.length}
-				totalCount={summaries.length}
-			/>
+			<OutletMobileFilters>
+				<AgencyOutletFilters
+					filters={filters}
+					onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
+					shiftDateIsos={shiftDateIsos}
+					// The venues actually on this page — deduped and sorted where it is
+					// defined above. Left to a default the dropdown listed a demo
+					// constant instead: venues this agency never onboarded, so picking
+					// one emptied the page.
+					outletNames={outletFilterNames}
+					resultCount={filtered.length}
+					totalCount={summaries.length}
+				/>
+			</OutletMobileFilters>
 
 			<section className="mt-4">
 				<div className="iz-pr-manage-stats">

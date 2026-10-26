@@ -16,7 +16,7 @@ import { fill } from "@/lib/portal-i18n/fill";
 export function PostJobFormLegend() {
 	const { t } = usePortalLocale();
 	return (
-		<details className="iz-post-job-legend" open>
+		<details className="iz-post-job-legend">
 			<summary className="iz-post-job-legend__title cursor-pointer select-none">
 				{t.postJob.howToReadThisForm}
 			</summary>
@@ -407,12 +407,7 @@ export function PostJobActionPanel({
 				{shiftLabel}
 				<ChevronRight className="h-4 w-4" />
 			</button>
-			<p className="iz-post-job-submit-hint">
-				<span className="iz-post-job-submit-hint__green">
-					{t.postJob.greenWord}
-				</span>
-				{t.postJob.greenExplains}
-			</p>
+			<p className="iz-post-job-submit-hint">{t.postJob.submitHint}</p>
 		</div>
 	);
 }

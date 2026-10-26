@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { Link } from "@tanstack/react-router";
 import { FileText } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
@@ -20,7 +21,7 @@ export function AuditLogRolePicker() {
 	const LastIcon = lastRole.icon;
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={FileText}
 				title={t.admin.navAuditLog}

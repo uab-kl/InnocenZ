@@ -1,12 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "@tanstack/react-router";
-import {
-	Bell,
-	ChevronDown,
-	LogOut,
-	Settings,
-	User as UserIcon,
-} from "lucide-react";
+import { Bell, LogOut, Settings, User as UserIcon } from "lucide-react";
+import { AdminIconGuide } from "@/components/admin/admin-design-chrome";
+import { adminConsoleRoleLabel } from "@/components/admin/admin-role-label";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,13 +20,11 @@ import { getBusinessSectionByKey } from "@/constants/business-sections";
 import { sidebarSections } from "@/constants/links";
 import { getRbacSectionByKey } from "@/constants/rbac-sections";
 import { getUserTypeByKey } from "@/constants/user-types";
-import { adminConsoleRoleName } from "@/lib/auth/console-role";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchPendingCount } from "@/services/admin-request";
 
@@ -51,6 +45,7 @@ function resolveBreadcrumbSegments(
 
 	if (pathname.startsWith("/rbac/")) {
 		const rbacKey = pathname.split("/").pop();
+		if (rbacKey === "pending") return [t.admin.navRbac, t.rbac.pendingTitle];
 		const rbacSection = rbacKey ? getRbacSectionByKey(rbacKey) : undefined;
 		if (rbacSection)
 			return [
@@ -122,20 +117,52 @@ function useBreadcrumbSegments() {
 	);
 }
 
+/** Where the bell opens, and the count that page will show. */
+export function bellTarget(
+	pendingRequests: number,
+	pendingPlanChanges: number,
+): {
+	to: "/admin/service/requests" | "/admin/service/plan-changes";
+	count: number;
+} {
+	if (pendingRequests <= 0 && pendingPlanChanges > 0) {
+		return { to: "/admin/service/plan-changes", count: pendingPlanChanges };
+	}
+	return { to: "/admin/service/requests", count: Math.max(0, pendingRequests) };
+}
+
 function NotificationBell() {
 	const { t } = usePortalLocale();
 	const { logout } = useAuthActions();
-	const { data } = useQuery({
-		queryKey: ["admin-requests", "pending-count"],
-		queryFn: () => fetchPendingCount(logout),
+	/*
+	 * The bell counted EVERY pending request — plan changes included — and then
+	 * opened Plan Request, which lists everything but plan changes, so a bell
+	 * reading 3 could land on a page holding 1. Each page's own count now (the
+	 * sidebar badges' query keys, one cache, refreshed by the pages'
+	 * "admin-requests" invalidation), and the bell names the page it opens: Plan
+	 * Request while anything waits there, else Plan Change.
+	 */
+	const requestsQuery = useQuery({
+		queryKey: ["admin-requests", "pending-count", "without-plan-changes"],
+		queryFn: () => fetchPendingCount(logout, { excludeType: "plan_change" }),
 		staleTime: 30_000,
 		refetchInterval: 60_000,
 	});
-	const count = data?.pending ?? 0;
+	const planChangesQuery = useQuery({
+		queryKey: ["admin-requests", "pending-count", "plan-change"],
+		queryFn: () => fetchPendingCount(logout, { type: "plan_change" }),
+		staleTime: 30_000,
+		refetchInterval: 60_000,
+	});
+	const target = bellTarget(
+		requestsQuery.data?.pending ?? 0,
+		planChangesQuery.data?.pending ?? 0,
+	);
+	const count = target.count;
 
 	return (
 		<Link
-			to="/admin/service/requests"
+			to={target.to}
 			aria-label={fill(
 				count === 1 ? t.admin.notificationsOne : t.admin.notificationsMany,
 				{ n: count },
@@ -182,11 +209,11 @@ export function Header() {
 	 * ⚠️ The ADMIN role, not `roles[0]` — the list has no order, and an admin
 	 * who also holds a Finance lane was titled "Finance" here (28 Sep audit).
 	 */
-	const roleLabel = portalRoleLabel(adminConsoleRoleName(user?.roles), t);
+	const roleLabel = adminConsoleRoleLabel(user?.roles, t);
 	const avatarSrc = apiAssetUrl(user?.profileImage);
 
 	return (
-		<header className="flex h-16 items-center justify-between gap-2 border-b bg-background px-4 md:px-6">
+		<header className="iz-admin-header flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b px-4 py-3 md:px-6">
 			<div className="flex min-w-0 items-center gap-1">
 				{/*
 				  Below 768px `ui/sidebar.tsx` swaps the rail for an off-canvas
@@ -220,7 +247,14 @@ export function Header() {
 							}`}
 						>
 							{!crumb.isFirst && (
-								<span className="text-muted-foreground" aria-hidden="true">
+								// On a phone the ancestors fold away, so the leaf's own
+								// separator would lead the trail with a lone "›".
+								<span
+									className={`text-muted-foreground${
+										crumb.isLast ? " hidden sm:inline" : ""
+									}`}
+									aria-hidden="true"
+								>
 									›
 								</span>
 							)}
@@ -236,7 +270,8 @@ export function Header() {
 				</nav>
 			</div>
 
-			<div className="flex shrink-0 items-center gap-1">
+			<div className="iz-admin-header-controls flex shrink-0 items-center gap-2">
+				<AdminIconGuide />
 				{/*
 				  Inside the existing control cluster. It adds no overlay and no
 				  portal, so the breadcrumb on the left and the avatar dropdown on
@@ -251,7 +286,9 @@ export function Header() {
 					<DropdownMenuTrigger asChild>
 						<Button
 							variant="ghost"
-							className="h-auto gap-3 px-2 py-1.5 hover:bg-muted/50"
+							size="icon"
+							aria-label={`${user?.displayName ?? t.webShell.userFallback} — ${t.admin.navProfile}`}
+							className="iz-admin-avatar-button hover:bg-muted/50"
 						>
 							<div className="relative shrink-0">
 								<Avatar className="h-9 w-9">
@@ -272,17 +309,6 @@ export function Header() {
 									aria-hidden="true"
 								/>
 							</div>
-
-							<div className="hidden text-left sm:block">
-								<p className="text-sm font-semibold leading-none text-foreground">
-									{user?.displayName ?? t.webShell.userFallback}
-								</p>
-								<p className="mt-1 text-xs leading-none text-muted-foreground">
-									{roleLabel}
-								</p>
-							</div>
-
-							<ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent className="w-56" align="end" forceMount>

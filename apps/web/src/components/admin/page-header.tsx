@@ -13,7 +13,7 @@ export function PageShell({
 }) {
 	return (
 		<div
-			className={`flex flex-col gap-6 p-6 md:p-8${className ? ` ${className}` : ""}`}
+			className={`iz-admin-page flex min-w-0 flex-col gap-6 p-6 md:p-8${className ? ` ${className}` : ""}`}
 		>
 			{children}
 		</div>
@@ -44,14 +44,14 @@ export function PageHeader({
 	actions,
 }: PageHeaderProps) {
 	return (
-		<div className="flex flex-wrap items-end justify-between gap-5">
-			<div className="flex items-start gap-3.5">
+		<div className="iz-admin-page-heading flex flex-wrap items-end justify-between gap-5">
+			<div className="flex min-w-0 items-start gap-3.5">
 				{Icon && (
 					<span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[color:var(--lavender-soft)] text-lavender">
 						<Icon className="h-6 w-6" />
 					</span>
 				)}
-				<div>
+				<div className="min-w-0">
 					{kicker && (
 						<div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[color:var(--royal-gold-line)] bg-[color:var(--royal-gold-soft)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--royal-gold)]">
 							<span
@@ -61,7 +61,7 @@ export function PageHeader({
 							{kicker}
 						</div>
 					)}
-					<h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+					<h1 className="iz-admin-page-title font-semibold tracking-tight">
 						{title}
 					</h1>
 					{description && (
@@ -72,7 +72,9 @@ export function PageHeader({
 				</div>
 			</div>
 			{actions && (
-				<div className="flex flex-wrap items-center gap-3">{actions}</div>
+				<div className="iz-admin-page-actions flex min-w-0 flex-wrap items-center gap-3">
+					{actions}
+				</div>
 			)}
 		</div>
 	);

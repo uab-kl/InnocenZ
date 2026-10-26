@@ -63,3 +63,14 @@ export function auditLogRoleDescription(
 	const hit = ROLE_COPY[key];
 	return hit ? hit.description(t) : fallback;
 }
+
+/**
+ * The role AS RECORDED on a log row — kept in English (the record is not
+ * translated), only cased for reading. `formatRoleLabel` capitalises the first
+ * letter, which turned the acronym `pr` into "Pr".
+ */
+export function recordedRoleText(role: string): string {
+	const trimmed = role.trim();
+	if (trimmed.toLowerCase() === "pr") return "PR";
+	return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}

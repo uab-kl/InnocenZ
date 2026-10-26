@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	keepPreviousData,
 	useMutation,
@@ -9,6 +10,7 @@ import { CreditCard } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { pagePlansByPrice } from "@/components/subscription/plan-catalogue-page";
 import { SubscriptionFormSheet } from "@/components/subscription/subscription-form-sheet";
 import {
 	type BillingCycleFilter,
@@ -36,6 +38,8 @@ export const Route = createFileRoute("/admin/business/plan")({
 });
 
 const PAGE_SIZE = 10;
+/** Comfortably above the catalogue's size (13 plans today). */
+const ALL_PLANS = 500;
 
 function PlanPage() {
 	const { t } = usePortalLocale();
@@ -54,9 +58,11 @@ function PlanPage() {
 		null,
 	);
 
+	// The WHOLE catalogue in one request, so the cheapest-first order holds
+	// across pages — see `pagePlansByPrice`. The page is cut client-side.
 	const plansQueryParams: SubscriptionsQueryParams = {
-		page: plansPage,
-		pageSize: PAGE_SIZE,
+		page: 1,
+		pageSize: ALL_PLANS,
 	};
 	if (statusFilter !== "all") plansQueryParams.status = statusFilter;
 	if (billingCycleFilter !== "all")
@@ -74,6 +80,12 @@ function PlanPage() {
 		staleTime: 30_000,
 		retry: 2,
 	});
+
+	const plansPageView = pagePlansByPrice(
+		plansQuery.data?.data ?? [],
+		plansPage,
+		PAGE_SIZE,
+	);
 
 	const createPlanMutation = useMutation({
 		mutationFn: (input: CreateSubscriptionInput) =>
@@ -105,7 +117,7 @@ function PlanPage() {
 	);
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={CreditCard}
 				title={t.admin.navPlan}
@@ -113,9 +125,9 @@ function PlanPage() {
 			/>
 
 			<SubscriptionsTable
-				subscriptions={plansQuery.data?.data ?? []}
-				pagination={plansQuery.data?.pagination}
-				page={plansPage}
+				subscriptions={plansPageView.rows}
+				pagination={plansQuery.data ? plansPageView.pagination : undefined}
+				page={plansPageView.pagination.page}
 				pageSize={PAGE_SIZE}
 				isLoading={plansQuery.isLoading}
 				isFetching={plansQuery.isFetching}

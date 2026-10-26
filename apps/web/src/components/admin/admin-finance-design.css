@@ -1,0 +1,207 @@
+/* Presentation for the original Admin billing, plan and audit components. */
+.admin-finance-page,
+.admin-finance-sheet {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.admin-finance-page > *,
+.admin-finance-sheet > *,
+.admin-finance-page [data-slot="card-content"],
+.admin-finance-sheet [data-slot="card-content"] {
+	min-width: 0;
+	max-width: 100%;
+}
+.admin-finance-page [data-slot="card"] {
+	box-shadow: none;
+}
+.admin-finance-filters {
+	margin-block: 20px 4px;
+}
+.admin-finance-filter-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 12px;
+	min-width: 0;
+}
+.admin-finance-filter-row > * {
+	min-width: 0;
+	max-width: 100%;
+}
+.admin-finance-page [data-slot="table-container"],
+.admin-finance-sheet [data-slot="table-container"] {
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+}
+.admin-finance-table {
+	width: 100%;
+	min-width: 760px;
+}
+.admin-finance-table :is(th, td) {
+	padding: 16px;
+	white-space: normal;
+	vertical-align: middle;
+	line-height: 1.5;
+}
+.admin-finance-table th {
+	background: var(--muted);
+	color: var(--muted-foreground);
+}
+.admin-finance-table td:first-child {
+	min-width: 160px;
+}
+@media (min-width: 768px) {
+	.admin-finance-table td:has(> [data-slot="badge"]) {
+		min-width: 128px;
+	}
+}
+.admin-finance-review {
+	display: flex;
+	margin-top: 8px;
+	width: fit-content;
+}
+.admin-finance-page [data-slot="card-content"] > .mt-4.flex {
+	flex-wrap: wrap;
+	gap: 16px;
+}
+.admin-finance-page [data-slot="card-content"] > .mt-4.flex > .flex {
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+.admin-finance-sheet .truncate,
+.admin-refunds-card .truncate {
+	overflow: visible;
+	white-space: normal;
+	text-overflow: clip;
+}
+.admin-finance-sheet :is(dl, dd, section, form, pre) {
+	min-width: 0;
+	max-width: 100%;
+}
+.admin-finance-sheet :is(pre, code) {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.admin-finance-sheet [data-slot="sheet-header"] {
+	padding-right: 48px;
+}
+.admin-finance-sheet
+	:is([data-slot="sheet-footer"], [data-slot="dialog-footer"]) {
+	flex-wrap: wrap;
+	gap: 12px;
+}
+.admin-invoice-detail {
+	min-width: 0;
+}
+.admin-invoice-detail > section {
+	flex-shrink: 0;
+}
+.admin-refunds-card [data-slot="card-title"] {
+	flex-wrap: wrap;
+}
+@media (max-width: 767px) {
+	.admin-finance-sheet > .admin-invoice-detail {
+		padding: 16px;
+	}
+	.admin-finance-filter-row {
+		flex-direction: column;
+		align-items: stretch;
+		margin-top: 12px;
+	}
+	.admin-finance-filter-row > *,
+	.admin-finance-filter-row [data-slot="select-trigger"],
+	.admin-finance-filter-row input {
+		width: 100%;
+	}
+	.admin-finance-filter-row > .flex:has(input[type="date"]) {
+		flex-wrap: wrap;
+	}
+	.admin-finance-filter-row > .flex:has(input[type="date"]) input {
+		flex-basis: 100%;
+	}
+	/* Labeled cards keep all existing table fields available on narrow screens. */
+	.admin-finance-table {
+		display: block;
+		min-width: 0;
+		width: 100%;
+	}
+	.admin-finance-table > thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+	.admin-finance-table > tbody {
+		display: grid;
+		gap: 16px;
+		width: 100%;
+		padding: 12px;
+	}
+	.admin-finance-table > tbody > tr {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		min-width: 0;
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		background: var(--card);
+		padding: 8px 16px;
+	}
+	.admin-finance-table > tbody > tr > td {
+		display: block;
+		min-width: 0;
+		max-width: 100%;
+		width: 100%;
+		padding: 10px 0;
+		text-align: left;
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+	.admin-finance-table > tbody > tr > td[data-label]::before {
+		content: attr(data-label);
+		display: block;
+		margin-bottom: 4px;
+		color: var(--muted-foreground);
+		font-size: var(--iz-fs-tiny, 0.875rem);
+		font-weight: 400;
+	}
+	.admin-finance-table > tbody > tr > td + td {
+		border-top: 1px solid var(--border);
+	}
+	.admin-finance-table .line-clamp-2 {
+		display: block;
+		line-clamp: unset;
+		-webkit-line-clamp: unset;
+		overflow: visible;
+	}
+	.admin-finance-sheet .grid-cols-2,
+	.admin-finance-sheet .grid-cols-3 {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.admin-finance-sheet
+		:is(.flex.items-center.justify-between, .flex.items-start.justify-between) {
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+	.admin-finance-sheet dl {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
+	}
+	.admin-finance-sheet dd {
+		text-align: left;
+		margin-bottom: 8px;
+	}
+	.admin-invoice-detail .shrink-0 {
+		flex-shrink: 1;
+	}
+	.admin-refunds-card li {
+		padding: 12px;
+		gap: 12px;
+	}
+	.admin-refunds-card li > button:first-child {
+		flex-basis: 100%;
+		padding: 0;
+	}
+}

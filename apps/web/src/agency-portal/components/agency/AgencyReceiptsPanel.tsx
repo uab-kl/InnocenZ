@@ -9,8 +9,13 @@ import {
 	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { useAgencyMemberName } from "@agency-portal/hooks/use-agency-member-name";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import {
+	formatPayrollStampDay,
+	olderStripDays,
+} from "@agency-portal/lib/payroll-display";
 import {
 	anyLineClassified,
 	groupLinesByKind,
@@ -102,8 +107,19 @@ export function workingDayIso(receipt: AgencyReceipt): string {
 	return lineDate ?? receipt.receiptDate ?? receipt.loggedAt.slice(0, 10);
 }
 
+/**
+ * The venue, by its CURRENT name.
+ *
+ * `line.outlet` is a text copy stamped when the line was written, so a venue
+ * renamed since kept its old name on the card's header ("Emhub Testing") while
+ * the shift line under it — `shift.outletName`, joined live through the
+ * assignment FK — said "UAB Emhub". The FK-resolved name wins; the stored copy
+ * is only the fallback for a receipt with no shift link.
+ */
 const receiptOutlet = (receipt: AgencyReceipt): string =>
-	receipt.lines.find((line) => line.outlet)?.outlet ?? "—";
+	receipt.shift?.outletName?.trim() ||
+	receipt.lines.find((line) => line.outlet)?.outlet ||
+	"—";
 
 /**
  * yyyy-MM-dd -> "Tue 29 Jul" / "周二 29 7月".
@@ -234,6 +250,7 @@ function ReceiptRow({
 	 */
 	const claims = openDisputesFor(receipt);
 	const tag = receiptStatusTag(receipt);
+	const reviewerName = useAgencyMemberName()(receipt.reviewedBy);
 	// Pending rows open themselves: the whole point of the row is the decision,
 	// and a decision behind a click is one the reviewer can walk past. A DISPUTED
 	// row opens for the same reason — somebody is waiting on an answer, and the
@@ -492,15 +509,16 @@ function ReceiptRow({
 						/>
 					</div>
 
+					{/* By NAME — `reviewedBy` is a user id — and in the portal's date
+					    shape, the same line the per-voucher verify panel prints. */}
 					{receipt.status !== "pending" && (
 						<p className="iz-tiny iz-muted2 mt-2">
-							{receipt.reviewedBy
-								? `${t.receipts.reviewedBy} ${receipt.reviewedBy}`
+							{reviewerName
+								? `${t.receipts.reviewedBy} ${reviewerName}`
 								: t.receipts.reviewed}
 							{" · "}
-							{receipt.reviewedAt
-								? new Date(receipt.reviewedAt).toLocaleDateString("en-GB")
-								: t.agencyReceipts.beforeThisReviewExisted}
+							{formatPayrollStampDay(receipt.reviewedAt, t) ??
+								t.agencyReceipts.beforeThisReviewExisted}
 						</p>
 					)}
 
@@ -659,6 +677,22 @@ export function AgencyReceiptsPanel({
 		[receipts, weekStartIso, weekEndIso, includesOlder],
 	);
 	const offWeekCount = receipts.length - weekReceipts.length;
+
+	/**
+	 * The days BEFORE the week that this list still holds — payment week only.
+	 *
+	 * The catch-all lists aged pending receipts, but the day strip offered only
+	 * the window's seven nights, every one greyed, over rows from weeks earlier.
+	 * Read off the whole week's list rather than the faceted one, so picking a
+	 * bucket greys an older chip instead of removing it from under the cursor.
+	 */
+	const olderDays = useMemo(
+		() =>
+			includesOlder
+				? olderStripDays(weekReceipts.map(workingDayIso), weekStartIso)
+				: [],
+		[includesOlder, weekReceipts, weekStartIso],
+	);
 
 	/**
 	 * EXCLUSIVE buckets (owner, 26 Aug 2026) — the four chips partition the week:
@@ -960,34 +994,62 @@ export function AgencyReceiptsPanel({
 						</IzCard>
 					)}
 
-					<div className="mt-2 flex flex-wrap gap-1.5">
-						{(
-							[
-								["all", t.common.all],
-								["pending", t.receipts.waitingOnYou],
-								["approved", t.receipts.approved],
-								["verified", t.receipts.verified],
-								["disputed", t.receipts.disputed],
-							] as [StatusFilter, string][]
-						).map(([value, label]) => (
-							<button
-								key={value}
-								type="button"
-								// The space before `${` is deliberate: Tailwind v4 drops an
-								// arbitrary-value class glued to an interpolation, and
-								// `!text-[11px]` only survives here because other panels
-								// happen to use it in a plain string.
-								className={`iz-payroll-tab !flex-none !px-2.5 !text-[11px] ${status === value ? "on" : ""}`}
-								onClick={() => setStatus(value)}
-							>
-								{label} ({statusCounts[value]})
-							</button>
-						))}
+					<div className="iz-receipt-filters">
+						<div className="iz-receipt-search">
+							<label>
+								<span className="iz-receipt-filter-label">
+									{t.receipts.searchReceipts}
+								</span>
+								<div className="relative">
+									<Search
+										className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--iz-muted)]"
+										aria-hidden
+									/>
+									<input
+										type="search"
+										className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
+										placeholder={t.receipts.searchPlaceholder}
+										value={search}
+										onChange={(e) => setSearch(e.target.value)}
+										aria-label={t.receipts.searchReceipts}
+									/>
+								</div>
+							</label>
+						</div>
+						<fieldset className="iz-receipt-status-filter">
+							<legend className="iz-receipt-filter-label">
+								{t.filters.status}
+							</legend>
+							<div className="iz-receipt-status-options">
+								{(
+									[
+										["all", t.common.all],
+										["pending", t.receipts.waitingOnYou],
+										["approved", t.receipts.approved],
+										["verified", t.receipts.verified],
+										["disputed", t.receipts.disputed],
+									] as [StatusFilter, string][]
+								).map(([value, label]) => (
+									<button
+										key={value}
+										type="button"
+										className="iz-receipt-status-chip"
+										aria-pressed={status === value}
+										onClick={() => setStatus(value)}
+									>
+										<span>{label}</span>
+										<span className="iz-receipt-status-count">
+											{statusCounts[value]}
+										</span>
+									</button>
+								))}
+							</div>
+						</fieldset>
 					</div>
 
 					{/* WHICH MONEY, WHICH NIGHT — the same strip the Disputes sub-tab
 					    draws, from the same component, reading the same selection
-					    (owner, 3 Sep 2026). Above the search box and OUTSIDE the
+					    (owner, 3 Sep 2026). Below the search/status controls and OUTSIDE the
 					    collapsible Filters panel deliberately: the ask was to *see and
 					    select* drinks and tips, and a filter folded behind a toggle is
 					    one nobody discovers. Below the status chips because it narrows
@@ -996,6 +1058,7 @@ export function AgencyReceiptsPanel({
 						<PayrollKindDayFilter
 							weekStartIso={weekStartIso}
 							weekEndIso={weekEndIso}
+							olderDays={olderDays}
 							kinds={kinds}
 							day={day}
 							onKindsChange={onKindsChange}
@@ -1008,6 +1071,7 @@ export function AgencyReceiptsPanel({
 							<IzSelect
 								block
 								className="!text-xs"
+								aria-label={t.table.pr}
 								value={prId}
 								onChange={(e) => setPrId(e.target.value)}
 							>
@@ -1021,6 +1085,7 @@ export function AgencyReceiptsPanel({
 							<IzSelect
 								block
 								className="!text-xs"
+								aria-label={t.filters.outlet}
 								value={outlet}
 								onChange={(e) => setOutlet(e.target.value)}
 							>
@@ -1034,6 +1099,7 @@ export function AgencyReceiptsPanel({
 							<IzSelect
 								block
 								className="!text-xs"
+								aria-label={t.receipts.allEntryMethods}
 								value={source}
 								onChange={(e) =>
 									setSource(e.target.value as "" | AgencyReceipt["source"])
@@ -1055,23 +1121,6 @@ export function AgencyReceiptsPanel({
 							)}
 						</PayrollKindDayFilter>
 					)}
-
-					<div className="mt-2 flex items-center gap-2">
-						<div className="relative flex-1">
-							<Search
-								className="absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--iz-muted)]"
-								aria-hidden
-							/>
-							<input
-								type="search"
-								className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
-								placeholder={t.receipts.searchPlaceholder}
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								aria-label={t.receipts.searchReceipts}
-							/>
-						</div>
-					</div>
 
 					<div className="mt-3 space-y-3">
 						{days.length === 0 ? (

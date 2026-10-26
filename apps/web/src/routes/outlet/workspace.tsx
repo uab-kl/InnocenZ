@@ -5,6 +5,7 @@ import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
+import { priceListHint } from "@agency-portal/components/outlet/ShiftEventPriceEditor";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import {
@@ -17,7 +18,6 @@ import {
 	snapTierWage,
 } from "@agency-portal/lib/agency-demo";
 import {
-	drinkMenuPriceRange,
 	OUTLET_DRINKS_PRICE_SECTION_ID,
 	OUTLET_PRICES_SECTION_ID,
 	OUTLET_SERVICE_ENTITLEMENT_SECTION_ID,
@@ -94,7 +94,7 @@ function NumField({
 			<div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
 				{label}
 			</div>
-			<div className="flex items-center gap-1.5 rounded-xl border border-[var(--iz-line2)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5">
+			<div className="iz-workspace-number-control flex items-center gap-1.5 rounded-xl border border-[var(--iz-line2)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5">
 				{suffix === "RM" && (
 					<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
 						RM
@@ -275,8 +275,6 @@ function OutletWorkspacePage() {
 	const serviceItems = fullMenu.filter(
 		(d) => outletDrinkCategory(d) === "service",
 	);
-	const drinkPriceRange = drinkMenuPriceRange(drinkItems);
-	const serviceRange = drinkMenuPriceRange(serviceItems);
 
 	// Merge one category's edited slice back with the untouched other slice.
 	const commitMenuSlice = (
@@ -298,6 +296,47 @@ function OutletWorkspacePage() {
 	return (
 		<OutletPage>
 			<OutletPageHeader
+				trailing={
+					canEdit &&
+					!loadFailed && (
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary"
+							onClick={() => {
+								// A row the outlet added but never named is still showing its
+								// placeholder; bank that name so nothing saves as a blank line.
+								const toSave = {
+									...draft,
+									drinkMenu: withOutletMenuNamesResolved(fullMenu),
+								};
+								setDraft(toSave);
+								if (backend.backed) {
+									backend
+										.save(toSave)
+										.then(() => {
+											toast(t.workspace.workspaceSaved, "success");
+											// ⚠️ ONLY on success. This used to run synchronously
+											// below, outside the promise, so a FAILED save also
+											// marked the draft clean — and the next time `source`
+											// changed, the effect above overwrote the operator's
+											// unsaved rates with the server's old ones. They were
+											// told the save failed and then quietly lost the work
+											// they were about to retry.
+											draftDirtyRef.current = false;
+										})
+										.catch(() =>
+											toast(t.workspace.couldNotSaveWorkspace, "warn"),
+										);
+								} else {
+									saveOutletWorkspace(toSave);
+									draftDirtyRef.current = false;
+								}
+							}}
+						>
+							{t.workspace.saveWorkspace}
+						</button>
+					)
+				}
 				title={t.nav.workspace}
 				iconKey="Workspace"
 				hint={fill(t.workspace.ratesForNewShifts, { outlet: draft.outletName })}
@@ -349,15 +388,12 @@ function OutletWorkspacePage() {
 				id={OUTLET_DRINKS_PRICE_SECTION_ID}
 				title={t.workspace.drinksPrice}
 				iconKey="Drinks Price"
-				hint={
-					drinkItems.length
-						? fill(t.workspace.drinksSummary, {
-								n: drinkItems.length,
-								min: drinkPriceRange.min,
-								max: drinkPriceRange.max,
-							})
-						: t.workspace.addDrinksBelow
-				}
+				hint={priceListHint(
+					drinkItems,
+					t.workspace.addDrinksBelow,
+					t.workspace.drinksSummary,
+					t.workspace.drinksSummaryOne,
+				)}
 				collapsible
 				open={drinksOpen}
 				onOpenChange={setDrinksOpen}
@@ -385,15 +421,14 @@ function OutletWorkspacePage() {
 				id={OUTLET_SERVICE_ENTITLEMENT_SECTION_ID}
 				title={t.workspace.serviceEntitlement}
 				iconKey="Service Entitlement"
-				hint={
-					serviceItems.length
-						? fill(t.workspace.servicesSummary, {
-								n: serviceItems.length,
-								min: serviceRange.min,
-								max: serviceRange.max,
-							})
-						: t.workspace.addServicesBelow
-				}
+				// The same helper as the event editor, so the two pages can never
+				// count or print a price list two different ways.
+				hint={priceListHint(
+					serviceItems,
+					t.workspace.addServicesBelow,
+					t.workspace.servicesSummary,
+					t.workspace.servicesSummaryOne,
+				)}
 				collapsible
 				open={servicesOpen}
 				onOpenChange={setServicesOpen}
@@ -468,42 +503,6 @@ function OutletWorkspacePage() {
 			  known to be the venue's. Pressing it would PUT the blank fallback,
 			  and the handler full-draft-saves.
 			*/}
-			{canEdit && !loadFailed && (
-				<button
-					type="button"
-					className="iz-btn iz-btn-primary mt-5"
-					onClick={() => {
-						// A row the outlet added but never named is still showing its
-						// placeholder; bank that name so nothing saves as a blank line.
-						const toSave = {
-							...draft,
-							drinkMenu: withOutletMenuNamesResolved(fullMenu),
-						};
-						setDraft(toSave);
-						if (backend.backed) {
-							backend
-								.save(toSave)
-								.then(() => {
-									toast(t.workspace.workspaceSaved, "success");
-									// ⚠️ ONLY on success. This used to run synchronously
-									// below, outside the promise, so a FAILED save also
-									// marked the draft clean — and the next time `source`
-									// changed, the effect above overwrote the operator's
-									// unsaved rates with the server's old ones. They were
-									// told the save failed and then quietly lost the work
-									// they were about to retry.
-									draftDirtyRef.current = false;
-								})
-								.catch(() => toast(t.workspace.couldNotSaveWorkspace, "warn"));
-						} else {
-							saveOutletWorkspace(toSave);
-							draftDirtyRef.current = false;
-						}
-					}}
-				>
-					{t.workspace.saveWorkspace}
-				</button>
-			)}
 		</OutletPage>
 	);
 }

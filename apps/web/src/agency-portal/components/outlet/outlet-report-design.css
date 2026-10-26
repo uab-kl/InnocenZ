@@ -1,0 +1,880 @@
+/* Outlet's approved presentation; the report keeps its existing data sources. */
+.iz-portal[data-portal="outlet"] .iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-hero {
+	display: contents;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metrics {
+	margin-top: 0;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metric {
+	padding: 24px;
+	min-height: 180px;
+	gap: 8px;
+	background: var(--iz-panel);
+	border: 1px solid var(--iz-line);
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metric__value {
+	font-weight: 400;
+}
+.iz-report-metric-description {
+	margin: 0;
+	font-size: var(--iz-fs-body);
+	color: var(--iz-muted);
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-hero__badges {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 16px;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-layout {
+	grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+	align-items: start;
+	gap: 20px;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-main {
+	display: contents;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-chart {
+	grid-column: 1;
+	grid-row: 1;
+	margin: 0;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pnl {
+	grid-column: 2;
+	grid-row: 1;
+	padding: 24px;
+	margin: 0;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pnl__label {
+	font-size: var(--iz-fs-title);
+	font-weight: 600;
+	margin: 0 0 20px;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pnl__bar {
+	display: none;
+}
+.iz-report-pnl-values {
+	margin: 0;
+}
+.iz-report-pnl-values > div {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 16px 0;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-report-pnl-values dd {
+	margin: 0;
+	white-space: nowrap;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-sidebar {
+	grid-column: 1 / -1;
+	grid-row: 2;
+}
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-breakdown {
+	grid-column: 1 / -1;
+	grid-row: 3;
+}
+.iz-approved-table-scroll {
+	max-width: 100%;
+	overflow-x: auto;
+}
+.iz-approved-table {
+	border-collapse: collapse;
+	width: 100%;
+	min-width: 800px;
+	margin-top: 24px;
+	font-size: var(--iz-fs-body);
+}
+.iz-approved-table :is(th, td) {
+	text-align: left;
+	padding: 18px;
+	border-bottom: 1px solid var(--iz-line);
+	vertical-align: middle;
+}
+.iz-approved-table th {
+	background: var(--iz-panel2);
+	color: var(--iz-muted);
+	font-weight: 400;
+}
+.iz-approved-table td p {
+	color: var(--iz-muted);
+	margin: 6px 0 0;
+}
+.iz-approved-table progress {
+	display: block;
+	width: 100%;
+	min-width: 100px;
+	height: 6px;
+	margin-bottom: 10px;
+	accent-color: var(--iz-violet);
+}
+@media (max-width: 767px) {
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-layout {
+		display: flex;
+		flex-direction: column;
+	}
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-layout
+		> *,
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-chart,
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-breakdown {
+		width: 100%;
+	}
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-chart {
+		order: 1;
+	}
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-pnl {
+		order: 2;
+	}
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-sidebar {
+		order: 3;
+	}
+	.iz-portal[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-breakdown {
+		order: 4;
+	}
+}
+[data-portal="outlet"] .iz-portal-main .iz-outlet-report-design {
+	gap: 24px;
+	min-width: 0;
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(
+		.iz-outlet-report-hero,
+		.iz-outlet-report-chart,
+		.iz-outlet-report-breakdown,
+		.iz-outlet-report-sidebar
+	) {
+	min-width: 0;
+	margin: 0;
+	padding: 24px;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+	box-shadow: none;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-filters__body:not([hidden]) {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	min-width: 0;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-filters__body[hidden] {
+	display: none;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-tabs {
+	align-self: flex-start;
+	max-width: 100%;
+	gap: 4px;
+	border-color: var(--iz-line);
+	background: var(--iz-bg2);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-tabs__btn {
+	min-height: 44px;
+	padding: 8px 16px;
+	font-size: var(--iz-fs-body);
+	font-weight: 500;
+	white-space: normal;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-tabs__btn--active {
+	background: rgba(186, 164, 214, 0.16);
+	box-shadow: none;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-filters__toggle {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 52px;
+	padding: 12px 16px;
+	border: 1px solid var(--iz-line);
+	border-radius: 10px;
+	background: var(--iz-panel);
+	color: var(--iz-txt);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-filters__selection {
+	flex: 1;
+	min-width: 0;
+	color: var(--iz-muted);
+	text-align: right;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-layout {
+	grid-template-columns: minmax(0, 1fr);
+	gap: 24px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-main {
+	gap: 24px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-hero__head {
+	gap: 20px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(
+		.iz-outlet-report-hero__label,
+		.iz-outlet-report-hero__formula,
+		.iz-outlet-report-metric__label,
+		.iz-outlet-report-expand__tile-label,
+		.iz-outlet-report-pnl__label,
+		.iz-outlet-report-chart__hint,
+		.iz-outlet-report-sidebar__foot,
+		.iz-outlet-report-pr-card__name,
+		.iz-outlet-report-pr-card__agency,
+		.iz-outlet-report-pr-card__earned
+	) {
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+	font-weight: 400;
+	letter-spacing: normal;
+	text-transform: none;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-hero__label {
+	color: var(--iz-muted);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-hero__value {
+	margin-top: 8px;
+	font-size: var(--iz-fs-display);
+	line-height: 1.25;
+	color: var(--iz-txt);
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-hero__formula {
+	max-width: 48rem;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(.iz-outlet-report-badge, .iz-outlet-report-sidebar__badge) {
+	padding: 5px 10px;
+	border-radius: 6px;
+	font-size: var(--iz-fs-tiny);
+	font-weight: 500;
+	white-space: normal;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-badge--margin {
+	border-color: transparent;
+	background: rgba(186, 164, 214, 0.13);
+	color: var(--iz-accent-d);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metrics {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	align-items: stretch;
+	gap: 16px;
+	margin-top: 24px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metric {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+	padding: 20px;
+	border-color: var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-bg2);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metric--selected {
+	/* biome-ignore lint/complexity/noImportantStyles: the legacy selected metric border is already important; keep this override isolated to the approved Outlet design. */
+	border-color: var(--iz-accent-d) !important;
+	background: rgba(186, 164, 214, 0.12);
+	box-shadow: none;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metric__label {
+	gap: 8px;
+	color: var(--iz-muted);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metric__value {
+	margin: 0;
+	font-size: var(--iz-fs-head);
+	line-height: 1.3;
+	font-weight: 600;
+	color: var(--iz-txt);
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-metric__action {
+	margin-top: auto;
+	color: var(--iz-accent-d);
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+}
+
+/* One breakdown per metric. Desktop shows it beneath the whole row; on a
+   phone its natural DOM position puts it immediately after its own card. */
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-expand {
+	grid-column: 1 / -1;
+	order: 1;
+	min-width: 0;
+	margin: 0;
+	padding: 20px;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-bg2);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-sales-tiles {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-expand__tile {
+	min-width: 0;
+	padding: 16px;
+	border-color: var(--iz-line);
+	background: var(--iz-panel);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-expand__tile-value {
+	font-size: var(--iz-fs-head);
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(.iz-outlet-report-pnl, .iz-outlet-report-chart) {
+	margin-top: 24px;
+	padding-top: 24px;
+	border-top-color: var(--iz-line);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-chart {
+	margin-top: 0;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pnl__legend {
+	font-size: var(--iz-fs-body);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(.iz-outlet-report-chart__title, .iz-outlet-report-sidebar__title) {
+	font-size: var(--iz-fs-title);
+	line-height: 1.4;
+	font-weight: 600;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-chart__plot {
+	margin-top: 20px;
+	min-width: 0;
+	height: 240px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-chart__scroll {
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-spend-row {
+	flex-wrap: wrap;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-spend-row
+	> div {
+	flex-basis: 140px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-spend-row
+	:is(p, span) {
+	max-width: 100%;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-sidebar {
+	scroll-margin-top: 24px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-sidebar__head {
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 20px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-sidebar__list {
+	gap: 12px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pr-card {
+	padding: 16px;
+	border-color: var(--iz-line);
+	background: var(--iz-bg2);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pr-card__head {
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(.iz-outlet-report-pr-card__identity, .iz-outlet-report-pr-card__earned) {
+	max-width: 100%;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(
+		.iz-outlet-report-pr-card__name,
+		.iz-outlet-report-pr-card__agency,
+		.iz-outlet-report-pr-card__earned
+	) {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pr-bar {
+	flex-wrap: wrap;
+	gap: 10px;
+	margin-top: 12px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pr-bar__track {
+	min-width: 80px;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pr-bar__label {
+	display: block;
+	font-size: var(--iz-fs-tiny);
+	white-space: normal;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-pr-rank {
+	width: 30px;
+	height: 30px;
+	font-size: var(--iz-fs-body);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-daily-rows {
+	min-width: 0;
+	overflow-x: auto;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(.iz-outlet-report-day-row, .iz-outlet-report-day-head) {
+	min-width: 640px;
+	grid-template-columns: 6rem minmax(4rem, 1fr) repeat(3, 7rem);
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(.iz-outlet-report-floor-row, .iz-outlet-report-floor-head) {
+	grid-template-columns: 4rem 7rem repeat(4, minmax(7rem, 1fr));
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-floor-table {
+	min-width: 44rem;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-floor-row
+	> :nth-child(2) {
+	white-space: normal;
+	overflow: visible;
+	text-overflow: clip;
+	overflow-wrap: anywhere;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(
+		.iz-tiny,
+		.iz-sm,
+		.text-xs,
+		.text-sm,
+		[class*="text-[9px]"],
+		[class*="text-[10px]"],
+		[class*="text-[11px]"]
+	) {
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-expand
+	.iz-btn {
+	min-height: 44px;
+	font-size: var(--iz-fs-body);
+	white-space: normal;
+}
+
+[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	:is(button:focus-visible) {
+	outline: 2px solid var(--iz-accent-d);
+	outline-offset: 3px;
+}
+
+@media (min-width: 1100px) {
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-layout {
+		grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+	}
+}
+
+@media (max-width: 767px) {
+	[data-portal="outlet"] .iz-portal-main .iz-outlet-report-design {
+		gap: 20px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		:is(
+			.iz-outlet-report-hero,
+			.iz-outlet-report-chart,
+			.iz-outlet-report-breakdown,
+			.iz-outlet-report-sidebar
+		) {
+		padding: 16px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-filters__body:not([hidden]) {
+		padding-top: 16px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-tabs {
+		align-self: stretch;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-tabs__btn {
+		padding: 8px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-hero__badges {
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: flex-start;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-metrics {
+		grid-template-columns: minmax(0, 1fr);
+		margin-top: 20px;
+		gap: 12px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-expand {
+		order: 0;
+		padding: 16px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-sales-tiles {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-expand__tile {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 8px;
+	}
+}
+
+@media (max-width: 639px) {
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-day-row {
+		min-width: 0;
+		grid-template-columns: minmax(0, 1fr) auto;
+		padding: 12px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-day-row
+		> :first-child {
+		grid-column: 1 / -1;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-day-row
+		> :nth-child(2)
+		p {
+		display: none;
+	}
+
+	[data-portal="outlet"]
+		.iz-portal-main
+		.iz-outlet-report-design
+		.iz-outlet-report-day-row
+		> :last-child {
+		overflow-wrap: anywhere;
+	}
+}
+
+.iz-portal[data-portal="outlet"]
+	.iz-portal-main
+	.iz-outlet-report-design
+	.iz-outlet-report-hero__badges {
+	flex-direction: row;
+}

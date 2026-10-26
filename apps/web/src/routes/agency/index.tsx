@@ -1,4 +1,4 @@
-import { IconGuide } from "@agency-portal/components/iz/IconGuide";
+import "@agency-portal/components/agency/agency-roster-design.css";
 import { UnpaidBillingBanner } from "@agency-portal/components/iz/UnpaidBillingBanner";
 import { formatRM, IzPageTitle } from "@agency-portal/components/iz/ui";
 import { AgencyHomeHubTabs } from "@agency-portal/components/portal/AgencyHomeHubTabs";
@@ -14,10 +14,10 @@ import {
 } from "@agency-portal/lib/agency-payroll";
 import { LIVE_SEED_PR_PVS } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
-import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 
@@ -236,17 +236,28 @@ function AgencyHub() {
 	const { t } = usePortalLocale();
 
 	return (
-		<div className="iz-screen iz-portal-page">
+		<div className="iz-screen iz-portal-page agency-today-design">
 			{/* The page names itself, like every other page in both portals.
 			    This heading and its clock used to be drawn by the SHELL, on a
 			    path test, which is why the date sat above the title on Roster and
 			    below it here. `iconKey` takes the ENGLISH lookup key, not the
 			    rendered words: `iconForNav` matches on text, so a translated
 			    "今天" would resolve to a "?" glyph. */}
-			<IzPageTitle level={1} iconKey="Today" dateTime>
-				{t.common.today}
-			</IzPageTitle>
-			<div className="iz-portal-kpi-grid iz-portal-desktop-only">
+			<header className="iz-approved-page-header">
+				<IzPageTitle level={1} iconKey="Today" dateTime>
+					{t.common.today}
+				</IzPageTitle>
+				{/* Same rule as the tiles below: `/agency/prs` hard-refuses without
+				    `managePr`, so a Director or Finance head would follow this into
+				    a bounce. Hidden rather than disabled, like the other actions the
+				    redesign leaves out for a lane that cannot use them. */}
+				{canOpenRecords && (
+					<Link to="/agency/prs" className="iz-btn iz-btn-ghost">
+						{t.nav.managePr}
+					</Link>
+				)}
+			</header>
+			<div className="iz-portal-kpi-grid">
 				<KpiTile
 					label={t.agencyHome.totalPr}
 					value={prsUnknown ? "—" : totalPrs}
@@ -292,6 +303,11 @@ function AgencyHub() {
 				</Link>
 			</div>
 
+			{canAssignShifts && (
+				<aside className="iz-portal-home-aside iz-approved-staffing">
+					<AiSuggestionsPanel />
+				</aside>
+			)}
 			<div className="iz-portal-home-grid">
 				<div className="iz-portal-home-main">
 					{/* What the agency owes InnocenZ for its OWN subscription — not the
@@ -315,15 +331,7 @@ function AgencyHub() {
 
 					<AgencyHomeHubTabs agencySubRole={agencySubRole} />
 				</div>
-
-				{canAssignShifts && (
-					<aside className="iz-portal-home-aside iz-portal-desktop-only">
-						<AiSuggestionsPanel />
-					</aside>
-				)}
 			</div>
-
-			<IconGuide className="iz-icon-guide--portal mt-6" />
 		</div>
 	);
 }

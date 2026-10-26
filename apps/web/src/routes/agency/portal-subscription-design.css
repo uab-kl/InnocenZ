@@ -1,0 +1,114 @@
+.iz-portal .iz-approved-plan-table {
+	padding: 24px;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+	overflow-x: auto;
+}
+.iz-approved-plan-head,
+.iz-approved-plan-row {
+	display: grid;
+	grid-template-columns: minmax(240px, 2fr) minmax(140px, 1fr) minmax(
+			140px,
+			1fr
+		) minmax(180px, 1fr);
+	gap: 20px;
+	align-items: center;
+	min-width: 800px;
+}
+.iz-approved-plan-head {
+	padding: 14px 18px;
+	background: var(--iz-panel2);
+	color: var(--iz-muted);
+}
+.iz-approved-plan-row {
+	padding: 20px 18px;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-approved-plan-row:last-child {
+	border-bottom: 0;
+}
+.iz-approved-plan-row > div {
+	min-width: 0;
+}
+.iz-approved-plan-row p {
+	margin: 6px 0 0;
+	color: var(--iz-muted);
+}
+.iz-portal .iz-approved-plan-row button {
+	font: inherit;
+	min-height: 46px;
+}
+.iz-portal .iz-approved-plan-table .iz-outlet-pos-addon {
+	margin-top: 20px;
+	background: var(--iz-panel2);
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+}
+.iz-portal .iz-outlet-pos-addon__inner {
+	background: transparent;
+	padding: 24px;
+}
+.iz-portal .iz-outlet-pos-addon__glow {
+	display: none;
+}
+.iz-portal .iz-outlet-pos-addon__icon-wrap {
+	box-shadow: none;
+}
+.iz-portal .iz-outlet-pos-addon :is(p, li, button) {
+	font-size: var(--iz-fs-body);
+	line-height: 1.5;
+}
+.iz-portal .iz-outlet-pos-addon__title {
+	font-size: var(--iz-fs-title);
+	font-weight: 600;
+}
+@media (max-width: 767px) {
+	.iz-portal .iz-approved-plan-table {
+		padding: 16px;
+	}
+	.iz-approved-plan-head {
+		display: none;
+	}
+	.iz-approved-plan-row {
+		min-width: 0;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+		padding: 20px 0;
+	}
+	.iz-approved-plan-row > div:nth-child(3) {
+		font-size: var(--iz-fs-display);
+	}
+}
+.iz-portal .iz-approved-subscription-summary {
+	display: grid;
+	grid-template-columns: 1.3fr 1fr 1fr;
+	gap: 24px;
+	padding: 24px;
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+	background: var(--iz-panel);
+}
+.iz-approved-subscription-summary > div {
+	min-width: 0;
+}
+.iz-approved-subscription-summary h2 {
+	font-size: var(--iz-fs-head);
+	font-weight: 600;
+	margin: 8px 0;
+}
+.iz-approved-subscription-summary p {
+	color: var(--iz-muted);
+	margin: 6px 0;
+}
+.iz-portal .iz-outlet-pos-addon {
+	background: var(--iz-panel);
+	border: 1px solid var(--iz-line);
+	border-radius: 13px;
+}
+@media (max-width: 767px) {
+	.iz-portal .iz-approved-subscription-summary {
+		grid-template-columns: minmax(0, 1fr);
+		padding: 16px;
+	}
+}

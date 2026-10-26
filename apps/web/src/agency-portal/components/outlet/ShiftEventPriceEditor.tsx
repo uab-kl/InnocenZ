@@ -1,6 +1,8 @@
 import { OutletDrinkMenuEditor } from "@agency-portal/components/outlet/OutletDrinkMenuEditor";
+import { fillPriceRange } from "@agency-portal/components/outlet/price-range";
 import {
 	drinkMenuPriceRange,
+	isOutletTipsRow,
 	type OutletDrinkCategory,
 	type OutletDrinkPrice,
 	outletDrinkCategory,
@@ -8,26 +10,33 @@ import {
 } from "@agency-portal/lib/outlet-demo";
 import type { ReactNode } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
-import { fill } from "@/lib/portal-i18n/fill";
 
 /*
  * Both sentences are passed in whole rather than composed here. The old
  * version built `${n} ${noun}s` and `Add ${noun}s below` from an English noun,
  * which is grammar this helper has no business owning — `workspace` already
  * carries one empty state and one summary per kind.
+ *
+ * The TIPS row is not counted, nor priced into the range. It draws inside
+ * Service Entitlement, but it is stored as `category='tip'` — the bucket a
+ * logged tip lands in, not a service (see `isOutletTipsRow`). Every venue is
+ * seeded one at RM 0, so counting it made a venue with no services read
+ * "1 service · RM 0–0".
  */
-function priceListHint(
+export function priceListHint(
 	items: OutletDrinkPrice[],
 	emptyHint: string,
 	summary: string,
+	/** The n === 1 sentence — "1 services" read as a typo. */
+	summaryOne: string,
 ): string {
-	if (items.length === 0) return emptyHint;
-	const range = drinkMenuPriceRange(items);
-	return fill(summary, {
-		n: items.length,
-		min: range.min,
-		max: range.max,
-	});
+	const priced = items.filter((d) => !isOutletTipsRow(d));
+	if (priced.length === 0) return emptyHint;
+	return fillPriceRange(
+		priced.length === 1 ? summaryOne : summary,
+		drinkMenuPriceRange(priced),
+		{ n: priced.length },
+	);
 }
 
 function ShiftEventPriceGroup({
@@ -93,6 +102,7 @@ export function ShiftEventPriceEditor({
 					drinkItems,
 					t.workspace.addDrinksBelow,
 					t.workspace.drinksSummary,
+					t.workspace.drinksSummaryOne,
 				)}
 			>
 				<OutletDrinkMenuEditor
@@ -111,6 +121,7 @@ export function ShiftEventPriceEditor({
 					serviceItems,
 					t.workspace.addServicesBelow,
 					t.workspace.servicesSummary,
+					t.workspace.servicesSummaryOne,
 				)}
 			>
 				<OutletDrinkMenuEditor

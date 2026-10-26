@@ -14,7 +14,10 @@ import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 // The seam a seating write runs its guard through — a leaf (pr-seating-rules.ts).
-import { ShiftWriteRefused, type ShiftWriteGuard } from '@/features/shift/shift-write-guard';
+import {
+  ShiftWriteRefused,
+  type ShiftWriteGuard,
+} from '@/features/shift/shift-write-guard';
 import {
   ShiftDrinkMenuTable,
   ShiftTable,
@@ -1305,7 +1308,10 @@ export class ShiftAssignmentRepositoryClass {
    * (shift-write-guard.ts, 30 Sep 2026) — the double-booking re-checks read the
    * PR's other bookings on the connection that holds it.
    */
-  async listForPr(prId: string, client: DbTransaction | typeof db = db): Promise<
+  async listForPr(
+    prId: string,
+    client: DbTransaction | typeof db = db,
+  ): Promise<
     Array<
       ShiftAssignmentType & {
         shiftDate: string;
@@ -1972,7 +1978,9 @@ export class ShiftAssignmentRepositoryClass {
           ...r,
           staffedCount: liveByShift.get(r.shiftId)?.length ?? 0,
         }))
-        .filter((r) => !answered.has(r.assignmentId) && r.staffedCount < r.quantity);
+        .filter(
+          (r) => !answered.has(r.assignmentId) && r.staffedCount < r.quantity,
+        );
     } catch (error) {
       logger.error(
         '[ShiftAssignmentRepository.listBackfillSlots] Error:',
@@ -2415,7 +2423,12 @@ export class ShiftAssignmentRepositoryClass {
         for (const row of rows) {
           const list = eventByShift.get(row.shiftId) ?? [];
           // The Workspace list's wire shape: the slug as `id`, money as a string.
-          list.push({ id: row.slug, name: row.name, priceRm: row.priceRm, category: row.category });
+          list.push({
+            id: row.slug,
+            name: row.name,
+            priceRm: row.priceRm,
+            category: row.category,
+          });
           eventByShift.set(row.shiftId, list);
         }
       }
@@ -2432,12 +2445,18 @@ export class ShiftAssignmentRepositoryClass {
           shift.shiftId,
           own?.length
             ? { source: 'event', items: own }
-            : { source: 'workspace', items: everyday.get(shift.outletId) ?? [] },
+            : {
+                source: 'workspace',
+                items: everyday.get(shift.outletId) ?? [],
+              },
         );
       }
       return result;
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.resolveDrinkMenusForShifts] Error:', error);
+      logger.error(
+        '[ShiftAssignmentRepository.resolveDrinkMenusForShifts] Error:',
+        error,
+      );
       throw error;
     }
   }
@@ -3000,6 +3019,9 @@ export class ShiftAssignmentRepositoryClass {
           prId: ShiftAssignmentTable.prId,
           prName: prDisplayNameSql,
           soldOn: ShiftTable.shiftDate,
+          // Grouped on below: a statement is one agency's bill, so the
+          // reconciliation banner needs each agency's wages apart.
+          agencyId: ShiftAssignmentTable.agencyId,
           cost: sql<number>`coalesce(sum(${ShiftAssignmentTable.payAmount}), 0)::float8`,
           /**
            * A CORRELATED SUBQUERY, not a join — deliberately.
@@ -3056,12 +3078,14 @@ export class ShiftAssignmentRepositoryClass {
           UserTable.username,
           UserProfileTable.fullName,
           ShiftTable.shiftDate,
+          ShiftAssignmentTable.agencyId,
         )
         .orderBy(asc(ShiftTable.shiftDate));
       return rows.map((r) => ({
         prId: r.prId,
         prName: r.prName,
         soldOn: r.soldOn,
+        agencyId: r.agencyId,
         cost: Number(r.cost),
         commission: Number(r.commission),
         overtime: Number(r.overtime),

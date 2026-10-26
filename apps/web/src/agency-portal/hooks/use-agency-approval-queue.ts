@@ -1,7 +1,10 @@
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
 import { useAgencyPendingPrs } from "@agency-portal/hooks/use-agency-pending-prs";
 import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
-import { useOrgMembersQuery } from "@agency-portal/hooks/use-org-members";
+import {
+	type OrgMember,
+	useOrgMembersQuery,
+} from "@agency-portal/hooks/use-org-members";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { isMemberWaiting } from "@agency-portal/lib/member-queue-state";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
@@ -40,11 +43,10 @@ export interface AgencyApprovalQueue {
 	/**
 	 * People asking to join this agency's TEAM — the "New member" tab.
 	 *
-	 * A count, not the rows: the panel behind that tab reads the same query key
-	 * and does its own filtering, so handing the list up here would be a second
-	 * copy of it to keep honest.
+	 * The count and Today rows share the same filtered query result.
 	 */
 	pendingMembers: number;
+	pendingMemberRows: OrgMember[];
 	/** Everything the Approvals page's tabs add up to. */
 	total: number;
 	isLoading: boolean;
@@ -125,10 +127,11 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 	 * was fixed THERE while these counts kept the old predicate. One authority,
 	 * so a third spelling cannot drift away from it again.
 	 */
-	const pendingMembers = useMemo(
-		() => (memberRows.data ?? []).filter(isMemberWaiting).length,
+	const pendingMemberRows = useMemo(
+		() => (memberRows.data ?? []).filter(isMemberWaiting),
 		[memberRows.data],
 	);
+	const pendingMembers = pendingMemberRows.length;
 
 	const liveCutlost = useCutlostRequests({ status: "pending" });
 	const cutlostRequests = useMemo(
@@ -184,6 +187,7 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 		// which drives the "needs your attention" count.
 		outletLinkRequests: outletLinks.links,
 		pendingMembers,
+		pendingMemberRows,
 		// A venue waiting to be let in IS work awaiting this agency, so it belongs
 		// in the same total the Today tile reads. Leaving it out is why that tile
 		// said "Nothing awaiting approval" while the Approvals page had a venue

@@ -18,7 +18,9 @@ const h = vi.hoisted(() => {
     update: () => ({
       set: (values: Record<string, unknown>) => ({
         where: () => ({
-          returning: async () => [{ id: 'voucher-1', status: 'disputed', ...values }],
+          returning: async () => [
+            { id: 'voucher-1', status: 'disputed', ...values },
+          ],
         }),
       }),
     }),
@@ -40,7 +42,9 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock('@/db/index', () => ({
-  db: { transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(h.tx) },
+  db: {
+    transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(h.tx),
+  },
 }));
 vi.mock('@/util/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -71,11 +75,28 @@ const storedLine = (over: Record<string, unknown>) => ({
 function repositoryWith(previous: Array<Record<string, unknown>>) {
   const repository = new PaymentVoucherRepositoryClass();
   const spyOn = (name: string) => vi.spyOn(repository as never, name as never);
-  (spyOn('getLines') as unknown as { mockResolvedValue(v: unknown): void }).mockResolvedValue(previous);
-  (spyOn('assertLinesAgreeWithShifts') as unknown as { mockResolvedValue(v: unknown): void }).mockResolvedValue(
-    undefined,
-  );
-  (spyOn('recomputeTotals') as unknown as { mockResolvedValue(v: unknown): void }).mockResolvedValue(undefined);
+  (
+    spyOn('getLines') as unknown as { mockResolvedValue(v: unknown): void }
+  ).mockResolvedValue(previous);
+  (
+    spyOn('assertLinesAgreeWithShifts') as unknown as {
+      mockResolvedValue(v: unknown): void;
+    }
+  ).mockResolvedValue(undefined);
+  (
+    spyOn('recomputeTotals') as unknown as {
+      mockResolvedValue(v: unknown): void;
+    }
+  ).mockResolvedValue(undefined);
+  // The venue resolver reads the database; its own rule is pinned in
+  // payment-voucher-line-outlet.repository.test.ts. Identity here.
+  (
+    spyOn('resolveLineOutletIds') as unknown as {
+      mockImplementation(
+        fn: (tx: unknown, lines: unknown[]) => Promise<unknown[]>,
+      ): void;
+    }
+  ).mockImplementation(async (_tx, lines) => lines);
   return repository;
 }
 
@@ -87,7 +108,12 @@ beforeEach(() => {
 describe('update() with lines — the wipe-and-reinsert keeps what the payload cannot say', () => {
   it('a generator wage keeps component = wages; a drink keeps its receipt and photos', async () => {
     const repository = repositoryWith([
-      storedLine({ ref: ASSIGNMENT, description: 'Shift on 2026-09-15', amount: '700.00', component: 'wages' }),
+      storedLine({
+        ref: ASSIGNMENT,
+        description: 'Shift on 2026-09-15',
+        amount: '700.00',
+        component: 'wages',
+      }),
       storedLine({
         ref: DRINK_REF,
         description: 'Lemon Drop',
@@ -100,13 +126,29 @@ describe('update() with lines — the wipe-and-reinsert keeps what the payload c
 
     // Exactly what `toLineRows` builds from the agency editor's payload.
     await repository.update(VOUCHER, { updatedBy: 'agency-user' }, [
-      { lineDate: '2026-09-15', description: 'Shift on 2026-09-15', quantity: 1, amount: '650.00', ref: ASSIGNMENT },
-      { lineDate: '2026-09-15', description: 'Lemon Drop', quantity: 2, amount: '30.00', ref: DRINK_REF },
+      {
+        lineDate: '2026-09-15',
+        description: 'Shift on 2026-09-15',
+        quantity: 1,
+        amount: '650.00',
+        ref: ASSIGNMENT,
+      },
+      {
+        lineDate: '2026-09-15',
+        description: 'Lemon Drop',
+        quantity: 2,
+        amount: '30.00',
+        ref: DRINK_REF,
+      },
     ]);
 
     expect(h.state.deleted).toBe(1);
     expect(h.state.inserted).toHaveLength(2);
-    expect(h.state.inserted[0]).toMatchObject({ ref: ASSIGNMENT, amount: '650.00', component: 'wages' });
+    expect(h.state.inserted[0]).toMatchObject({
+      ref: ASSIGNMENT,
+      amount: '650.00',
+      component: 'wages',
+    });
     expect(h.state.inserted[1]).toMatchObject({
       ref: DRINK_REF,
       component: 'drink_commission',
@@ -119,7 +161,13 @@ describe('update() with lines — the wipe-and-reinsert keeps what the payload c
     const repository = repositoryWith([]);
 
     await repository.update(VOUCHER, { updatedBy: 'agency-user' }, [
-      { lineDate: '2026-09-15', description: 'Shift on 2026-09-15', quantity: 1, amount: '650.00', ref: ASSIGNMENT },
+      {
+        lineDate: '2026-09-15',
+        description: 'Shift on 2026-09-15',
+        quantity: 1,
+        amount: '650.00',
+        ref: ASSIGNMENT,
+      },
     ]);
 
     expect(h.state.inserted[0]?.component ?? null).toBeNull();

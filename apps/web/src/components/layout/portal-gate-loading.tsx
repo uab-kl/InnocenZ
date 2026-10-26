@@ -9,6 +9,9 @@ type PortalGateLoadingProps = {
 	/** Admin uses the light app background; agency/outlet use the dark portal shell. */
 	variant?: "admin" | "portal";
 	className?: string;
+	/** A failed profile lookup can be retried without opening the portal gate. */
+	onRetry?: () => void;
+	retrying?: boolean;
 };
 
 /**
@@ -36,6 +39,8 @@ export function PortalGateLoading(props: PortalGateLoadingProps) {
 function PortalGateLoadingBody({
 	variant = "admin",
 	className,
+	onRetry,
+	retrying = false,
 }: PortalGateLoadingProps) {
 	const { t } = usePortalLocale();
 	const isPortal = variant === "portal";
@@ -49,7 +54,7 @@ function PortalGateLoadingBody({
 				className,
 			)}
 			aria-live="polite"
-			aria-label={t.webShell.loadingLabel}
+			aria-label={onRetry ? t.chooseOrg.failed : t.webShell.loadingLabel}
 		>
 			{isPortal ? (
 				<div className="pointer-events-none absolute inset-0" aria-hidden>
@@ -76,26 +81,42 @@ function PortalGateLoadingBody({
 
 				<p
 					className={cn(
-						"mt-5 text-sm font-medium tracking-wide",
+						"mt-5 text-center text-sm font-medium tracking-wide",
 						isPortal ? "text-white/55" : "text-muted-foreground",
 					)}
 				>
-					{t.webShell.gettingReady}
+					{onRetry ? t.chooseOrg.failed : t.webShell.gettingReady}
 				</p>
 
-				<div
-					className={cn(
-						"relative mt-6 h-[3px] w-40 overflow-hidden rounded-full",
-						isPortal ? "bg-white/10" : "bg-muted",
-					)}
-				>
-					<span
+				{onRetry ? (
+					<button
+						type="button"
+						onClick={onRetry}
+						disabled={retrying}
 						className={cn(
-							"absolute inset-y-0 w-2/5 rounded-full animate-[iz-boot-bar_1.6s_ease-in-out_infinite]",
-							isPortal ? "bg-[#b79ce8]" : "bg-primary",
+							"mt-6 min-h-11 w-full rounded-lg px-4 py-3 text-base font-semibold disabled:opacity-60",
+							isPortal
+								? "bg-[#68517f] text-white"
+								: "bg-primary text-primary-foreground",
 						)}
-					/>
-				</div>
+					>
+						{retrying ? t.common.loading : t.common.retry}
+					</button>
+				) : (
+					<div
+						className={cn(
+							"relative mt-6 h-[3px] w-40 overflow-hidden rounded-full",
+							isPortal ? "bg-white/10" : "bg-muted",
+						)}
+					>
+						<span
+							className={cn(
+								"absolute inset-y-0 w-2/5 rounded-full animate-[iz-boot-bar_1.6s_ease-in-out_infinite]",
+								isPortal ? "bg-[#b79ce8]" : "bg-primary",
+							)}
+						/>
+					</div>
+				)}
 			</div>
 
 			<style>{`

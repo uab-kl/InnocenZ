@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import {
 	keepPreviousData,
 	useMutation,
@@ -8,12 +9,19 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, ReceiptText } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useActorName } from "@/components/admin/actor-name";
+import { AdminFilters } from "@/components/admin/admin-filters";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import {
+	PV_STATUS_BADGE,
+	RECEIPT_STATUS_BADGE,
+} from "@/components/admin/pv-status-tone";
 import {
 	agencySignLine,
 	prSignLine,
 	voucherNumberLabel,
 } from "@/components/admin/voucher-identity";
+import { formatAuditTimestamp } from "@/components/audit-log/audit-log-format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -104,21 +112,10 @@ const statusLabels: Record<
 	disputed: (t) => t.payroll.statusDisputed,
 };
 
-const statusBadgeColors: Record<PaymentVoucherStatus, string> = {
-	pending_review:
-		"border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-	sent: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
-	signed:
-		"border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
-	paid: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-	disputed:
-		"border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
-};
-
 function StatusBadge({ status }: { status: PaymentVoucherStatus }) {
 	const { t } = usePortalLocale();
 	return (
-		<Badge variant="outline" className={`${statusBadgeColors[status]} w-fit`}>
+		<Badge variant="outline" className={`${PV_STATUS_BADGE[status]} w-fit`}>
 			{statusLabels[status](t)}
 		</Badge>
 	);
@@ -150,7 +147,7 @@ function PaymentVoucherPage() {
 	const showLoading = vouchersQuery.isLoading;
 
 	return (
-		<PageShell>
+		<PageShell className="admin-finance-page">
 			<PageHeader
 				icon={ReceiptText}
 				title={t.payroll.paymentVouchers}
@@ -170,59 +167,67 @@ function PaymentVoucherPage() {
 							<CardDescription>{t.adminService.pvReadOnlyHint}</CardDescription>
 						</div>
 
-						<div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-							<div className="space-y-1.5">
-								<Label htmlFor="pv-search">{t.adminService.searchPrName}</Label>
-								<Input
-									id="pv-search"
-									placeholder={t.adminService.searchPrNamePlaceholder}
-									className="sm:w-56"
-									value={search}
-									onChange={(event) => {
-										setSearch(event.target.value);
-										setPage(1);
-									}}
-								/>
-							</div>
+						<AdminFilters className="admin-finance-filters">
+							<div className="admin-finance-filter-row flex flex-col gap-3 sm:flex-row sm:items-end">
+								<div className="space-y-1.5">
+									<Label htmlFor="pv-search">
+										{t.adminService.searchPrName}
+									</Label>
+									<Input
+										id="pv-search"
+										placeholder={t.adminService.searchPrNamePlaceholder}
+										className="sm:w-56"
+										value={search}
+										onChange={(event) => {
+											setSearch(event.target.value);
+											setPage(1);
+										}}
+									/>
+								</div>
 
-							<div className="space-y-1.5">
-								<Label htmlFor="pv-status">{t.admin.colStatus}</Label>
-								<Select
-									value={statusFilter}
-									onValueChange={(value) => {
-										setStatusFilter(value as StatusFilter);
-										setPage(1);
-									}}
-								>
-									<SelectTrigger
-										id="pv-status"
-										className="sm:w-44"
-										aria-label={t.admin.filterByStatus}
+								<div className="space-y-1.5">
+									<Label htmlFor="pv-status">{t.admin.colStatus}</Label>
+									<Select
+										value={statusFilter}
+										onValueChange={(value) => {
+											setStatusFilter(value as StatusFilter);
+											setPage(1);
+										}}
 									>
-										<SelectValue placeholder={t.admin.allStatus} />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
-										<SelectItem value="pending_review">
-											{statusLabels.pending_review(t)}
-										</SelectItem>
-										<SelectItem value="sent">{statusLabels.sent(t)}</SelectItem>
-										<SelectItem value="signed">
-											{statusLabels.signed(t)}
-										</SelectItem>
-										<SelectItem value="paid">{statusLabels.paid(t)}</SelectItem>
-										<SelectItem value="disputed">
-											{statusLabels.disputed(t)}
-										</SelectItem>
-									</SelectContent>
-								</Select>
+										<SelectTrigger
+											id="pv-status"
+											className="sm:w-44"
+											aria-label={t.admin.filterByStatus}
+										>
+											<SelectValue placeholder={t.admin.allStatus} />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+											<SelectItem value="pending_review">
+												{statusLabels.pending_review(t)}
+											</SelectItem>
+											<SelectItem value="sent">
+												{statusLabels.sent(t)}
+											</SelectItem>
+											<SelectItem value="signed">
+												{statusLabels.signed(t)}
+											</SelectItem>
+											<SelectItem value="paid">
+												{statusLabels.paid(t)}
+											</SelectItem>
+											<SelectItem value="disputed">
+												{statusLabels.disputed(t)}
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
 							</div>
-						</div>
+						</AdminFilters>
 					</div>
 				</CardHeader>
 
 				<CardContent>
-					<Table>
+					<Table className="admin-finance-table">
 						<TableHeader>
 							<TableRow>
 								<TableHead>{t.adminService.colVoucher}</TableHead>
@@ -271,7 +276,7 @@ function PaymentVoucherPage() {
 									>
 										{/* The number never travels without its agency: numbering
 										    is per agency, so two companies each hold a PV-000001. */}
-										<TableCell>
+										<TableCell data-label={t.adminService.colVoucher}>
 											<div className="font-medium tabular-nums">
 												{voucherNumberLabel(voucher)}
 											</div>
@@ -279,17 +284,27 @@ function PaymentVoucherPage() {
 												{voucher.agencyName ?? "—"}
 											</div>
 										</TableCell>
-										<TableCell className="font-medium">
+										<TableCell
+											data-label={t.adminService.colPrName}
+											className="font-medium"
+										>
 											{voucher.prName}
 										</TableCell>
-										<TableCell>{voucher.outlet ?? "—"}</TableCell>
-										<TableCell>{voucher.cycle ?? "—"}</TableCell>
-										<TableCell>
+										<TableCell data-label={t.table.outlet}>
+											{voucher.outletName ?? voucher.outlet ?? "—"}
+										</TableCell>
+										<TableCell data-label={t.adminService.colCycle}>
+											{voucher.cycle ?? "—"}
+										</TableCell>
+										<TableCell data-label={t.adminService.issued}>
 											{voucher.issuedDate ? formatDay(voucher.issuedDate) : "—"}
 										</TableCell>
 										{/* Both halves of the dual signature, with their times —
 										    the first two questions an escalation asks. */}
-										<TableCell className="text-xs">
+										<TableCell
+											data-label={t.adminService.colSigned}
+											className="text-xs"
+										>
 											<div>
 												{t.adminService.agency}:{" "}
 												{voucher.financeHeadSignedAt
@@ -300,11 +315,26 @@ function PaymentVoucherPage() {
 												{t.table.pr}: {prSignLine(voucher, fmtDateTime) ?? "—"}
 											</div>
 										</TableCell>
-										<TableCell className="text-right tabular-nums">
+										<TableCell
+											data-label={`${t.table.net} (RM)`}
+											className="text-right tabular-nums"
+										>
 											{formatPrice(voucher.net)}
 										</TableCell>
-										<TableCell>
+										<TableCell data-label={t.admin.colStatus}>
 											<StatusBadge status={voucher.status} />
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												className="admin-finance-review"
+												onClick={(event) => {
+													event.stopPropagation();
+													setSelectedId(voucher.id);
+												}}
+											>
+												{t.rbac.review}
+											</Button>
 										</TableCell>
 									</TableRow>
 								))
@@ -359,7 +389,7 @@ function PaymentVoucherPage() {
 			>
 				<SheetContent
 					side="right"
-					className="w-full overflow-y-auto sm:max-w-lg"
+					className="admin-finance-sheet w-full overflow-y-auto sm:max-w-lg"
 				>
 					{selectedId && (
 						<VoucherDetail
@@ -424,7 +454,7 @@ function VoucherDetail({
 						voucherNumberLabel(voucher),
 						agencyName,
 						voucher.cycle ?? t.adminService.paymentVoucher,
-						voucher.outlet,
+						voucher.outletName ?? voucher.outlet,
 					]
 						.filter((part): part is string => Boolean(part?.trim()))
 						.join(" · ")}
@@ -452,6 +482,11 @@ function VoucherDetail({
 					<DetailField
 						label={t.adminService.prIc}
 						value={voucher.prIc ?? "—"}
+						hint={
+							voucher.prIcMatchesProfile === false
+								? t.izPv.prIcDiffersFromProfile
+								: undefined
+						}
 					/>
 					{/* Who signed for the agency, as what, and when — then the PR. */}
 					<DetailField
@@ -476,7 +511,7 @@ function VoucherDetail({
 					<h3 className="mb-2 text-sm font-semibold">
 						{t.adminService.lineItems}
 					</h3>
-					<Table>
+					<Table className="admin-finance-table">
 						<TableHeader>
 							<TableRow>
 								<TableHead>{t.filters.date}</TableHead>
@@ -502,19 +537,27 @@ function VoucherDetail({
 							) : (
 								voucher.lines.map((line) => (
 									<TableRow key={line.id}>
-										<TableCell>{fmtDate(line.lineDate)}</TableCell>
-										<TableCell>
+										<TableCell data-label={t.filters.date}>
+											{fmtDate(line.lineDate)}
+										</TableCell>
+										<TableCell data-label={t.adminService.colDescription}>
 											{line.description}
-											{line.outlet ? (
+											{(line.outletName ?? line.outlet) ? (
 												<span className="block text-xs text-muted-foreground">
-													{line.outlet}
+													{line.outletName ?? line.outlet}
 												</span>
 											) : null}
 										</TableCell>
-										<TableCell className="text-right tabular-nums">
+										<TableCell
+											data-label={t.adminService.colQty}
+											className="text-right tabular-nums"
+										>
 											{line.quantity}
 										</TableCell>
-										<TableCell className="text-right tabular-nums">
+										<TableCell
+											data-label={`${t.adminService.colAmount} (RM)`}
+											className="text-right tabular-nums"
+										>
 											{formatPrice(line.amount)}
 										</TableCell>
 									</TableRow>
@@ -577,15 +620,15 @@ const RECEIPT_STATUS_TONE: Record<
 > = {
 	pending: {
 		label: (t) => t.adminService.pendingReview,
-		className: "border-amber-500/40 text-amber-600 dark:text-amber-400",
+		className: RECEIPT_STATUS_BADGE.pending,
 	},
 	approved: {
 		label: (t) => t.receipts.approved,
-		className: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+		className: RECEIPT_STATUS_BADGE.approved,
 	},
 	verified: {
 		label: (t) => t.receipts.verified,
-		className: "border-sky-500/40 text-sky-600 dark:text-sky-400",
+		className: RECEIPT_STATUS_BADGE.verified,
 	},
 };
 
@@ -650,19 +693,7 @@ function ReceiptEvidence({
 										{receipt.note}
 									</p>
 								)}
-								<p className="mt-1 text-xs text-muted-foreground">
-									{/* A null reviewedAt beside `approved` means the row
-									    predates the review flow — never print a date derived
-									    from something else. */}
-									{receipt.reviewedBy
-										? fill(t.adminService.reviewedAtBy, {
-												when: fmtDateTime(receipt.reviewedAt),
-												name: receipt.reviewedBy,
-											})
-										: fill(t.adminService.reviewedAt, {
-												when: fmtDateTime(receipt.reviewedAt),
-											})}
-								</p>
+								<ReceiptReviewedLine receipt={receipt} />
 								{photos.length > 0 && (
 									<div className="mt-2 flex flex-wrap gap-2">
 										{photos.map((src) => (
@@ -692,6 +723,35 @@ function ReceiptEvidence({
 			)}
 		</div>
 	);
+}
+
+/**
+ * When the receipt was reviewed, and by WHOM — `reviewed_by` is an account id,
+ * which this line used to print as is. A null reviewedAt beside `approved`
+ * means the row predates the review flow — never print a date derived from
+ * something else.
+ */
+function ReceiptReviewedLine({ receipt }: { receipt: PaymentVoucherReceipt }) {
+	const { t } = usePortalLocale();
+	const reviewer = useActorName(receipt.reviewedBy, t);
+	return (
+		<p className="mt-1 text-xs text-muted-foreground">
+			{receipt.reviewedBy
+				? fill(t.adminService.reviewedAtBy, {
+						when: fmtDateTime(receipt.reviewedAt),
+						name: reviewer,
+					})
+				: fill(t.adminService.reviewedAt, {
+						when: fmtDateTime(receipt.reviewedAt),
+					})}
+		</p>
+	);
+}
+
+/** Who settled a dispute, by name — `resolved_by` is an account id. */
+function ResolvedByName({ actor }: { actor: string }) {
+	const { t } = usePortalLocale();
+	return <>{` · ${useActorName(actor, t)}`}</>;
 }
 
 const DISPUTE_COMPONENT_LABEL: Record<
@@ -914,7 +974,9 @@ function VoucherDisputes({
 						{dispute.outcome ? (
 							<p className="mt-2 text-xs text-muted-foreground">
 								{fmtDateTime(dispute.resolvedAt)}
-								{dispute.resolvedBy ? ` · ${dispute.resolvedBy}` : ""}
+								{dispute.resolvedBy ? (
+									<ResolvedByName actor={dispute.resolvedBy} />
+								) : null}
 								{dispute.resolutionNote ? ` — ${dispute.resolutionNote}` : ""}
 							</p>
 						) : (
@@ -965,11 +1027,25 @@ function VoucherDisputes({
 	);
 }
 
-function DetailField({ label, value }: { label: string; value: string }) {
+function DetailField({
+	label,
+	value,
+	hint,
+}: {
+	label: string;
+	value: string;
+	/** An amber "check this" line under the value (house code: amber = waiting on someone). */
+	hint?: string;
+}) {
 	return (
 		<div>
 			<dt className="text-muted-foreground">{label}</dt>
 			<dd className="font-medium">{value}</dd>
+			{hint && (
+				<dd className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
+					{hint}
+				</dd>
+			)}
 		</div>
 	);
 }
@@ -1005,8 +1081,15 @@ function fmtDate(value: string | null): string {
 	return value ? formatDay(value) : "—";
 }
 
+/**
+ * A signed / reviewed / paid instant in the admin's one date-time format —
+ * "14 Sep 2026, 11:30:40 am". `toLocaleString` printed "14/09/2026, 11:30:40
+ * am" here, a second format for the same kind of fact the audit log and every
+ * other admin page write day-first with the month in words.
+ */
 function fmtDateTime(value: string | null): string {
 	if (!value) return "—";
-	const date = new Date(value);
-	return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("en-MY");
+	return Number.isNaN(new Date(value).getTime())
+		? "—"
+		: formatAuditTimestamp(value);
 }

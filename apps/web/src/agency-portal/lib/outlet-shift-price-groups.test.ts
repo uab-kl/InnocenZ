@@ -34,6 +34,8 @@ describe("shiftPriceGroups", () => {
 		});
 		// Tips is priced on the Service Entitlement list, as on Workspace.
 		expect(groups[1]?.lines.map((l) => l.name)).toEqual(["Tips", "Havoc"]);
+		// …but is not a service, so the range is Havoc's alone (not RM 50–1,000).
+		expect(groups[1]).toMatchObject({ minRm: 1000, maxRm: 1000 });
 	});
 
 	it("only an event menu is 'event-specific', and it flags changed prices", () => {

@@ -229,7 +229,7 @@ export function OutletTodayOperationPanel({
 	const [comcardZoomOpen, setComcardZoomOpen] = useState(false);
 	const [historyPrId, setHistoryPrId] = useState<string | null>(null);
 	const [liveSalesPrId, setLiveSalesPrId] = useState<string | null>(null);
-	const [prTonightOpen, setPrTonightOpen] = useState(false);
+	const [prTonightOpen, setPrTonightOpen] = useState(true);
 	const [liveSalesOpen, setLiveSalesOpen] = useState(false);
 
 	/**
@@ -714,7 +714,7 @@ export function OutletTodayOperationPanel({
 						{t.today.noPrsTonight}
 					</p>
 				) : (
-					<div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+					<div className="iz-approved-tonight-grid">
 						{staffTonight.map(({ pr, slot, displayStatus }) => {
 							const agencyProfile = agencyPrById.get(pr.id);
 							const comcardPr = agencyProfile

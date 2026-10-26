@@ -15,6 +15,7 @@ import {
 	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
+import { OutletMobileFilters } from "@agency-portal/components/outlet/OutletMobileFilters";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import {
 	canGeneratePortfolioComcard,
@@ -23,6 +24,7 @@ import {
 import { useAgencyPenaltyProposals } from "@agency-portal/hooks/use-agency-penalty-proposals";
 import { useAgencyPenaltyRules } from "@agency-portal/hooks/use-agency-penalty-rules";
 import { useAgencyPrLiveStatus } from "@agency-portal/hooks/use-agency-pr-live-status";
+import { useAgencyPrPenalties } from "@agency-portal/hooks/use-agency-pr-penalties";
 import {
 	shiftOutcomeLabel,
 	useAgencyPrShiftHistory,
@@ -48,6 +50,7 @@ import {
 	RATING_SUSPEND_SHIFT_THRESHOLD,
 	RATING_WARN_THRESHOLD,
 } from "@agency-portal/lib/agency-pr-flags";
+import { formatPayrollDay } from "@agency-portal/lib/payroll-display";
 import { shiftHistoryForPr } from "@agency-portal/lib/portal-sync";
 import {
 	evaluatePrPenalties,
@@ -91,6 +94,7 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { languageLabel, raceLabel } from "@/lib/portal-i18n/language-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import "./agency-management-design.css";
 
 /** How many shifts the card shows. Content, not styling — leave it at 3. */
 const SHIFT_HISTORY_ROWS = 3;
@@ -148,6 +152,82 @@ function penaltyBreachLabel(
 	t: PortalTranslations,
 ): string {
 	return PENALTY_BREACH_LABELS[ruleId]?.(t) ?? fallback;
+}
+
+/**
+ * The profile's penalties on a REAL session — this PR's rows from the reads
+ * Payroll uses (see `prPenaltyItems`). Loading and failure are said as such:
+ * "no penalties" while the request is still out, or after it failed, would be
+ * a settled-sounding answer the screen does not have.
+ */
+function PrProfilePenaltyList({
+	penalties,
+}: {
+	penalties: ReturnType<typeof useAgencyPrPenalties>;
+}) {
+	const { t } = usePortalLocale();
+	if (penalties.isLoading) {
+		return <p className="iz-sm iz-muted2">{t.managePr.loadingPenalties}</p>;
+	}
+	if (penalties.isError) {
+		return (
+			<p className="iz-sm text-[var(--iz-red,#e5484d)]">
+				{t.managePr.penaltiesLoadFailed}
+			</p>
+		);
+	}
+	if (penalties.items.length === 0) {
+		return <p className="iz-sm iz-muted">{t.managePr.noActivePenalties}</p>;
+	}
+	return (
+		<div className="space-y-2">
+			<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+				{penalties.items.map((item) => (
+					<div
+						key={item.key}
+						className="rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2.5"
+					>
+						<div className="flex items-center justify-between gap-2">
+							<span className="text-sm font-semibold text-[var(--iz-txt)]">
+								{penaltyRuleTypeLabel(item.ruleType, t)}
+							</span>
+							<span className="shrink-0 text-sm font-semibold tabular-nums text-[var(--iz-red,#e5484d)]">
+								{item.fineRm > 0
+									? `RM ${item.fineRm.toFixed(2)}`
+									: t.managePr.warning}
+							</span>
+						</div>
+						<p className="iz-sm iz-muted mt-0.5">
+							{item.detail ??
+								[
+									item.shiftDate ? formatPayrollDay(item.shiftDate, t) : null,
+									item.outletName,
+								]
+									.filter(Boolean)
+									.join(" · ")}
+						</p>
+						{/* Recorded vs still only a finding — the same words the
+						    Manage PR list uses, both pointing at Payroll. */}
+						<p className="iz-tiny iz-muted2 mt-0.5">
+							{item.recorded
+								? t.agencyPrs.penaltyRecorded
+								: t.agencyPrs.penaltyNotRecorded}
+						</p>
+					</div>
+				))}
+			</div>
+			{penalties.totalRm > 0 && (
+				<div className="flex items-center justify-between rounded-lg bg-[rgba(229,72,77,0.08)] px-2.5 py-2">
+					<span className="iz-sm font-semibold uppercase tracking-wide text-[var(--iz-red,#e5484d)]">
+						{t.managePr.pendingDeduction}
+					</span>
+					<span className="text-base font-bold tabular-nums text-[var(--iz-red,#e5484d)]">
+						RM {penalties.totalRm.toFixed(2)}
+					</span>
+				</div>
+			)}
+		</div>
+	);
 }
 
 /**
@@ -455,7 +535,7 @@ function AgencyManagePRs() {
 	};
 
 	return (
-		<div className="iz-screen">
+		<div className="iz-screen iz-agency-pr-management">
 			<header className="iz-pr-manage-header">
 				<div className="min-w-0">
 					<IzPageTitle>{t.managePr.title}</IzPageTitle>
@@ -476,7 +556,6 @@ function AgencyManagePRs() {
 					</button>
 				</div>
 			</header>
-
 			<IzCard flat className="border-[var(--iz-line2)]">
 				<button
 					type="button"
@@ -619,7 +698,6 @@ function AgencyManagePRs() {
 						</div>
 					))}
 			</IzCard>
-
 			<IzCard flat className="border-[var(--iz-line2)]">
 				<button
 					type="button"
@@ -673,144 +751,163 @@ function AgencyManagePRs() {
 			{/* The house filter bar — same one the roster tabs and Manage Outlet use.
 			    These were six placeholder-only boxes: the moment you picked a value the
 			    word telling you what it meant was replaced by the value itself. */}
-			<div className="iz-roster-filterbar iz-roster-filterbar--fill">
-				<div className="iz-roster-filterbar__head">
-					<span className="iz-roster-filterbar__title">
-						{t.managePr.filterPrs}
-					</span>
-					<span className="iz-roster-filterbar__spacer" />
-					<span className="iz-roster-filterbar__count">
-						{filtered.length} {t.roster.countOf} {totalPrs}
-					</span>
-					{activeFilterCount > 0 && (
-						<button
-							type="button"
-							className="iz-roster-filterbar__clear"
-							onClick={clearPrFilters}
-						>
-							<RotateCcw className="h-3.5 w-3.5" />
-							{t.rosterGrid.clearFilters}
-							<span className="iz-roster-filterbar__badge">
-								{activeFilterCount}
-							</span>
-						</button>
-					)}
-				</div>
+			<OutletMobileFilters>
+				<div className="iz-roster-filterbar iz-roster-filterbar--fill">
+					<div className="iz-roster-filterbar__head">
+						<span className="iz-roster-filterbar__title">
+							{t.managePr.filterPrs}
+						</span>
+						<span className="iz-roster-filterbar__spacer" />
+						<span className="iz-roster-filterbar__count">
+							{filtered.length} {t.roster.countOf} {totalPrs}
+						</span>
+						{activeFilterCount > 0 && (
+							<button
+								type="button"
+								className="iz-roster-filterbar__clear"
+								onClick={clearPrFilters}
+							>
+								<RotateCcw className="h-3.5 w-3.5" />
+								{t.rosterGrid.clearFilters}
+								<span className="iz-roster-filterbar__badge">
+									{activeFilterCount}
+								</span>
+							</button>
+						)}
+					</div>
 
-				<div className="iz-roster-filterbar__row">
-					<label className="iz-roster-filterbar__field">
-						<span className="iz-roster-filterbar__label">{t.filters.name}</span>
-						{/* `__input` is a BARE input on purpose — no border, transparent —
+					<div className="iz-roster-filterbar__row">
+						<label className="iz-roster-filterbar__field">
+							<span className="iz-roster-filterbar__label">
+								{t.filters.name}
+							</span>
+							{/* `__input` is a BARE input on purpose — no border, transparent —
 						    and the box is drawn by `__inputwrap` around it, or by the
 						    `--num` modifier on the numeric fields. Used on its own it
 						    renders as loose text beside boxed neighbours, which is exactly
 						    how this field first shipped. The wrapper also gives the search
 						    icon somewhere to live and carries the focus ring. */}
-						<span className="iz-roster-filterbar__inputwrap">
-							<Search className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
-							<input
-								type="search"
-								className="iz-roster-filterbar__input"
-								placeholder={t.filters.allNames}
-								value={nameQuery}
-								onChange={(e) => setNameQuery(e.target.value)}
-							/>
-						</span>
-					</label>
-					<label className="iz-roster-filterbar__field">
-						<span className="iz-roster-filterbar__label">{t.managePr.age}</span>
-						<input
-							type="number"
-							className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
-							placeholder={t.managePr.minAge}
-							value={ageMin}
-							onChange={(e) => setAgeMin(e.target.value)}
-						/>
-					</label>
-					<label className="iz-roster-filterbar__field">
-						<span className="iz-roster-filterbar__label">
-							{t.managePr.rating}
-						</span>
-						<input
-							type="number"
-							min={0}
-							max={5}
-							step={0.1}
-							className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
-							placeholder={t.managePr.minRating}
-							value={ratingMin}
-							onChange={(e) => setRatingMin(e.target.value)}
-						/>
-					</label>
-					<label className="iz-roster-filterbar__field">
-						<span className="iz-roster-filterbar__label">
-							{t.managePr.experience}
-						</span>
-						<input
-							type="number"
-							className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
-							placeholder={t.managePr.minYears}
-							value={expMin}
-							onChange={(e) => setExpMin(e.target.value)}
-						/>
-					</label>
-					<label htmlFor={langSelectId} className="iz-roster-filterbar__field">
-						<span className="iz-roster-filterbar__label">
-							{t.managePr.languages}
-						</span>
-						<IzSelect
-							id={langSelectId}
-							block
-							value={lang}
-							onChange={(e) => setLang(e.target.value)}
+							<span className="iz-roster-filterbar__inputwrap">
+								<Search className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
+								<input
+									type="search"
+									className="iz-roster-filterbar__input"
+									placeholder={t.filters.allNames}
+									value={nameQuery}
+									onChange={(e) => setNameQuery(e.target.value)}
+								/>
+							</span>
+						</label>
+						<label
+							htmlFor={langSelectId}
+							className="iz-roster-filterbar__field"
 						>
-							<option value="">{t.managePr.allLanguages}</option>
-							{languages.map((l) => (
-								<option key={l} value={l}>
-									{languageLabel(l, t)}
-								</option>
-							))}
-						</IzSelect>
-					</label>
-					<label htmlFor={raceSelectId} className="iz-roster-filterbar__field">
-						<span className="iz-roster-filterbar__label">
-							{t.managePr.race}
-						</span>
-						<IzSelect
-							id={raceSelectId}
-							block
-							value={race}
-							onChange={(e) => setRace(e.target.value)}
+							<span className="iz-roster-filterbar__label">
+								{t.managePr.languages}
+							</span>
+							<IzSelect
+								id={langSelectId}
+								block
+								value={lang}
+								onChange={(e) => setLang(e.target.value)}
+							>
+								<option value="">{t.managePr.allLanguages}</option>
+								{languages.map((l) => (
+									<option key={l} value={l}>
+										{languageLabel(l, t)}
+									</option>
+								))}
+							</IzSelect>
+						</label>
+						<label
+							htmlFor={placeSelectId}
+							className="iz-roster-filterbar__field"
 						>
-							<option value="">{t.managePr.allRaces}</option>
-							{races.map((r) => (
-								<option key={r.value} value={r.value}>
-									{raceLabel(r.label, t)}
-								</option>
-							))}
-						</IzSelect>
-					</label>
-					<label htmlFor={placeSelectId} className="iz-roster-filterbar__field">
-						<span className="iz-roster-filterbar__label">
-							{t.managePr.place}
-						</span>
-						<IzSelect
-							id={placeSelectId}
-							block
-							value={place}
-							onChange={(e) => setPlace(e.target.value)}
-						>
-							<option value="">{t.managePr.allPlaces}</option>
-							{places.map((pl) => (
-								<option key={pl} value={pl}>
-									{pl}
-								</option>
-							))}
-						</IzSelect>
-					</label>
+							<span className="iz-roster-filterbar__label">
+								{t.managePr.place}
+							</span>
+							<IzSelect
+								id={placeSelectId}
+								block
+								value={place}
+								onChange={(e) => setPlace(e.target.value)}
+							>
+								<option value="">{t.managePr.allPlaces}</option>
+								{places.map((pl) => (
+									<option key={pl} value={pl}>
+										{pl}
+									</option>
+								))}
+							</IzSelect>
+						</label>
+					</div>
+					<details className="iz-approved-more-filters">
+						<summary>{t.approvedDesign.moreFilters}</summary>
+						<div className="iz-roster-filterbar__row">
+							<label className="iz-roster-filterbar__field">
+								<span className="iz-roster-filterbar__label">
+									{t.managePr.age}
+								</span>
+								<input
+									type="number"
+									className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
+									placeholder={t.managePr.minAge}
+									value={ageMin}
+									onChange={(e) => setAgeMin(e.target.value)}
+								/>
+							</label>
+							<label className="iz-roster-filterbar__field">
+								<span className="iz-roster-filterbar__label">
+									{t.managePr.rating}
+								</span>
+								<input
+									type="number"
+									min={0}
+									max={5}
+									step={0.1}
+									className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
+									placeholder={t.managePr.minRating}
+									value={ratingMin}
+									onChange={(e) => setRatingMin(e.target.value)}
+								/>
+							</label>
+							<label className="iz-roster-filterbar__field">
+								<span className="iz-roster-filterbar__label">
+									{t.managePr.experience}
+								</span>
+								<input
+									type="number"
+									className="iz-roster-filterbar__input iz-roster-filterbar__input--num"
+									placeholder={t.managePr.minYears}
+									value={expMin}
+									onChange={(e) => setExpMin(e.target.value)}
+								/>
+							</label>
+							<label
+								htmlFor={raceSelectId}
+								className="iz-roster-filterbar__field"
+							>
+								<span className="iz-roster-filterbar__label">
+									{t.managePr.race}
+								</span>
+								<IzSelect
+									id={raceSelectId}
+									block
+									value={race}
+									onChange={(e) => setRace(e.target.value)}
+								>
+									<option value="">{t.managePr.allRaces}</option>
+									{races.map((r) => (
+										<option key={r.value} value={r.value}>
+											{raceLabel(r.label, t)}
+										</option>
+									))}
+								</IzSelect>
+							</label>
+						</div>
+					</details>
 				</div>
-			</div>
-
+			</OutletMobileFilters>
 			<section className="mt-4">
 				<div className="iz-pr-manage-stats">
 					<span className="iz-pr-manage-stats__count">
@@ -1006,13 +1103,21 @@ function AgencyPrDetail({
 }) {
 	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
+	/*
+	 * THIS PR'S PENALTIES. A real session reads the rows Payroll reads — this
+	 * week's unrecorded breaches, recorded penalties and cancellation fees not
+	 * yet billed — cut to this PR. The browser evaluator below only works on
+	 * DEMO PRs: `shiftsThisWeek` and friends do not exist on a backend PR, so
+	 * on a real roster it always said "none". It runs for a demo session only,
+	 * and its numbers never reach a real one.
+	 */
+	const prPenalties = useAgencyPrPenalties(detail.id);
 	const penaltyRules = normalizePenaltyRules(
 		useStore((s) => s.agencyPenaltyRules),
 	);
-	const penaltyBreaches = evaluatePrPenalties(
-		prAttendanceWindow(detail),
-		penaltyRules,
-	);
+	const penaltyBreaches = prPenalties.backed
+		? []
+		: evaluatePrPenalties(prAttendanceWindow(detail), penaltyRules);
 	const penaltyTotalRm = totalPenaltyFineRm(penaltyBreaches);
 	const [editing, setEditing] = useState(false);
 	const [suspendOpen, setSuspendOpen] = useState(false);
@@ -1350,7 +1455,9 @@ function AgencyPrDetail({
 
 			<IzSectionLabel>{t.managePr.penalties}</IzSectionLabel>
 			<IzCard flat>
-				{penaltyBreaches.length === 0 ? (
+				{prPenalties.backed ? (
+					<PrProfilePenaltyList penalties={prPenalties} />
+				) : penaltyBreaches.length === 0 ? (
 					<p className="iz-sm iz-muted">{t.managePr.noActivePenalties}</p>
 				) : (
 					<div className="space-y-2">

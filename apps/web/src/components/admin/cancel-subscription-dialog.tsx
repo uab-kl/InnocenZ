@@ -1,3 +1,4 @@
+import "@/components/admin/admin-finance-design.css";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,7 +54,7 @@ export function CancelSubscriptionDialog({
 	const { t } = usePortalLocale();
 	return (
 		<Dialog open={record !== null} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-md">
+			<DialogContent className="admin-finance-sheet sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>{t.adminBusiness.cancelSubscriptionTitle}</DialogTitle>
 					<DialogDescription>

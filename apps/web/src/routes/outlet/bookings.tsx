@@ -1,7 +1,8 @@
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
-import { IzPageTitle, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import { IzPageTitle } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
 import { EventTemplatePicker } from "@agency-portal/components/outlet/EventTemplatePicker";
+import "@agency-portal/components/outlet/outlet-post-job-design.css";
 import {
 	OutletPage,
 	OutletPageHeader,
@@ -13,13 +14,11 @@ import {
 	buildLanguagesLabel,
 	type DraftShift,
 	DraftShiftEditor,
-	DraftShiftSummary,
 	defaultComposerPayTierRows,
 	draftTierRatesFromWorkspace,
 	eachJobDateFromIsos,
 	estimateDraftShiftCost,
 	formatJobDate,
-	formatJobDates,
 	isoFromJobDate,
 	newDraftShift,
 	resolveDraftEventName,
@@ -248,6 +247,7 @@ function PostJobPage() {
 			// newDraftShift returns a fixed shape; the template link rides on top.
 			templateId: tpl.id,
 			templateName: tpl.name,
+			templateCoverImage: tpl.coverImage,
 		});
 		setEventChosen(tpl);
 	};
@@ -261,6 +261,8 @@ function PostJobPage() {
 	const [helpOpen, setHelpOpen] = useState(false);
 
 	const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+	const activeShift =
+		draftShifts.find((shift) => shift.id === editingShiftId) ?? composer;
 
 	// The backend card arrives a beat after mount, so this signature change is
 	// also what seeds a real session's composer — it starts on the store's blank
@@ -322,7 +324,9 @@ function PostJobPage() {
 	const namedPrsOnDate = (jobDate: Date, excludeShiftId?: string) => {
 		const iso = isoFromJobDate(jobDate);
 		const booked = outletNamedPrCountForDate(capShifts, outletName, iso);
-		const fromDrafts = draftShifts
+		const fromDrafts = (
+			excludeShiftId ? [...draftShifts, composer] : draftShifts
+		)
 			.filter((d) => d.id !== excludeShiftId)
 			.flatMap((d) =>
 				eachJobDateFromIsos(d.selectedDateIsos).map((day) => ({
@@ -338,7 +342,9 @@ function PostJobPage() {
 	const headcountOnDate = (jobDate: Date, excludeShiftId?: string) => {
 		const iso = isoFromJobDate(jobDate);
 		const booked = outletPrHeadcountForDate(capShifts, outletName, iso);
-		const fromDrafts = draftShifts
+		const fromDrafts = (
+			excludeShiftId ? [...draftShifts, composer] : draftShifts
+		)
 			.filter((d) => d.id !== excludeShiftId)
 			.flatMap((d) =>
 				eachJobDateFromIsos(d.selectedDateIsos).map((day) => ({
@@ -434,6 +440,9 @@ function PostJobPage() {
 		}
 
 		const snapshot = newDraftShift({
+			templateId: composer.templateId,
+			templateName: composer.templateName,
+			templateCoverImage: composer.templateCoverImage,
 			selectedDateIsos: [...composer.selectedDateIsos],
 
 			// Kept raw, blank included: the summary card and the post payload each
@@ -508,37 +517,31 @@ function PostJobPage() {
 		if (editingShiftId === id) setEditingShiftId(null);
 	};
 
-	const sectionDate =
-		draftShifts.length > 0
-			? formatJobDates(draftShifts[0].selectedDateIsos, t)
-			: formatJobDates(composer.selectedDateIsos, t);
-
-	const totalHeadcount =
-		draftShifts.reduce((sum, s) => sum + s.quantity, 0) +
-		(draftShifts.length === 0
-			? totalPrCountFromPayTierRows(composer.payTierRows)
-			: 0);
-
-	const totalCost =
-		draftShifts.reduce(
-			(sum, s) => sum + estimateDraftShiftCost(s, prTierById),
-			0,
-		) +
-		(draftShifts.length === 0
-			? estimateDraftShiftCost(composer, prTierById)
-			: 0);
-
-	const shiftCountForPost = draftShifts.length > 0 ? draftShifts.length : 1;
+	// Every visible tab is part of the batch, including the current composer.
+	const shiftsToPost = [...draftShifts, composer];
+	const totalHeadcount = shiftsToPost.reduce(
+		(sum, shift) => sum + totalPrCountFromPayTierRows(shift.payTierRows),
+		0,
+	);
+	const totalCost = shiftsToPost.reduce(
+		(sum, shift) => sum + estimateDraftShiftCost(shift, prTierById),
+		0,
+	);
+	const shiftCountForPost = shiftsToPost.length;
 
 	const submitNew = () => {
 		// ONE post at a time. Both Post buttons are disabled while one is in flight;
 		// this also stops the tap that lands before they re-render (`postInFlight`).
 		if (isPosting || postInFlight.current) return;
 
-		const shiftsToPost = draftShifts.length > 0 ? draftShifts : [composer];
 		if (shiftsToPost.length === 0) return;
 
 		for (const s of shiftsToPost) {
+			if (s.quantity <= 0 || totalPrCountFromPayTierRows(s.payTierRows) <= 0) {
+				setEditingShiftId(s.id === composer.id ? null : s.id);
+				toast(t.postJob.setPrCountPerTier, "warn");
+				return;
+			}
 			if (
 				s.eventKind === "special" &&
 				isOtherSpecialEvent(s.specialEventType) &&
@@ -883,7 +886,7 @@ function PostJobPage() {
 	}
 
 	return (
-		<OutletPage>
+		<OutletPage className="outlet-post-job-design">
 			{editingShiftId && tab === "shifts" && (
 				<AppTopbar
 					onBack={() => setEditingShiftId(null)}
@@ -1028,6 +1031,30 @@ function PostJobPage() {
 							viewOnly ? "m-0 border-0 p-0 opacity-70" : "m-0 border-0 p-0"
 						}
 					>
+						{(draftShifts.length > 0 || eventChosen !== null || !backed) && (
+							<nav
+								className="outlet-job-shift-tabs"
+								aria-label={t.postJob.shiftDetails}
+							>
+								{draftShifts.map((shift, index) => (
+									<button
+										key={shift.id}
+										type="button"
+										aria-pressed={editingShiftId === shift.id}
+										onClick={() => setEditingShiftId(shift.id)}
+									>
+										{fill(t.postJob.shiftN, { n: index + 1 })}
+									</button>
+								))}
+								<button
+									type="button"
+									aria-pressed={!editingShiftId}
+									onClick={() => setEditingShiftId(null)}
+								>
+									{fill(t.postJob.shiftN, { n: draftShifts.length + 1 })}
+								</button>
+							</nav>
+						)}
 						{backed && !editingShiftId && eventChosen === null ? (
 							<EventTemplatePicker
 								onPick={applyTemplate}
@@ -1037,93 +1064,75 @@ function PostJobPage() {
 							<>
 								<div className="iz-post-job-layout">
 									<div className="iz-post-job-layout__main">
-										{eventChosen && eventChosen !== "blank" && (
+										{activeShift.templateId && (
 											<ChosenEventBar
-												template={eventChosen}
-												eventName={composer.event}
-												onChange={() => {
-													setComposer(freshDraft());
-													setEventChosen(null);
+												template={{
+													name: activeShift.templateName ?? activeShift.event,
+													eventKind: activeShift.eventKind,
+													coverImage: activeShift.templateCoverImage ?? null,
 												}}
+												eventName={activeShift.event}
+												onChange={
+													!editingShiftId
+														? () => {
+																setComposer(freshDraft());
+																setEventChosen(null);
+															}
+														: undefined
+												}
 											/>
 										)}
-										<DraftShiftEditor
-											eventTypeLocked={Boolean(
-												eventChosen && eventChosen !== "blank",
-											)}
-											shift={composer}
-											onChange={(patch) =>
-												setComposer((c) => ({ ...c, ...patch }))
-											}
-											title={t.postJob.shiftDetails}
-											shiftIndex={1}
-											shiftTotal={Math.max(1, draftShifts.length + 1)}
-											namedPrsOnDate={composerNamedPrsOnDate}
-											peopleRemaining={composerPeopleRemaining}
-											prCandidates={prPool.backed ? prPool.prs : undefined}
-											prEmptyHint={prPoolHint}
-											workspaceMenu={workspaceMenu}
-											workspaceRates={effectiveWorkspace}
-										/>
-
-										{draftShifts.length > 0 && (
-											<>
-												<div className="mt-4 flex items-center justify-between">
-													<IzSectionLabel>
-														{fill(t.outletRoutes.shiftsForDate, {
-															date: sectionDate.toLowerCase(),
-														})}
-													</IzSectionLabel>
-													<span className="text-[10px] text-[var(--iz-muted)]">
-														{fill(
-															draftShifts.length === 1
-																? t.outletRoutes.slotCountOne
-																: t.outletRoutes.slotCountMany,
-															{ n: draftShifts.length },
-														)}
-													</span>
-												</div>
-												<div className="mt-3 flex flex-col gap-4">
-													{draftShifts.map((s, i) =>
-														editingShiftId === s.id ? (
-															<DraftShiftEditor
-																key={s.id}
-																shift={s}
-																onChange={(patch) =>
-																	updateDraftShift(s.id, patch)
-																}
-																onRemove={() => removeDraftShift(s.id)}
-																showRemove
-																title={t.postJob.shiftDetails}
-																shiftIndex={i + 1}
-																shiftTotal={draftShifts.length}
-																onDone={() => setEditingShiftId(null)}
-																namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
-																peopleRemaining={peopleRemainingForShift(
-																	s,
-																	s.id,
-																)}
-																prCandidates={
-																	prPool.backed ? prPool.prs : undefined
-																}
-																prEmptyHint={prPoolHint}
-																workspaceMenu={workspaceMenu}
-																workspaceRates={effectiveWorkspace}
-															/>
-														) : (
-															<DraftShiftSummary
-																key={s.id}
-																shift={s}
-																title={fill(t.postJob.shiftN, { n: i + 1 })}
-																onEdit={() => setEditingShiftId(s.id)}
-																onRemove={() => removeDraftShift(s.id)}
-																showRemove
-																workspaceMenu={workspaceMenu}
-															/>
-														),
-													)}
-												</div>
-											</>
+										{!editingShiftId ? (
+											<DraftShiftEditor
+												key={composer.id}
+												eventTypeLocked={Boolean(composer.templateId)}
+												shift={composer}
+												onRemove={() => {
+													const previous = draftShifts[draftShifts.length - 1];
+													if (!previous) return;
+													setComposer(previous);
+													setDraftShifts((current) => current.slice(0, -1));
+													setEventChosen("blank");
+												}}
+												showRemove={draftShifts.length > 0}
+												onChange={(patch) =>
+													setComposer((c) => ({ ...c, ...patch }))
+												}
+												title={t.postJob.shiftDetails}
+												shiftIndex={draftShifts.length + 1}
+												shiftTotal={Math.max(1, draftShifts.length + 1)}
+												namedPrsOnDate={composerNamedPrsOnDate}
+												peopleRemaining={composerPeopleRemaining}
+												prCandidates={prPool.backed ? prPool.prs : undefined}
+												prEmptyHint={prPoolHint}
+												workspaceMenu={workspaceMenu}
+												workspaceRates={effectiveWorkspace}
+											/>
+										) : (
+											draftShifts.map((s, i) =>
+												editingShiftId === s.id ? (
+													<DraftShiftEditor
+														key={s.id}
+														shift={s}
+														eventTypeLocked={Boolean(s.templateId)}
+														onChange={(patch) => updateDraftShift(s.id, patch)}
+														onRemove={() => removeDraftShift(s.id)}
+														showRemove
+														title={t.postJob.shiftDetails}
+														shiftIndex={i + 1}
+														shiftTotal={draftShifts.length + 1}
+														onDone={() => setEditingShiftId(null)}
+														namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
+														peopleRemaining={peopleRemainingForShift(s, s.id)}
+														prCandidates={
+															prPool.backed ? prPool.prs : undefined
+														}
+														prEmptyHint={prPoolHint}
+														workspaceMenu={workspaceMenu}
+														workspaceRates={effectiveWorkspace}
+													/>
+												) : null,
+											)
 										)}
 									</div>
 
@@ -1220,10 +1229,10 @@ function ChosenEventBar({
 	eventName,
 	onChange,
 }: {
-	template: ShiftTemplate;
+	template: Pick<ShiftTemplate, "name" | "eventKind" | "coverImage">;
 	/** The composer's LIVE event name - may differ from the card's name. */
 	eventName?: string;
-	onChange: () => void;
+	onChange?: () => void;
 }) {
 	const { t } = usePortalLocale();
 	const cover = apiAssetUrl(template.coverImage);
@@ -1275,10 +1284,12 @@ function ChosenEventBar({
 					{eventName?.trim() || t.postJob.clickToPutEventName}
 				</span>
 			</span>
-			<button type="button" className="iz-chip" onClick={onChange}>
-				<ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-				{t.postJob.changeEvent}
-			</button>
+			{onChange && (
+				<button type="button" className="iz-chip" onClick={onChange}>
+					<ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+					{t.postJob.changeEvent}
+				</button>
+			)}
 			{zoomOpen && cover && (
 				<PhotoLightbox
 					photo={cover}

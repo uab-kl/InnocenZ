@@ -91,29 +91,29 @@ export function AiSuggestionsPanel() {
 
 	return (
 		<>
-			<button
-				type="button"
-				className="iz-portal-ai-btn w-full text-left"
-				disabled={!canAssign}
-				onClick={() => setOpen(true)}
-			>
-				<div className="iz-portal-ai-btn__label">
-					<Layers
-						className="h-4 w-4 text-[var(--iz-violet)]"
-						strokeWidth={1.8}
-					/>
-					<span>{t.agencyHome.aiSuggestion}</span>
+			<section className="iz-approved-staffing-panel">
+				<h2>{t.approvedDesign.staffingSuggestions}</h2>
+				<p>
+					{title} · {desc}
+				</p>
+				<div className="iz-approved-section-actions">
+					<button
+						type="button"
+						className="iz-btn iz-btn-soft"
+						disabled={!canAssign}
+						onClick={() => setOpen(true)}
+					>
+						{t.approvedDesign.reviewAutoAssignment}
+					</button>
+					<Link
+						to="/agency/roster"
+						search={{ view: "planning" }}
+						className="iz-btn iz-btn-soft"
+					>
+						{t.agencyHome.openRosterPlanning}
+					</Link>
 				</div>
-				<div className="iz-portal-ai-btn__body">
-					<div className="min-w-0 flex-1">
-						<div className="iz-heading text-sm font-semibold leading-snug">
-							{title}
-						</div>
-						<p className="iz-tiny iz-muted mt-0.5">{desc}</p>
-					</div>
-					<ChevronRight className="h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
-				</div>
-			</button>
+			</section>
 
 			{open && (
 				<AutoAssignSheet
