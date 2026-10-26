@@ -218,3 +218,11 @@ Dated history lives in `TEST_SCRIPT.md` §8/§10; rules live in `CLAUDE.md`.
 ### Newly added - file these into a section above
 
 - [Shorts fix never drop details](shorts-fix-never-drop-details.md) — "Owner, 12 Oct 2026: when fixing the Seedance/Higgsfield short prompts, never remove important details — only repetition may go; prove it with a before/after detail check"
+
+### Newly added - file these into a section above
+
+- [Xhs reply policy](xhs-reply-policy.md) — "STANDING (owner, 15 Oct 2026): whenever the owner brings a 小红书/RedNote comment, apply RedNote's rules and write a reply that cannot get the restricted InnocenZ account banned — the rules, the decision steps and the safe lines"
+
+### Newly added - file these into a section above
+
+- [Social seo tools and keywords](social-seo-tools-and-keywords.md) — "19 Oct 2026: best SEO tools per platform (free first) + in-app search/Explore rules + Malaysia keyword traps; built as the 'SEO Tools' and 'SEO Keywords' tabs of the marketing workbook"
