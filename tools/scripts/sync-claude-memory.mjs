@@ -241,13 +241,20 @@ function rebuildIndex() {
 	const kept = [];
 	let dropped = 0;
 	for (const line of lines) {
-		const link = line.match(/^-\s*\[[^\]]*\]\(([^)]+\.md)\)/);
-		if (!link) {
+		if (!/^-\s*\[/.test(line)) {
 			kept.push(line);
 			continue;
 		}
-		if (files.has(link[1])) {
-			listed.add(link[1]);
+		/*
+		 * A line may list SEVERAL memories ("- [Day status](a.md) — … · [Disputes](b.md) — …"):
+		 * the index pairs short entries to stay under the ~200 lines a session loads. Reading only
+		 * the first link re-listed every second one under "Newly added" on each run (27 Oct 2026:
+		 * 54 duplicates). Keep the line while any of its memories exists.
+		 */
+		const links = [...line.matchAll(/\]\(([^)]+\.md)\)/g)].map((m) => m[1]);
+		const live = links.filter((f) => files.has(f));
+		if (!links.length || live.length) {
+			for (const f of live) listed.add(f);
 			kept.push(line);
 		} else {
 			dropped += 1;

@@ -19,6 +19,21 @@ or the **`mobile-web`** entry in `.claude/launch.json`. Serves on **8081**.
   already dependencies; `dev-mobile.mjs` runs `expo start`, which wants a TTY for its QR code and a
   phone to scan it, and that requirement alone is why this app was never run.
 
+## From a `.claude/worktrees/*` checkout (7 Oct 2026)
+
+`dev-mobile-web.mjs` does NOT work there as-is, and fails without a useful message:
+- `metro.config.js` `rootClutterBlockList` blocks any path containing `\.claude\` — i.e. every
+  source file of a worktree. Fix without touching the repo: `EXPO_OVERRIDE_METRO_CONFIG` pointing at a
+  scratch config that `await require()`s the real one and filters out the regex whose source has `claude`.
+- A worktree has no `node_modules` and no `.env`. A junction to the main checkout's root `node_modules`
+  works (mobile deps are hoisted), but Metro then maps the junction as a FILE and crashes
+  ("TreeFS: Could not add directory node_modules") — drop it from `watchFolders`, add the REAL path, and
+  set `resolver.nodeModulesPaths` to it. Pass `EXPO_PUBLIC_API_URL` / maps key in process env.
+- 8081 is usually the main checkout's own server; use `expo start --web --port 8082`. Same-instrument
+  before/after is then free: 8081 = old code, 8082 = the worktree.
+- nx also refuses (`@nx/expo/plugin`) without `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`; a placeholder is enough
+  for `nx run @org/mobile:test` (flag is `--testPathPatterns`, plural).
+
 ## Signing in
 
 Login is by **mobile number**, and the number that works is the one on the **`user`** row, not the

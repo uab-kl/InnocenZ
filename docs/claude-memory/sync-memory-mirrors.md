@@ -5,8 +5,20 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 88bfe12d-2821-45af-978c-7103c199f157
-  modified: 2026-08-20T07:46:01.260Z
+  modified: 2026-09-22T04:16:36.156Z
 ---
+
+⚠️ **DO NOT RUN THE SYNC UNASKED (owner, 22 Sep 2026).** Seeing 3 changed files appear under
+`docs/claude-memory/` during a workbook task, the owner said: *"dont modify any inside the folder ?
+just read it and update in he excel only"*. The mirror script writes into the REPO, and a repo
+write is never a side effect of another task — it shows up in their Source Control panel as work
+they did not ask for and now have to judge. So: write memories to the NATIVE folder only
+(`~/.claude/projects/<slug>/memory/`, outside the repo), and run
+`tools/scripts/sync-claude-memory.mjs` **only when the owner asks for the mirror or a commit**.
+The three files were reverted (`git checkout` + delete), leaving the tree clean. Everything below
+still describes how the mirror works and is correct **once asked** — it is the *when* that
+changed, not the *how*. The same rule holds for any non-repo task: read the repo freely, write to
+the deliverable only.
 
 The user works on multiple devices (office PC + house PC, same Claude account) — file-based memory is per-machine, so it must be mirrored where every device can read it.
 

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: a3eda563-9081-4ac4-bcae-3e8070576d18
-  modified: 2026-10-21T07:22:45.607Z
+  modified: 2026-10-22T03:26:32.801Z
 ---
 
 From the 21 Oct 2026 chat ([[hotpie-style-agency-promo]]), researched on Higgsfield's help pages:
@@ -26,5 +26,11 @@ From the 21 Oct 2026 chat ([[hotpie-style-agency-promo]]), researched on Higgsfi
   Connectors → Connect, sign in (needs a paid Higgsfield plan), then enable it for the chat. Marketing Studio is not
   available through it; lip-sync availability isn't documented, so both may need the website.
 - A 30 s Seedance 2.5 short costs about 210 credits ([[v2-shorts-prompt-style-08oct]]).
+
+- **Prompt length limits (22 Oct 2026):**
+  - Seedream 5.0 lite (image) refuses prompts over **3,000 characters**. The owner hit "Prompt is too long (max 3000 characters)", so face-photo prompts must stay under ~2,800.
+  - Seedance 2.5 has taken ~14,000-character prompts (V2 and V3 evidence).
+  - Kling 4.0's cap is not verified but is far shorter, so never send it a full Seedance prompt.
+  - Seedream "Auto" ratio gives a square image; pick 9:16 by hand.
 
 **How to apply:** ask before any generation through the connector — each one spends paid credits and there is no cap.
