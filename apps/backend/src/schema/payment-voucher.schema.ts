@@ -56,6 +56,10 @@ export const PaymentVoucherLineSchema = z.object({
 export const CreatePaymentVoucherSchema = z.object({
   // Optional: derived from the caller's agency for agency users; required for admin.
   agencyId: z.string().uuid('Invalid agency ID').optional(),
+  // Must name a PR on the voucher's agency's roster (400 otherwise). When it
+  // does (on create, or a PUT that changes it), the server writes user_id,
+  // pr_name and pr_ic from that PR's account and the body's `prName` / `prIc`
+  // are not used.
   prId: z.string().uuid('Invalid PR ID').optional(),
   prName: z
     .string()
@@ -68,7 +72,12 @@ export const CreatePaymentVoucherSchema = z.object({
   dueDate: isoDate.optional(),
   weekStart: isoDate.optional(),
   weekEnd: isoDate.optional(),
-  // Optional: recomputed from lines by the controller when omitted.
+  // `subtotal` and `net` are ACCEPTED but never stored as sent: the server
+  // derives subtotal = Σ line amounts and net = subtotal − deduction (the
+  // payout bank file pays the stored net). Kept on the schema so a caller that
+  // round-trips the figures it read is not refused; the response says when
+  // they were not used. `deduction` is the one real input — omitted on a PUT,
+  // the stored deduction is kept.
   subtotal: money.optional(),
   deduction: money.optional(),
   net: money.optional(),

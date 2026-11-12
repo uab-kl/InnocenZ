@@ -294,8 +294,10 @@ export class AuditLogRepositoryClass {
         // how the login response's {accessToken, refreshToken} spent months in
         // new_data in PLAINTEXT: req.body was redacted, the response never was,
         // and audit_logs became a table of live 7-day bearer tokens.
-        oldData: redactSensitive(input.oldData),
-        newData: redactSensitive(input.newData),
+        // The same choke point drops embedded files (`stripAuditBlobs`) — see
+        // there for the 112 MB that rule exists to stop growing.
+        oldData: sanitiseAuditData(input.oldData),
+        newData: sanitiseAuditData(input.newData),
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
       })
@@ -404,6 +406,83 @@ export function redactSensitive<T>(value: T): T {
   }
 
   return redacted as T;
+}
+
+/**
+ * A `data:` URL — the scheme followed DIRECTLY by its header
+ * (`data:image/jpeg;base64,…`). A person's note that happens to begin
+ * "data: see attached" has a space there and is text, so it stays.
+ */
+const DATA_URL = /^data:\S/i;
+
+/** What an embedded file is replaced with: its size, never its content. */
+export function omittedBlobLabel(value: string): string {
+  return `[omitted: ${Buffer.byteLength(value, 'utf8')} bytes]`;
+}
+
+/**
+ * EMBEDDED FILES NEVER ENTER `audit_logs` (12 Nov 2026).
+ *
+ * Every receipt, proof and MC photo used to travel as a base64 `data:` URL,
+ * and this table copied each one out of the request or response body: 250 rows
+ * holding about 112 MB of the database's 150 MB. The successful writes stopped
+ * on 10 Aug, when photos moved to R2 and the source rows began storing keys.
+ * The FAILED writes did not: a refused upload stores its whole request body,
+ * the phone still posts data URLs, and the JSON limit is 12 MB, so one failed
+ * photo could still land 12 MB in a single row. The copies also sat outside the
+ * signed-link and delete rules that guard the R2 originals.
+ *
+ * Only `data:` strings are replaced — NOT long strings in general. A voucher's
+ * signature is stroke JSON that can run past 8 KB, and 17 live rows already
+ * hold real non-image values that long; a size cap would erase them.
+ *
+ * Raw base64 with no `data:` header is a file too when its KEY says so: the
+ * sign-up form posts `logoBase64` as bare `btoa` output, and every refused
+ * sign-up stored the whole logo (8 rows, ~6.5 MB, up to 2.2 MB each — review,
+ * 12 Nov 2026). A key ending in `base64` (logoBase64, coverBase64 …) longer
+ * than 256 characters is replaced too; a short one is a value, and stays.
+ *
+ * Idempotent: the label does not start with `data:` and is under 256
+ * characters, so a second pass is a no-op — which is what lets
+ * `_strip-audit-blobs.ts` re-run safely.
+ */
+const BASE64_KEY = /base64$/i;
+const BASE64_KEY_MIN_LENGTH = 256;
+
+export function stripAuditBlobs<T>(value: T, key?: string): T {
+  if (typeof value === 'string') {
+    const isFile =
+      DATA_URL.test(value) ||
+      (key !== undefined &&
+        BASE64_KEY.test(normaliseAuditKey(key)) &&
+        value.length > BASE64_KEY_MIN_LENGTH);
+    return (isFile ? omittedBlobLabel(value) : value) as T;
+  }
+  if (value === null || value === undefined || value instanceof Date) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    // An array inherits its key: `photosBase64: ['…', '…']` is a list of files.
+    return value.map((item) => stripAuditBlobs(item, key)) as T;
+  }
+  if (typeof value !== 'object') {
+    return value;
+  }
+
+  const stripped: Record<string, unknown> = {};
+  for (const [k, entry] of Object.entries(value as Record<string, unknown>)) {
+    stripped[k] = stripAuditBlobs(entry, k);
+  }
+  return stripped as T;
+}
+
+/**
+ * Both rules, in the order the insert applies them: credentials masked, then
+ * embedded files dropped. Also applied on READ by the resolver, so a row
+ * written before either rule existed never reaches the screen unmasked.
+ */
+export function sanitiseAuditData<T>(value: T): T {
+  return stripAuditBlobs(redactSensitive(value));
 }
 
 export type AuditOldDataFetcher = (req: import('express').Request) => Promise<unknown>;

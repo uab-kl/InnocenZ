@@ -3,9 +3,12 @@ import {
   subscriptionInvoiceRepository,
 } from '@/composition-root.js';
 import { announceOpenedInvoices } from '@/features/subscription-invoice/announce-opened.js';
+import { writeSystemAudit } from '@/features/audit-log/audit-log.system.js';
 import { logger } from '@/util/logger.js';
 import { SYSTEM_ACTOR } from '@/util/actor.js';
 import type { JobDefinition } from './scheduler.js';
+
+const JOB_NAME = 'subscription-invoice';
 
 /**
  * Opens the billing periods that have started, so the admin's Plan Payment page
@@ -48,6 +51,33 @@ async function runSubscriptionInvoices(): Promise<void> {
   }
 
   /**
+   * The run's audit row, after the bills are written and announced — 92 bills
+   * this job opened had none. Never throws, and writes nothing on the days the
+   * job opens nothing. `OpenedInvoice` carries no invoice id, so each period
+   * is named by its subscriber and dates, which together identify the row.
+   */
+  await writeSystemAudit({
+    job: JOB_NAME,
+    entity: 'subscription-invoice',
+    action: 'BULK_CREATE',
+    changed: result.created,
+    summary: {
+      scanned: result.scanned,
+      created: result.created,
+      organisationsTold: told,
+      opened: result.opened.map((o) => ({
+        subscriberType: o.subscriberType,
+        subscriberId: o.subscriberId,
+        periodStart: o.periodStart,
+        periodEnd: o.periodEnd,
+        amount: o.amount,
+        currency: o.currency,
+        creditApplied: o.creditApplied,
+      })),
+    },
+  });
+
+  /**
    * AND THE ONE THING THIS JOB CANNOT FIX BY RUNNING AGAIN.
    *
    * Every other gap heals here: a morning the job missed, a period nobody
@@ -80,7 +110,7 @@ async function runSubscriptionInvoices(): Promise<void> {
 }
 
 export const SUBSCRIPTION_INVOICE_JOB: JobDefinition = {
-  name: 'subscription-invoice',
+  name: JOB_NAME,
   schedule: SCHEDULE,
   run: runSubscriptionInvoices,
 };

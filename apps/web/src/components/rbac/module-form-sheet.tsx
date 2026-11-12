@@ -75,9 +75,13 @@ export function ModuleFormSheet({
 			onSubmit: ModuleSchema,
 		},
 		onSubmit: async ({ value }) => {
+			// The portal is required: the server answers 400 without one (a
+			// portal-less module twins a portal's key and can never be granted).
+			// The field validator below blocks this already; never send null.
+			if (!value.portalId) return;
 			onSubmit({
 				...value,
-				portalId: value.portalId || null,
+				portalId: value.portalId,
 				moduleKey:
 					value.moduleKey ||
 					value.moduleName.toLowerCase().replace(/\s+/g, "_"),
@@ -197,30 +201,51 @@ export function ModuleFormSheet({
 							}}
 						</form.Field>
 
-						<form.Field name="portalId">
-							{(field) => (
-								<Field>
-									<FieldLabel htmlFor="module-portal">
-										{t.rbac.colPortal}
-									</FieldLabel>
-									<Select
-										value={field.state.value || undefined}
-										onValueChange={(v) => field.handleChange(v)}
-										disabled={isSubmitting || portalsQuery.isLoading}
-									>
-										<SelectTrigger id="module-portal" className="w-full">
-											<SelectValue placeholder={t.rbac.selectPortal} />
-										</SelectTrigger>
-										<SelectContent>
-											{(portalsQuery.data ?? []).map((p) => (
-												<SelectItem key={p.id} value={p.id}>
-													{p.name} ({p.code})
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</Field>
-							)}
+						<form.Field
+							name="portalId"
+							validators={{
+								onChange: ({ value }) =>
+									value ? undefined : { message: t.rbac.selectPortal },
+								onSubmit: ({ value }) =>
+									value ? undefined : { message: t.rbac.selectPortal },
+							}}
+						>
+							{(field) => {
+								// handleSubmit touches every field, so an untouched Select
+								// still shows this after Create is pressed.
+								const isInvalid =
+									field.state.meta.isTouched && !field.state.meta.isValid;
+								return (
+									<Field data-invalid={isInvalid}>
+										<FieldLabel htmlFor="module-portal">
+											{t.rbac.colPortal}
+										</FieldLabel>
+										<Select
+											value={field.state.value || undefined}
+											onValueChange={(v) => field.handleChange(v)}
+											disabled={isSubmitting || portalsQuery.isLoading}
+										>
+											<SelectTrigger
+												id="module-portal"
+												className="w-full"
+												aria-invalid={isInvalid}
+											>
+												<SelectValue placeholder={t.rbac.selectPortal} />
+											</SelectTrigger>
+											<SelectContent>
+												{(portalsQuery.data ?? []).map((p) => (
+													<SelectItem key={p.id} value={p.id}>
+														{p.name} ({p.code})
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										{isInvalid && (
+											<FieldError errors={field.state.meta.errors} />
+										)}
+									</Field>
+								);
+							}}
 						</form.Field>
 
 						<form.Field name="status">

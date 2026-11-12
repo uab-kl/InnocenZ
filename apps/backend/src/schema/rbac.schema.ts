@@ -1,11 +1,40 @@
 import { z } from 'zod';
 import { permissionTypeValues } from '@/types/rbac-constant';
 
+/**
+ * The only two values `status` may hold on role, m_module and m_permission.
+ *
+ * ⚠️ It was free text (`z.string()`), and every server read asks for EXACTLY
+ * `'active'` (getUserPermissions, userHasPermission, permissionsForRoleNames,
+ * roleHasPermission). So a typo such as `'Active'` or `'enabled'` was stored
+ * without complaint and then silently switched the grant OFF — the admin saw a
+ * saved row and every member of that lane collected a 403. The admin sheets
+ * only ever send these two; anything else is now a 400 that names them.
+ */
+export const RBAC_STATUSES = ['active', 'inactive'] as const;
+const rbacStatus = z.enum(RBAC_STATUSES, {
+  error: "Status must be 'active' or 'inactive'.",
+});
+
 export const RoleSchema = z.object({
   roleName: z.string().trim().min(1).max(100),
+  // Stays nullable: the mobile PR role is portal-less by design.
   portalId: z.uuid().nullable().optional(),
-  status: z.string().default('active'),
+  status: rbacStatus.default('active'),
 });
+
+/**
+ * Sent back when a module arrives without a portal, or with `portalId: null`.
+ *
+ * ⚠️ `m_module_portal_key_uidx` is UNIQUE (portal_id, module_key), and NULLs
+ * never collide in a Postgres unique index — so a portal-less module could
+ * twin a key that already lives on a portal (`settings`, `dashboard`, …).
+ * `roleHasPermission` requires a grant's module to sit on the role's own
+ * portal, so such a twin would answer no member at all: refusing it here stops
+ * an admin creating a module nobody can ever use.
+ */
+export const MODULE_PORTAL_REQUIRED =
+  'Choose the portal this module belongs to (agency, outlet or admin).';
 
 export const ModuleSchema = z.object({
   moduleName: z.string().min(1).max(100),
@@ -16,8 +45,8 @@ export const ModuleSchema = z.object({
     .max(100)
     .transform((key) => key.toLowerCase().replace(/\s+/g, '_'))
     .optional(),
-  portalId: z.uuid().nullable().optional(),
-  status: z.string().default('active'),
+  portalId: z.uuid({ error: MODULE_PORTAL_REQUIRED }),
+  status: rbacStatus.default('active'),
 });
 
 /** Normalize optional moduleKey from moduleName before insert/update. */
@@ -34,7 +63,7 @@ export const PermissionSchema = z.object({
   moduleId: z.uuid(),
   permissionType: z.enum(permissionTypeValues),
   description: z.string().min(1).max(255),
-  status: z.string().default('active'),
+  status: rbacStatus.default('active'),
 });
 
 /**
@@ -48,17 +77,20 @@ export const PermissionSchema = z.object({
  * admin had deliberately deactivated silently switched it back on, undoing the
  * `inactiveRole` / `inactiveModule` / `inactivePermission` endpoints that sit a
  * few lines below each one. See the note on `UpdateOutletSchema`.
+ *
+ * `UpdateModuleSchema` inherits the REQUIRED portal as optional-but-not-null:
+ * a PATCH may leave a module's portal alone, never clear it.
  */
 export const UpdateRoleSchema = RoleSchema.partial().extend({
-  status: z.string().optional(),
+  status: rbacStatus.optional(),
 });
 
 export const UpdateModuleSchema = ModuleSchema.partial().extend({
-  status: z.string().optional(),
+  status: rbacStatus.optional(),
 });
 
 export const UpdatePermissionSchema = PermissionSchema.partial().extend({
-  status: z.string().optional(),
+  status: rbacStatus.optional(),
 });
 
 export const RolePermissionSchema = z.object({

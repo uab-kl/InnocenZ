@@ -88,8 +88,13 @@ export function computeCancelFee(opts: {
     return { feeRm: '0.00', pct: 0, noticeHours: hours };
   }
 
-  // A half-configured rule must not silently price at the late band. A missing
-  // boundary means the agency has not defined that band, so nothing is due.
+  // ⚠️ A NULL short boundary prices everything under the free window at the
+  // LATE band. This comment used to claim the opposite ("a missing boundary
+  // means nothing is due"), and the screens read a null as their 2h default, so
+  // the three disagree. Which reading is right is an OWNER DECISION and is left
+  // as it was; the save now refuses an ENABLED cancellation rule with any band
+  // blank (agency-penalty-rule.schema.ts), and no live row has one, so only a
+  // row written before that gate can reach this branch.
   const pct =
     short != null && noticeHours >= short
       ? rule.shortNoticePct

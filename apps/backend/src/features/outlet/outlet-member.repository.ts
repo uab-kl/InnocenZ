@@ -3,6 +3,7 @@ import { db } from '@/db/index';
 import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { logger } from '@/util/logger';
 import type { MembershipStatus } from '@/util/membership-status';
+import { membershipPickOrder } from '@/util/membership-pick-order';
 import {
   ensureAccountCodeFromMembership,
   nextOrgMemberCode,
@@ -200,6 +201,9 @@ export class OutletMemberRepositoryClass {
     return { ...member, subRole: member.subRole as OutletUserSubRole };
   }
 
+  /** THE row for this person at this venue — the twin of
+   * `AgencyMemberRepository.getByAgencyAndUser`, ordered the same way (active,
+   * pending, inactive, rejected; see `util/membership-pick-order.ts`). */
   async getByOutletAndUser(
     outletId: string,
     userId: string,
@@ -214,6 +218,7 @@ export class OutletMemberRepositoryClass {
             eq(OutletUserTable.userId, userId),
           ),
         )
+        .orderBy(...membershipPickOrder(OutletUserTable))
         .limit(1);
       return member ?? null;
     } catch (error) {

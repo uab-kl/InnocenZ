@@ -139,3 +139,71 @@ describe("workspaceSettingsFromBackend — the tip category survives the round-t
 		]);
 	});
 });
+
+/**
+ * The save payload against the server's rate-card rules (12 Nov 2026). The PUT
+ * now refuses a tier label outside the six the pay resolver matches, a repeated
+ * tier, a second commission-only row, a labelled commission-only row, a
+ * repeated price-list id and a happy-hour window that is not an HH:MM pair or
+ * blank (outlet-workspace.schema.ts). The page's own save must never trip one,
+ * so it is pinned here rather than discovered as a refused Save.
+ */
+describe("saveInputFromWorkspaceSettings — passes the server's rate-card rules", () => {
+	const record = {
+		...emptyRecord,
+		happyHourStart: "21:00",
+		happyHourEnd: "23:00",
+		drinkMenu: [
+			{
+				slug: "cosmo",
+				name: "Cosmo",
+				priceRm: "150.00",
+				category: "drink",
+				sortOrder: 0,
+			},
+			{
+				slug: "tips",
+				name: "Tips",
+				priceRm: "0.00",
+				category: "tip",
+				sortOrder: 1,
+			},
+		],
+	} as unknown as OutletWorkspaceRecord;
+
+	it("sends each of the six labels exactly once, and one unlabelled commission-only row", () => {
+		const saved = saveInputFromWorkspaceSettings(
+			workspaceSettingsFromBackend(record, "JK House"),
+		);
+		const ranked = (saved.tierRates ?? []).filter((r) => r.kind === "tier");
+		expect(ranked.map((r) => r.tier)).toEqual([
+			"Tier I",
+			"Tier II",
+			"Tier III",
+			"Tier IV",
+			"Tier V",
+			"Servant",
+		]);
+		const commissionOnly = (saved.tierRates ?? []).filter(
+			(r) => r.kind === "commission_only",
+		);
+		expect(commissionOnly).toHaveLength(1);
+		expect(commissionOnly[0]?.tier).toBeNull();
+	});
+
+	it("sends every price-list id once", () => {
+		const saved = saveInputFromWorkspaceSettings(
+			workspaceSettingsFromBackend(record, "JK House"),
+		);
+		const slugs = (saved.drinkMenu ?? []).map((d) => d.slug);
+		expect(new Set(slugs).size).toBe(slugs.length);
+	});
+
+	it("carries the happy-hour pair through verbatim — HH:MM in, HH:MM out", () => {
+		const saved = saveInputFromWorkspaceSettings(
+			workspaceSettingsFromBackend(record, "JK House"),
+		);
+		expect(saved.happyHourStart).toBe("21:00");
+		expect(saved.happyHourEnd).toBe("23:00");
+	});
+});

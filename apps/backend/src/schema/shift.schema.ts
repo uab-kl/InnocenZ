@@ -5,6 +5,11 @@ import {
   type ShiftEventKind,
 } from '@/features/shift/shift.model';
 import { tierRateKindValues } from '@/features/outlet-workspace/outlet-workspace.model';
+import {
+  repeatedSlugRefusal,
+  repeatedTierRowRefusal,
+  tierRowLabelRefusal,
+} from '@/schema/outlet-workspace.schema';
 import { specialEventTypeValues } from '@/schema/shift-template.schema';
 import { slotMinutes } from '@/util/slot-window';
 
@@ -51,22 +56,38 @@ const requiredPct = z
  * One per-shift pay-tier override the outlet composes at post time. Mirrors an
  * `outlet_tier_rate` row plus the requested `prCount`; the output shape matches
  * the repo's `ShiftPayTierInput` (numeric columns as fixed(2) strings).
+ *
+ * The label rule is the rate card's (`tierRowLabelRefusal`): the resolver finds
+ * an override by its exact label, so 'Tier 1' would never price anyone. Refined
+ * on the ELEMENT, never on `CreateShiftSchema` — `UpdateShiftSchema` is its
+ * `.partial()`, and zod 4.4 throws at import on a refined object.
  */
-const ShiftPayTierSchema = z.object({
-  kind: z.enum(tierRateKindValues).default('tier'),
-  tier: z
-    .string()
-    .max(50)
-    .nullish()
-    .transform((v) => v ?? null),
-  wagePerHour: optionalNumeric,
-  drinkPct: requiredPct,
-  happyHourDrinkPct: optionalNumeric,
-  tipPct: requiredPct,
-  otAfterHours: optionalNumeric,
-  targetSalesRm: optionalNumeric,
-  prCount: z.number().int().nonnegative().optional().default(0),
-  sortOrder: z.number().int().nonnegative().optional().default(0),
+const ShiftPayTierSchema = z
+  .object({
+    kind: z.enum(tierRateKindValues).default('tier'),
+    tier: z
+      .string()
+      .max(50)
+      .nullish()
+      .transform((v) => v ?? null),
+    wagePerHour: optionalNumeric,
+    drinkPct: requiredPct,
+    happyHourDrinkPct: optionalNumeric,
+    tipPct: requiredPct,
+    otAfterHours: optionalNumeric,
+    targetSalesRm: optionalNumeric,
+    prCount: z.number().int().nonnegative().optional().default(0),
+    sortOrder: z.number().int().nonnegative().optional().default(0),
+  })
+  .superRefine((row, ctx) => {
+    const refusal = tierRowLabelRefusal(row);
+    if (refusal) ctx.addIssue({ code: 'custom', message: refusal, path: ['tier'] });
+  });
+
+/** One row per tier, one commission-only row — the rate card's rule, per shift. */
+const payTiersList = z.array(ShiftPayTierSchema).superRefine((rows, ctx) => {
+  const refusal = repeatedTierRowRefusal(rows, "in this job's pay tiers");
+  if (refusal) ctx.addIssue({ code: 'custom', message: refusal });
 });
 
 /**
@@ -152,6 +173,12 @@ export const CreateShiftSchema = z.object({
   eventDrinkMenu: z
     .array(EventDrinkMenuItemSchema)
     .max(EVENT_DRINK_MENU_MAX, `An event price list can hold at most ${EVENT_DRINK_MENU_MAX} items`)
+    // The phone counts by item id, so a repeated one logs a drink twice. On the
+    // array, not the object — see `ShiftPayTierSchema`.
+    .superRefine((items, ctx) => {
+      const refusal = repeatedSlugRefusal(items, 'event price list');
+      if (refusal) ctx.addIssue({ code: 'custom', message: refusal });
+    })
     .optional(),
   languages: z.string().max(255, 'Languages is too long').optional(),
   // 60 to match the column AND `shift_template.dress_code` — see 0132.
@@ -164,7 +191,7 @@ export const CreateShiftSchema = z.object({
   liveSales: money.optional(),
   // Per-shift rate overrides (Post Job pay-tier rows). Omit to keep the outlet's
   // workspace defaults; an empty array clears any existing overrides on update.
-  payTiers: z.array(ShiftPayTierSchema).optional(),
+  payTiers: payTiersList.optional(),
   // Named-PR requests from the venue's SELECT PRS picker (0131). Each pick
   // names the person AND the membership its card came from, because a PR can
   // belong to several agencies and only the addressed agency may see the ask.

@@ -47,6 +47,26 @@ function isTakenSignInValue(error: unknown): boolean {
 }
 
 /**
+ * WHICH EXISTING ROW AN ACCEPTED INVITE SWITCHES ON — or null, for "insert a
+ * fresh active row".
+ *
+ * `getByAgencyAndUser` / `getByOutletAndUser` hand back the best row for this
+ * person (active, pending, inactive, rejected — `util/membership-pick-order.ts`),
+ * so a `rejected` row arrives here only when the person holds nothing else.
+ * It is still not reused: its `updated_by` is the only record of who declined
+ * them, and activating it would overwrite that name with the invitee's — the
+ * same reason `requestJoin` inserts a fresh pending row beside a decline rather
+ * than flipping it. A rejected row only ever carried an `INNPND` placeholder,
+ * so a fresh row loses no real member id.
+ */
+export function reusableMembership<T extends { status: string }>(
+  existing: T | null,
+): T | null {
+  if (!existing || existing.status === 'rejected') return null;
+  return existing;
+}
+
+/**
  * Public accept for outlet/agency team invites.
  * Invite rows live on `org_member_invite`; membership is written only on accept.
  * First-time invitees complete email / name / password (phone optional) here.
@@ -546,10 +566,10 @@ export class OrgMemberInviteControllerClass {
        * beside any of the four, duplicate `pending` rows included. Every rule
        * below therefore has to be enforced here.
        *
-       * ⚠️ `listByUser` rather than `getByAgencyAndUser`: that lookup has no
-       * status filter, no ORDER BY and `limit(1)`, so it returns an ARBITRARY
-       * row the moment a person has two at one organisation — which is exactly
-       * what this endpoint can create.
+       * ⚠️ `listByUser` rather than `getByAgencyAndUser`: that lookup returns
+       * ONE row (ordered since 12 Nov 2026 — active, pending, inactive,
+       * rejected), and the rules below need to see EVERY row this person holds
+       * here, which is exactly what this endpoint can create more of.
        */
       const mine =
         kind === 'agency'
@@ -595,43 +615,60 @@ export class OrgMemberInviteControllerClass {
        */
       const former = mine.find((m) => m.status === 'inactive');
       const actor = getActor(req);
-      if (former) {
-        const updated =
-          kind === 'agency'
-            ? await this.agencyMemberRepository.update(former.id, {
-                status: 'pending',
-                subRole,
-                updatedBy: actor,
-              })
-            : await this.outletMemberRepository.update(former.id, {
-                status: 'pending',
-                subRole,
-                updatedBy: actor,
-              });
-        if (!updated) {
-          return res.status(500).json({
-            success: false,
-            message: Error.INTERNAL_SERVER_ERROR,
-            data: null,
+      /*
+       * ⚠️ THE CHECKS ABOVE ARE A READ, AND A READ CAN BE RACED. Two clicks of
+       * "Ask to join" can both find no pending row and both write. Wherever the
+       * database refuses the second (a unique violation — the pending-request
+       * index, if the owner adds it), the person gets the SAME answer the read
+       * would have given them, as a 409 — not a 500 that reads as "it broke"
+       * over a request that is in fact on file.
+       */
+      try {
+        if (former) {
+          const updated =
+            kind === 'agency'
+              ? await this.agencyMemberRepository.update(former.id, {
+                  status: 'pending',
+                  subRole,
+                  updatedBy: actor,
+                })
+              : await this.outletMemberRepository.update(former.id, {
+                  status: 'pending',
+                  subRole,
+                  updatedBy: actor,
+                });
+          if (!updated) {
+            return res.status(500).json({
+              success: false,
+              message: Error.INTERNAL_SERVER_ERROR,
+              data: null,
+            });
+          }
+        } else if (kind === 'agency') {
+          await this.agencyMemberRepository.add({
+            agencyId: orgId,
+            userId: user.id,
+            subRole,
+            status: 'pending',
+            createdBy: user.id,
+            updatedBy: user.id,
+          });
+        } else {
+          await this.outletMemberRepository.add({
+            outletId: orgId,
+            userId: user.id,
+            subRole,
+            status: 'pending',
+            createdBy: user.id,
+            updatedBy: user.id,
           });
         }
-      } else if (kind === 'agency') {
-        await this.agencyMemberRepository.add({
-          agencyId: orgId,
-          userId: user.id,
-          subRole,
-          status: 'pending',
-          createdBy: user.id,
-          updatedBy: user.id,
-        });
-      } else {
-        await this.outletMemberRepository.add({
-          outletId: orgId,
-          userId: user.id,
-          subRole,
-          status: 'pending',
-          createdBy: user.id,
-          updatedBy: user.id,
+      } catch (writeError) {
+        if (!isUniqueViolation(writeError)) throw writeError;
+        return res.status(409).json({
+          success: false,
+          message: `You have already asked to join ${org.name}, or are already on its team — refresh to see where it stands.`,
+          data: null,
         });
       }
 
@@ -803,7 +840,9 @@ export class OrgMemberInviteControllerClass {
         data: { kind: 'outlet', orgId: outletId },
       });
     }
-    if (existing) {
+    // A decline is a record, never a row to revive — see `reusableMembership`.
+    const reusable = reusableMembership(existing);
+    if (reusable) {
       /*
        * ⚠️ ONE CALL, because activating is three writes that must happen
        * together — the status, the real id over a placeholder, and the
@@ -815,12 +854,12 @@ export class OrgMemberInviteControllerClass {
       await activateOrgMembership({
         kind: 'outlet',
         orgId: outletId,
-        membershipId: existing.id,
+        membershipId: reusable.id,
         userId: user.id,
         // The invite's title wins over whatever they held before.
         subRole: invite.subRole,
         actor,
-        current: existing,
+        current: reusable,
       });
     } else {
       await this.outletMemberRepository.add({
@@ -882,7 +921,9 @@ export class OrgMemberInviteControllerClass {
         data: { kind: 'agency', orgId: agencyId },
       });
     }
-    if (existing) {
+    // A decline is a record, never a row to revive — see `reusableMembership`.
+    const reusable = reusableMembership(existing);
+    if (reusable) {
       /*
        * ⚠️ ONE CALL, because activating is three writes that must happen
        * together — the status, the real id over a placeholder, and the
@@ -894,12 +935,12 @@ export class OrgMemberInviteControllerClass {
       await activateOrgMembership({
         kind: 'agency',
         orgId: agencyId,
-        membershipId: existing.id,
+        membershipId: reusable.id,
         userId: user.id,
         // The invite's title wins over whatever they held before.
         subRole: invite.subRole,
         actor,
-        current: existing,
+        current: reusable,
       });
     } else {
       await this.agencyMemberRepository.add({

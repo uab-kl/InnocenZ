@@ -9,6 +9,9 @@ vi.mock('@/composition-root.js', () => ({
   subscriptionRepository: {},
 }));
 vi.mock('@/features/notification/notify.js', () => ({ notifyMany: vi.fn() }));
+vi.mock('@/features/audit-log/audit-log.system.js', () => ({
+  writeSystemAudit: vi.fn(async () => false),
+}));
 vi.mock('@/util/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
