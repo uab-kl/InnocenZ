@@ -24,6 +24,7 @@ import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { outletSubRoleLabel } from "@agency-portal/lib/outlet-rbac";
+import { sectionNavAlert } from "@agency-portal/lib/portal-nav-alerts";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
 import {
@@ -308,6 +309,7 @@ function PortalSidebar({
 }) {
 	const { pathname } = useLocation();
 	const { t, locale } = usePortalLocale();
+	const navAlerts = useNavAlerts();
 	const portalKindLabel =
 		portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal;
 
@@ -374,16 +376,34 @@ function PortalSidebar({
 												management: "Management",
 												organization: "Organization",
 											};
+								// A folded group still says something inside it is waiting
+								// — summed over the rows THIS role can see (see
+								// `sectionNavAlert`). Open, the rows carry their own pills.
+								const closedAlert = sections[section]
+									? null
+									: sectionNavAlert(
+											links.map((item) => item.to),
+											navAlerts,
+										);
 								return (
 									<div className="iz-outlet-nav-group" key={section}>
 										<button
 											type="button"
 											className="iz-outlet-nav-heading"
 											aria-expanded={sections[section]}
+											aria-label={`${labels[section]}${navAlertAriaSuffix(closedAlert?.count, t.shell.navAlertWaiting)}`}
 											onClick={() => onToggleSection?.(section)}
 										>
 											<span>{labels[section]}</span>
-											<ChevronDown aria-hidden className="h-4 w-4" />
+											<span className="iz-outlet-nav-heading__end">
+												{closedAlert && (
+													<NavAlertBadge
+														count={closedAlert.count}
+														tone={closedAlert.tone}
+													/>
+												)}
+												<ChevronDown aria-hidden className="h-4 w-4" />
+											</span>
 										</button>
 										<div
 											className="iz-outlet-nav-items"

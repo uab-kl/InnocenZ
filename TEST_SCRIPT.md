@@ -484,7 +484,17 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    one default method per owner and exactly-one owner are already enforced (#21 #22).
 5. **Support Desk Knowledge** — rewrite the 34 entries to today's facts (owner to sign in to the Desk in the
    automation Chrome window); the verified wording is in the 12 Nov workflow results.
-6. **Not walked in a browser:** the Workspace time picker and refusal toast, and the Penalty rules editor clamps —
+   **The Desk's count keeps RISING (16 Nov: 34 → 53 → 65), and that is not new breakage.** The top entries are
+   the original 34 word for word (entries 1–9 matched to the 12 Nov list); the rest are APPENDED by the Desk's
+   own AI ("Recorded by AI"), which reads a schema snapshot — it cannot see a guard that lives in code, so every
+   fix that waits on a migration (item 2) still reads to it as an open risk, and it never removes an entry.
+   Entries 35–65 are not read yet: the automation Chrome window is not signed in to the Desk.
+6. **Unpaid-billing badge vs banner (owner decision, found 16 Nov).** The Subscription badge counts EVERY unpaid
+   period, the banner only the OVERDUE ones, by design (`UnpaidBillingBanner`: "the period in use right now,
+   which nobody is late with") — so a screen can show 20 beside "18 periods". Badge the overdue count, or keep it.
+7. **Every backend start re-stamps `m_module`** — 25 rows `updated_by 'system'` at 10:24 on 16 Nov, from
+   `seedRbac()` at boot (`main.ts:369`). Harmless today; it is the #26 seeder question (item 3c) seen live.
+8. **Not walked in a browser:** the Workspace time picker and refusal toast, and the Penalty rules editor clamps —
    unit-tested and API-checked only; click through on a dev build.
 
 ### ▶ 🟠 OPEN — left after the redesign walkthrough (found 22 Oct 2026, round 2 verified 26 Oct; §10 2026-10-22, 2026-10-26, §8 G44–G61)
@@ -9912,6 +9922,8 @@ Newest first; the chat is given the latest 12 per side. §10 stays the full engi
 
 | Date | Side | English | 中文 |
 |---|---|---|---|
+| 2026-11-16 | agency | A folded menu group in the agency portal now shows how many things inside it are waiting for you, so you can see where work is without opening every group. | 经纪公司门户中折叠的菜单分组现在会显示其中有多少事项在等待你处理，无需逐个展开就能看到哪里有待办工作。 |
+| 2026-11-16 | outlet | A folded menu group in the outlet portal now shows how many things inside it are waiting for you, so you can see where work is without opening every group. | 场所门户中折叠的菜单分组现在会显示其中有多少事项在等待你处理，无需逐个展开就能看到哪里有待办工作。 |
 | 2026-10-26 | agency | Paid payment vouchers now show every line of the week and who signed them, and a voucher warns when the IC number on it no longer matches the PR's profile. | 已付款的付款凭单现在会列出当周的每一项明细与签署人；若凭单上的身份证号与 PR 资料不一致，也会显示提醒。 |
 | 2026-10-26 | outlet | The daily statement check now compares each agency's statement with that agency's own shifts; prices show as one amount when they do not vary, the calendar shows a tappable day count on phones, and reports draw loss-making nights below zero. | 每日对账现在会把各经纪公司的账单与该公司自己的班次逐一比对；价格相同时只显示一个金额，手机上的日历会显示可点按的当日班次数，报表也会把亏损的夜晚画在零线以下。 |
 | 2026-10-22 | agency | The agency portal has a new look, and its payroll screens now show voucher numbers, reviewer names, readable dates and references, and amounts with thousands separators; team members who can only view no longer see buttons they cannot use. | 经纪公司门户换上了新界面，薪资页面现在显示凭单编号、审核人姓名、易读的日期与参考编号，金额也带千位分隔符；只能查看的成员不会再看到无法使用的按钮。 |
