@@ -31,6 +31,7 @@ import {
 } from './shift-post-check';
 import { demandExceedsQuantity, UNKNOWN_TEMPLATE_REFUSAL } from './shift-venue-rules';
 import { moveRefusal, shiftEditRules } from './shift-edit-rules';
+import { invoiceCitationRefusal } from '@/features/shift-assignment/invoice-citation-guard';
 import { writeUnlessRefused } from './shift-write-guard';
 import {
   notifyPostedAfterCommit,
@@ -684,6 +685,16 @@ export class ShiftControllerClass {
         (a) => !['cancelled', 'no_show', 'leave_approved'].includes(a.status),
       );
       const outlet = await this.outletRepository.getById(existing.outletId);
+
+      // The delete cascades to every assignment on the shift, so billed work on
+      // ANY of them refuses it — admin included (invoice-citation-guard.ts).
+      const billed = invoiceCitationRefusal(
+        await this.shiftAssignmentRepository.listInvoiceCitations(booked.map((a) => a.id)),
+        'shift',
+      );
+      if (billed) {
+        return res.status(409).json({ success: false, message: billed, data: null });
+      }
 
       const removed = await this.shiftRepository.remove(id);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });

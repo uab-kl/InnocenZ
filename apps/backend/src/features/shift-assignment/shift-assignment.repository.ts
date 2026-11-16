@@ -69,6 +69,7 @@ import {
 // Defined on the model so a leaf can read it without a repo-to-repo import;
 // re-exported here because this path has many importers of long standing.
 import { NON_STAFFING_STATUSES } from './shift-assignment.model';
+import type { InvoiceCitation } from './invoice-citation-guard';
 export { NON_STAFFING_STATUSES };
 
 /**
@@ -3097,6 +3098,45 @@ export class ShiftAssignmentRepositoryClass {
       );
       return [];
     }
+  }
+
+  /**
+   * The collection invoices (not void) that cite any of these assignments in
+   * `source_assignment_ids` — read before a delete, see
+   * `invoice-citation-guard.ts`. `?|` asks "does the jsonb array hold ANY of
+   * these strings", which is exactly how the ids are stored.
+   *
+   * THROWS on a database error rather than answering "none": a delete must not
+   * go ahead on a check that did not run.
+   */
+  async listInvoiceCitations(assignmentIds: readonly string[]): Promise<InvoiceCitation[]> {
+    if (assignmentIds.length === 0) return [];
+    const ids = sql.join(
+      assignmentIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const result = await db.execute(sql`
+      select id::text as invoice_id, week_start::text as week_start,
+             outlet_name, status::text as status
+        from main.collection_invoice
+       where status <> 'void'
+         and jsonb_typeof(source_assignment_ids) = 'array'
+         and source_assignment_ids ?| array[${ids}]::text[]
+       order by week_start`);
+    const rows = (Array.isArray(result)
+      ? result
+      : ((result as { rows?: unknown[] })?.rows ?? [])) as Array<{
+      invoice_id: string;
+      week_start: string;
+      outlet_name: string;
+      status: string;
+    }>;
+    return rows.map((r) => ({
+      invoiceId: r.invoice_id,
+      weekStart: r.week_start,
+      outletName: r.outlet_name,
+      status: r.status,
+    }));
   }
 
   async remove(id: string): Promise<boolean> {
