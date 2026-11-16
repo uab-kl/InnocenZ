@@ -65,6 +65,7 @@ import {
 } from './resolve-tier-wages';
 import { shiftDayKey, shiftWindowInstants } from '@/util/slot-window';
 import { assignmentHistoryReason } from './assignment-history-guard';
+import { invoiceCitationRefusal } from './invoice-citation-guard';
 import { PR_UNAVAILABLE_THEN, travelWarningFor } from './travel-gap';
 import { assignAnswer, reStaffAnswer, seatingRules, type SeatReads } from './pr-seating-rules';
 import { ShiftWriteRefused, writeUnlessRefused } from '@/features/shift/shift-write-guard';
@@ -2785,6 +2786,16 @@ export class ShiftAssignmentControllerClass {
             data: null,
           });
         }
+      }
+
+      // Billed work is never deleted — admin included (invoice-citation-guard.ts):
+      // the invoice would go on citing a row that no longer exists.
+      const billed = invoiceCitationRefusal(
+        await this.shiftAssignmentRepository.listInvoiceCitations([id]),
+        'assignment',
+      );
+      if (billed) {
+        return res.status(409).json({ success: false, message: billed, data: null });
       }
 
       const removed = await this.shiftAssignmentRepository.remove(id);
