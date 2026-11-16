@@ -229,6 +229,23 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	border-color: color-mix(in oklab, var(--iz-red, #ff6b6b) 70%, #000);
 }
 
+/*
+ * A CLOSED section heading carries the total of its rows (16 Nov 2026), so a
+ * folded Workspace / Management / Organization still says where work waits.
+ * The pill sits beside the chevron; the pill's own `margin-left: auto` is for a
+ * nav ROW and would push it away from the chevron here.
+ */
+.iz-outlet-nav-heading__end {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+.iz-outlet-nav-heading__end .iz-nav-alert {
+	margin-left: 0;
+}
+
 /* `.iz-portal-nav-link` in the middle is load-bearing: the mobile tab bar lives
    INSIDE `.iz-portal` too, so the unscoped selector shrank its numbered pill to a
    dot on every phone whose user had once collapsed the desktop rail — a setting

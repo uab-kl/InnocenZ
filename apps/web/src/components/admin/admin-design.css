@@ -426,6 +426,17 @@ body[data-admin-design] .admin-sidebar-nav-item-active::before {
 	border-radius: 2px;
 	background: #d5c5e5;
 }
+/* Collapsed rail: the pill's place is taken by a corner dot (16 Nov 2026). */
+body[data-admin-design] .admin-sidebar-dot {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	width: 9px;
+	height: 9px;
+	border-radius: 999px;
+	background: #eccd6f;
+	box-shadow: 0 0 0 2px var(--sidebar, #17141f);
+}
 body[data-admin-design] .admin-sidebar-badge {
 	min-width: 24px;
 	height: 24px;

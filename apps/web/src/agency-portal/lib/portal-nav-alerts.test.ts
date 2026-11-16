@@ -3,6 +3,7 @@ import {
 	agencyNavAlerts,
 	countShiftsNeedingStaff,
 	outletNavAlerts,
+	sectionNavAlert,
 } from "./portal-nav-alerts";
 
 const NO_AGENCY_WORK = {
@@ -153,5 +154,42 @@ describe("countShiftsNeedingStaff", () => {
 				{ quantity: 4, demandCut: 3, prs: ["a"], status: "confirmed" },
 			]),
 		).toBe(0);
+	});
+});
+
+describe("sectionNavAlert — a closed heading carries its rows' work", () => {
+	const alerts = agencyNavAlerts({
+		...NO_AGENCY_WORK,
+		approvals: 3,
+		receipts: 2,
+		unpaidPeriods: 18,
+	});
+
+	it("sums the rows inside the section", () => {
+		expect(
+			sectionNavAlert(["/agency/pending", "/agency/subscription"], alerts),
+		).toEqual({ count: 21, tone: "amber" });
+	});
+
+	it("goes red when a money row inside is red — never quieter than its loudest row", () => {
+		expect(sectionNavAlert(["/agency/pending", "/agency/pv"], alerts)).toEqual({
+			count: 5,
+			tone: "red",
+		});
+	});
+
+	it("counts only the rows this role can see", () => {
+		// A role without Approvals has no /agency/pending row in its section.
+		expect(sectionNavAlert(["/agency/subscription"], alerts)).toEqual({
+			count: 18,
+			tone: "amber",
+		});
+	});
+
+	it("is absent — not a grey zero — when nothing inside is waiting", () => {
+		expect(
+			sectionNavAlert(["/agency/roster", "/agency/history"], alerts),
+		).toBeNull();
+		expect(sectionNavAlert([], {})).toBeNull();
 	});
 });
