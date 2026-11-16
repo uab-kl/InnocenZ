@@ -509,6 +509,17 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    authenticator secrets; keep it with the other secrets — changing or losing it locks enrolled admins out.
 10. **Not walked in a browser:** the Workspace time picker and refusal toast, and the Penalty rules editor clamps —
    unit-tested and API-checked only; click through on a dev build.
+11. **Desk list of 15 (16 Nov, re-checked read-only):** only #7 (billed work deleted) was real — fixed by the
+   invoice-citation guard. The rest hold in the DB or the code: unique indexes exist for vouchers, invoices,
+   penalty rules, agency–outlet pairs, memberships/member codes, `m_module (portal_id, module_key)`,
+   `m_permission`, and one default `payment_method` per owner; tier-rate and menu repeats are refused by
+   `repeatedTierRowRefusal` / the slug check and the save replaces the list under the workspace row lock (0
+   duplicates); cut-loss refuses assignments off the request's shift, swap sets `from_shift_id` itself (all 4
+   swaps chain correctly); status/timestamp pairs 0 mismatches. **Found:** `main.dispute` (entity_type /
+   entity_id) has NO model, migration, reader or writer anywhere in the repo — an orphan with 1 open row from
+   29 Jun; real disputes live in `payment_voucher_dispute`. Dropping it is a migration → owner's OK first.
+   Optional belt-and-braces: a DB unique index on `outlet_tier_rate (outlet_id, kind, tier)` and
+   `outlet_drink_menu (outlet_id, slug)` — also a migration, not needed while the code guard holds.
 
 ### ▶ 🟠 OPEN — left after the redesign walkthrough (found 22 Oct 2026, round 2 verified 26 Oct; §10 2026-10-22, 2026-10-26, §8 G44–G61)
 **SL's run steps — they write to the SHARED DB, so they are SL's to run, in this order.** Every script dry-runs by default; read its output, then repeat with `--apply`. From `apps/backend`:
