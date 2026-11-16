@@ -3,6 +3,10 @@ import { UnpaidBillingBanner } from "@agency-portal/components/iz/UnpaidBillingB
 import { formatRM, IzPageTitle } from "@agency-portal/components/iz/ui";
 import { AgencyHomeHubTabs } from "@agency-portal/components/portal/AgencyHomeHubTabs";
 import { AiSuggestionsPanel } from "@agency-portal/components/portal/AiSuggestionsPanel";
+import {
+	AgencyTodoRows,
+	TodoPanel,
+} from "@agency-portal/components/portal/TodoPanel";
 import { useAgencyOutlets } from "@agency-portal/hooks/use-agency-outlets";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
 import { useAgencyPvs } from "@agency-portal/hooks/use-agency-pvs";
@@ -257,6 +261,14 @@ function AgencyHub() {
 					</Link>
 				)}
 			</header>
+			{/* FIRST on the page (owner, 16 Nov 2026): everything waiting on this
+			    user, most urgent first, each with the one button that goes there.
+			    The subscription strip moved in here from the column below, so
+			    every "act on this" row on Today lives in one list. */}
+			<TodoPanel>
+				<UnpaidBillingBanner portal="agency" />
+				<AgencyTodoRows />
+			</TodoPanel>
 			<div className="iz-portal-kpi-grid">
 				<KpiTile
 					label={t.agencyHome.totalPr}
@@ -310,12 +322,8 @@ function AgencyHub() {
 			)}
 			<div className="iz-portal-home-grid">
 				<div className="iz-portal-home-main">
-					{/* What the agency owes InnocenZ for its OWN subscription — not the
-					    payout it owes its PRs, which is the KPI tile above. Two different
-					    directions of money, so they must never share a surface. Hidden
-					    entirely at zero. */}
-					<UnpaidBillingBanner portal="agency" />
-
+					{/* The subscription strip (what the agency owes InnocenZ — never
+					    the PR payout tile above) now opens the To do panel at the top. */}
 					{/* Says what finance can DO, not which pages exist for it.
 					    "payroll & PV only" was narrower than the role's actual reach —
 					    finance also reads the roster (owner's call, 11 Aug 2026: keep it)

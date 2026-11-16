@@ -1,22 +1,34 @@
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index.js';
+import { env } from '@/env.js';
 import { logger } from '@/util/logger.js';
 import { AdminMfa, AdminMfaTable } from './admin-mfa.model.js';
+import { mfaKeyFrom, openMfaSecret, sealMfaSecret } from './mfa-secret-crypto.js';
+
+/**
+ * The seed is sealed on the way IN and opened on the way OUT, here and only
+ * here, so every caller keeps reading a plain `secret` (see mfa-secret-crypto).
+ */
+const mfaKey = () => mfaKeyFrom(env.MFA_SECRET_KEY);
+const opened = (row: AdminMfa): AdminMfa => ({ ...row, secret: openMfaSecret(row.secret, mfaKey()) });
 
 export class AdminMfaRepositoryClass {
   async getByUserId(userId: string): Promise<AdminMfa | null> {
+    let row: AdminMfa | undefined;
     try {
-      const [row] = await db
+      [row] = await db
         .select()
         .from(AdminMfaTable)
         .where(eq(AdminMfaTable.userId, userId))
         .limit(1);
-      return row ?? null;
     } catch (error) {
       // Missing table on a fresh DB must not turn a correct password into HTTP 500.
       logger.error('[AdminMfaRepository.getByUserId] Error:', error);
       return null;
     }
+    // Opened OUTSIDE the catch on purpose: a sealed seed that cannot be opened
+    // must fail the login, never read as "this admin has no second factor".
+    return row ? opened(row) : null;
   }
 
   /**
@@ -38,20 +50,21 @@ export class AdminMfaRepositoryClass {
       const existing = await this.getByUserId(userId);
       if (existing?.confirmed) return null;
 
+      const stored = sealMfaSecret(secret, mfaKey());
       if (existing) {
         const [row] = await db
           .update(AdminMfaTable)
-          .set({ secret, confirmed: false, updatedAt: new Date() })
+          .set({ secret: stored, confirmed: false, updatedAt: new Date() })
           .where(and(eq(AdminMfaTable.id, existing.id), eq(AdminMfaTable.confirmed, false)))
           .returning();
-        return row ?? null;
+        return row ? opened(row) : null;
       }
 
       const [row] = await db
         .insert(AdminMfaTable)
-        .values({ userId, secret, confirmed: false })
+        .values({ userId, secret: stored, confirmed: false })
         .returning();
-      return row ?? null;
+      return row ? opened(row) : null;
     } catch (error) {
       logger.error('[AdminMfaRepository.startEnrolment] Error:', error);
       throw error;
@@ -65,7 +78,7 @@ export class AdminMfaRepositoryClass {
         .set({ confirmed: true, updatedAt: new Date() })
         .where(eq(AdminMfaTable.id, id))
         .returning();
-      return row ?? null;
+      return row ? opened(row) : null;
     } catch (error) {
       logger.error('[AdminMfaRepository.confirm] Error:', error);
       throw error;

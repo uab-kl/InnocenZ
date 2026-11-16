@@ -4,6 +4,7 @@ import { type NavItem, navIsActive } from "@agency-portal/components/Nav";
 import {
 	NavAlertBadge,
 	navAlertAriaSuffix,
+	PortalNavPathsContext,
 	useNavAlerts,
 } from "@agency-portal/components/portal/NavAlertBadge";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
@@ -44,6 +45,7 @@ import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -637,6 +639,12 @@ export function PortalShell({
 		canOutlet as (permission: string) => boolean,
 		orgProfileOnly,
 	);
+	// The paths this role's menu offers — what a page's To do panel may point at.
+	const navPathKey = sidebarItems.map((item) => item.to).join("|");
+	const navPaths = useMemo(
+		() => new Set(navPathKey.split("|").filter(Boolean)),
+		[navPathKey],
+	);
 
 	// A session that did not authenticate against the backend renders fixtures,
 	// and until now said so nowhere: org name and sub-role read identically to a
@@ -768,7 +776,11 @@ export function PortalShell({
 						menuOpen={menuOpen}
 					/>
 
-					<div className="iz-portal-viewport">{children}</div>
+					<div className="iz-portal-viewport">
+						<PortalNavPathsContext.Provider value={navPaths}>
+							{children}
+						</PortalNavPathsContext.Provider>
+					</div>
 				</div>
 
 				{menuOpen && (
