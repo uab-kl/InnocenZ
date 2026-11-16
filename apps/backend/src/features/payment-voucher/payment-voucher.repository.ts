@@ -31,6 +31,7 @@ import { ShiftTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { prepareLine, resolveComponent } from './payment-voucher-component';
 import { uniqueByRef, withCarriedFacts } from './payment-voucher-line-edit';
+import { formatCents, toCents } from './payment-voucher-balance';
 import {
   assignmentIdFromRef,
   checkLineAgainstShift,
@@ -60,6 +61,42 @@ import {
 } from './payment-voucher.model';
 
 type LineInput = Omit<PaymentVoucherLineInsertType, 'id' | 'voucherId'>;
+
+/** The header figures `recomputeTotals` writes, as stored (fixed(2) strings). */
+type VoucherTotals = {
+  subtotal: string;
+  deduction: string;
+  net: string;
+  updatedAt: Date;
+};
+
+/** The money a finance signature attests, read under the row lock. */
+type VoucherMoneyView = {
+  subtotal: string;
+  deduction: string;
+  net: string;
+  financeHeadSignedAt: Date | null;
+};
+
+/**
+ * Did any of the three header figures change? Compared in cents, so "24.0"
+ * and "24.00" are the same money. An unreadable figure counts as moved: a
+ * signature must not survive on a total nobody can read back.
+ */
+export function moneyMoved(
+  before: { subtotal: string; deduction: string; net: string },
+  after: { subtotal: string; deduction: string; net: string },
+): boolean {
+  try {
+    return (
+      toCents(before.subtotal) !== toCents(after.subtotal) ||
+      toCents(before.deduction) !== toCents(after.deduction) ||
+      toCents(before.net) !== toCents(after.net)
+    );
+  } catch {
+    return true;
+  }
+}
 
 /**
  * A line as screens read it: every stored column, plus the venue's CURRENT
@@ -453,7 +490,15 @@ export class PaymentVoucherRepositoryClass {
                 )
                 .returning()
             : [];
-        return { ...voucher, lines: insertedLines };
+        // The header's subtotal and net come from the lines that LANDED, never
+        // from the caller's arithmetic. POST /payment-voucher used to store
+        // whatever totals it was sent, and the payout bank file pays the
+        // stored `net` — so a voucher could pay a figure no line added up to.
+        // The weekly generator computes the same totals, so for it this is a
+        // no-op; what it gains is that a float or rounding slip can no longer
+        // reach the database (`checkVoucherBalance` only reported one).
+        const totals = await this.recomputeTotals(voucher.id, tx);
+        return { ...voucher, ...totals, lines: insertedLines };
       });
       logger.info(
         '[PaymentVoucherRepository.create] Voucher created:',
@@ -478,9 +523,20 @@ export class PaymentVoucherRepositoryClass {
      * rather than applied to a state nobody checked.
      */
     expectedStatus?: PaymentVoucherStatus,
+    /**
+     * `voidFinanceSignatureOnMoneyChange`: when this write moves the voucher's
+     * money (subtotal, deduction or net) and the agency had already signed it,
+     * the signature comes off — the same rule `addLineOnce` applies to a sealed
+     * wage. The signature attested a total that no longer exists, and the
+     * payout file pays the stored net. Only PUT /payment-voucher/:id asks for
+     * it; the sign, dispute and scheduler paths never move money.
+     */
+    options: { voidFinanceSignatureOnMoneyChange?: boolean } = {},
   ): Promise<PaymentVoucherWithLines | null> {
     try {
       return await db.transaction(async (tx) => {
+        const voidOnMoneyChange =
+          options.voidFinanceSignatureOnMoneyChange === true;
         // Optimistic concurrency, checked INSIDE the transaction under a row
         // lock — not in the controller, whose read races the very write it
         // would be guarding against. The window is real: the agency editor
@@ -489,15 +545,28 @@ export class PaymentVoucherRepositoryClass {
         // destroy the PR's line and its proof photo with no error on either
         // side. Only enforced when the caller sent a token, so the scheduler
         // and every status-flip path are untouched.
-        if (expectedUpdatedAt !== undefined || expectedStatus !== undefined) {
+        //
+        // The same locked read keeps the money as it stood BEFORE this write,
+        // which is what the signature void below compares against.
+        let before: VoucherMoneyView | undefined;
+        if (
+          expectedUpdatedAt !== undefined ||
+          expectedStatus !== undefined ||
+          voidOnMoneyChange
+        ) {
           const [current] = await tx
             .select({
               updatedAt: PaymentVoucherTable.updatedAt,
               status: PaymentVoucherTable.status,
+              subtotal: PaymentVoucherTable.subtotal,
+              deduction: PaymentVoucherTable.deduction,
+              net: PaymentVoucherTable.net,
+              financeHeadSignedAt: PaymentVoucherTable.financeHeadSignedAt,
             })
             .from(PaymentVoucherTable)
             .where(eq(PaymentVoucherTable.id, id))
             .for('update');
+          before = current;
           if (
             current &&
             ((expectedUpdatedAt !== undefined &&
@@ -510,9 +579,36 @@ export class PaymentVoucherRepositoryClass {
           }
         }
 
+        /*
+         * SUBTOTAL AND NET ARE NEVER WRITTEN AS SENT.
+         *
+         * They are arithmetic over the lines — subtotal = Σ line amounts,
+         * net = subtotal − deduction — and the payout bank file pays the stored
+         * `net`. A header-only PUT carrying `net` used to land as-is and skip
+         * the recompute entirely, so a voucher could pay a figure its own lines
+         * did not add up to. Only `deduction` is a fact of its own; the other
+         * two are derived from what is stored, below.
+         *
+         * A new deduction moves `net` in the SAME statement, so the row never
+         * holds a net that disagrees with its own subtotal − deduction — not
+         * even mid-transaction, which is what a CHECK constraint would judge.
+         */
+        const { subtotal: sentSubtotal, net: sentNet, ...header } = data;
+        const touchesMoney =
+          header.deduction !== undefined ||
+          sentSubtotal !== undefined ||
+          sentNet !== undefined;
         const [voucher] = await tx
           .update(PaymentVoucherTable)
-          .set({ ...data, updatedAt: new Date() })
+          .set({
+            ...header,
+            ...(header.deduction !== undefined
+              ? {
+                  net: sql`${PaymentVoucherTable.subtotal} - ${header.deduction}::numeric`,
+                }
+              : {}),
+            updatedAt: new Date(),
+          })
           .where(eq(PaymentVoucherTable.id, id))
           .returning();
         // Empty result => row not found (a genuine null); a real DB error re-throws below.
@@ -617,11 +713,31 @@ export class PaymentVoucherRepositoryClass {
           // Totals derive from what ACTUALLY landed, not from the caller's
           // arithmetic — a restored penalty the payload never mentioned still
           // has to reach the subtotal.
-          await this.recomputeTotals(id, tx);
-          return { ...voucher, lines: insertedLines };
+          const totals = await this.recomputeTotals(id, tx);
+          const voided = await this.voidFinanceSignatureIfMoneyMoved(
+            tx,
+            id,
+            voidOnMoneyChange ? before : undefined,
+            totals,
+          );
+          // The row as it now stands: the header statement above returned the
+          // pre-recompute figures.
+          return { ...voucher, ...totals, ...voided, lines: insertedLines };
         }
 
         const existingLines = await this.getLines(id, tx);
+        // A header-only money edit recomputes too. It used to skip this, so a
+        // PUT carrying only `deduction` left `net` exactly where it was.
+        if (touchesMoney) {
+          const totals = await this.recomputeTotals(id, tx);
+          const voided = await this.voidFinanceSignatureIfMoneyMoved(
+            tx,
+            id,
+            voidOnMoneyChange ? before : undefined,
+            totals,
+          );
+          return { ...voucher, ...totals, ...voided, lines: existingLines };
+        }
         return { ...voucher, lines: existingLines };
       });
     } catch (error) {
@@ -2455,31 +2571,76 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
-  /** subtotal = Σ line amounts; net = subtotal − deduction. */
+  /**
+   * subtotal = Σ line amounts; net = subtotal − deduction.
+   *
+   * Returns what it wrote, so a caller that already holds the header row can
+   * answer with the figures as stored rather than the ones it started with.
+   * In integer cents: two numeric(12,2) strings subtracted as floats can land a
+   * hair off a cent, and `net` is the figure the bank file pays.
+   */
   private async recomputeTotals(
     voucherId: string,
     tx: DbTransaction,
-  ): Promise<void> {
+  ): Promise<VoucherTotals> {
     const [row] = await tx
       .select({
         subtotal: sql<string>`coalesce(sum(${PaymentVoucherLineTable.amount}), 0)::numeric(12,2)`,
       })
       .from(PaymentVoucherLineTable)
       .where(eq(PaymentVoucherLineTable.voucherId, voucherId));
-    const subtotal = Number(row?.subtotal ?? 0);
+    const subtotalCents = toCents(row?.subtotal ?? '0');
     const [voucher] = await tx
       .select({ deduction: PaymentVoucherTable.deduction })
       .from(PaymentVoucherTable)
       .where(eq(PaymentVoucherTable.id, voucherId));
-    const deduction = Number(voucher?.deduction ?? 0);
+    const deductionCents = toCents(voucher?.deduction ?? '0');
+    const totals: VoucherTotals = {
+      subtotal: formatCents(subtotalCents),
+      deduction: formatCents(deductionCents),
+      net: formatCents(subtotalCents - deductionCents),
+      updatedAt: new Date(),
+    };
     await tx
       .update(PaymentVoucherTable)
       .set({
-        subtotal: subtotal.toFixed(2),
-        net: (subtotal - deduction).toFixed(2),
-        updatedAt: new Date(),
+        subtotal: totals.subtotal,
+        net: totals.net,
+        updatedAt: totals.updatedAt,
       })
       .where(eq(PaymentVoucherTable.id, voucherId));
+    return totals;
+  }
+
+  /**
+   * Takes the agency's signature off when a write moved the money it attested.
+   *
+   * `before` is the locked pre-write read, or undefined when the caller did not
+   * ask for the void. Compared on the three header figures only: a description
+   * fix, or a faithful round trip of the same lines, changes nothing the
+   * signature vouched for and keeps it. Returns the cleared columns (empty when
+   * nothing was cleared) so the caller's answer shows the voucher as stored.
+   */
+  private async voidFinanceSignatureIfMoneyMoved(
+    tx: DbTransaction,
+    voucherId: string,
+    before: VoucherMoneyView | undefined,
+    after: VoucherTotals | undefined,
+  ): Promise<Partial<PaymentVoucherType>> {
+    if (!before?.financeHeadSignedAt || !after) return {};
+    if (!moneyMoved(before, after)) return {};
+    const cleared = {
+      financeHeadSignedAt: null,
+      financeHeadSignature: null,
+      financeHeadName: null,
+      financeHeadRole: null,
+      updatedAt: new Date(),
+    };
+    await tx
+      .update(PaymentVoucherTable)
+      .set(cleared)
+      .where(eq(PaymentVoucherTable.id, voucherId));
+    return cleared;
   }
 
   /** Every day the agency has acted on for this voucher. Absence = unreviewed. */

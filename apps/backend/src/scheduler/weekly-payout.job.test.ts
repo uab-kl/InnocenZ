@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   members: { listByAgency: vi.fn() },
   notify: vi.fn(),
   notifyMany: vi.fn(),
+  writeSystemAudit: vi.fn(),
 }));
 
 vi.mock('@/composition-root.js', () => ({
@@ -37,6 +38,10 @@ vi.mock('@/features/notification/notify.js', () => ({
 }));
 vi.mock('@/util/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+// The run's audit row is stubbed: its own rules live in audit-log.system.test.ts.
+vi.mock('@/features/audit-log/audit-log.system.js', () => ({
+  writeSystemAudit: mocks.writeSystemAudit,
 }));
 
 import { runWeeklyPayout } from './weekly-payout.job.js';
@@ -90,6 +95,7 @@ beforeEach(() => {
   mocks.members.listByAgency.mockResolvedValue([]);
   mocks.notify.mockResolvedValue({ id: 'n1' });
   mocks.notifyMany.mockResolvedValue(0);
+  mocks.writeSystemAudit.mockResolvedValue(true);
   mocks.prRepo.getById.mockImplementation(async (prId: string) => ({ userId: prId }));
   mocks.repo.update.mockImplementation(async (id: string, patch: object) => ({
     ...voucher(id, true),
@@ -163,5 +169,52 @@ describe('runWeeklyPayout — receipt rollover', () => {
     const sentAt = mocks.repo.update.mock.invocationCallOrder[0]!;
     const rolledAt = mocks.repo.verifyApprovedReceipts.mock.invocationCallOrder[0]!;
     expect(rolledAt).toBeGreaterThan(sentAt);
+  });
+});
+
+/**
+ * 12 Nov 2026: no job wrote an audit row. The payout now files ONE per run,
+ * after every write and notice, naming what it sent, held and closed.
+ */
+describe('runWeeklyPayout — the run’s audit row', () => {
+  it('names the voucher it sent, the receipts it closed, and the ones it held', async () => {
+    mocks.repo.listForWeek.mockResolvedValue([voucher('A', true), voucher('B', false)]);
+    mocks.repo.verifyApprovedReceipts.mockResolvedValue(['r-1', 'r-2']);
+
+    await runWeeklyPayout();
+
+    expect(mocks.writeSystemAudit).toHaveBeenCalledTimes(1);
+    expect(mocks.writeSystemAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        job: 'weekly-payout',
+        entity: 'payment-voucher',
+        changed: 3,
+        ids: ['A'],
+        summary: expect.objectContaining({
+          issued: 1,
+          heldForSignature: 1,
+          issuedVoucherIds: ['A'],
+          verifiedReceiptIds: ['r-1', 'r-2'],
+        }),
+      }),
+    );
+  });
+
+  it('is written LAST, after the PR has been told', async () => {
+    mocks.repo.listForWeek.mockResolvedValue([voucher('A', true)]);
+
+    await runWeeklyPayout();
+
+    const toldAt = mocks.notify.mock.invocationCallOrder[0]!;
+    const auditedAt = mocks.writeSystemAudit.mock.invocationCallOrder[0]!;
+    expect(auditedAt).toBeGreaterThan(toldAt);
+  });
+
+  it('reports zero changes on a quiet week, so the helper writes nothing', async () => {
+    mocks.repo.listForWeek.mockResolvedValue([]);
+
+    await runWeeklyPayout();
+
+    expect(mocks.writeSystemAudit).toHaveBeenCalledWith(expect.objectContaining({ changed: 0 }));
   });
 });

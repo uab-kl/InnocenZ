@@ -18,10 +18,14 @@ import {
 } from '@/features/payment-voucher/payment-voucher-issue.js';
 import type { PaymentVoucherWithLines } from '@/features/payment-voucher/payment-voucher.model.js';
 import { notify, notifyMany } from '@/features/notification/notify.js';
+import { writeSystemAudit } from '@/features/audit-log/audit-log.system.js';
 import type { JobDefinition } from './scheduler.js';
 
 /** Stamped into the generated vouchers' audit columns. */
 const ACTOR = 'weekly-payout-job';
+
+/** The job's name — its lock key, and the `job:` its audit row is signed with. */
+const JOB_NAME = 'weekly-payout';
 
 // `klToday` used to be defined here, character for character. It now lives beside
 // `previousCompleteWeek` in payment-voucher-week.ts, because the send gate needs
@@ -225,12 +229,14 @@ export async function runWeeklyPayout(): Promise<void> {
   // past review here, so its receipts still close this same night. A voucher
   // held for a fortnight rolls over the Sunday after it is finally sent.
   // Vouchers with an open dispute stay skipped inside the repository.
+  let verifiedReceiptIds: string[] = [];
   try {
     const verified = await paymentVoucherRepository.verifyApprovedReceipts({
       throughWeekStart: weekStart,
       excludeVoucherStatuses: ['pending_review'],
       actor: ACTOR,
     });
+    verifiedReceiptIds = verified;
     logger.info(
       `[weekly-payout] receipts: ${verified.length} approved receipt(s) rolled over to verified` +
         (verified.length > 0
@@ -359,6 +365,33 @@ export async function runWeeklyPayout(): Promise<void> {
     }
   }
 
+  // The run's one audit row — LAST, after every voucher, receipt and notice
+  // above is written. `writeSystemAudit` never throws, so a failed audit insert
+  // costs this run nothing; and a run that changed nothing writes no row.
+  const createdVoucherIds = result.created.map((c) => c.voucherId);
+  const issuedVoucherIds = issued.map((v) => v.id);
+  await writeSystemAudit({
+    job: JOB_NAME,
+    entity: 'payment-voucher',
+    action: 'BULK_UPDATE',
+    changed: createdVoucherIds.length + issuedVoucherIds.length + verifiedReceiptIds.length,
+    ids: [...createdVoucherIds, ...issuedVoucherIds],
+    summary: {
+      weekStart,
+      weekEnd,
+      created: createdVoucherIds.length,
+      issued: issuedVoucherIds.length,
+      heldUnbalanced: held,
+      heldForDayReview: awaitingReview,
+      heldForSignature: awaitingSignature,
+      receiptsVerified: verifiedReceiptIds.length,
+      prsNotified: notified,
+      createdVoucherIds,
+      issuedVoucherIds,
+      verifiedReceiptIds,
+    },
+  });
+
   // Collections (what an outlet owes its agency) are NOT drafted here any more.
   //
   // Owner's decision, 12 Aug 2026: the outlet and the agency settle that between
@@ -381,7 +414,7 @@ export async function runWeeklyPayout(): Promise<void> {
 }
 
 export const WEEKLY_PAYOUT_JOB: JobDefinition = {
-  name: 'weekly-payout',
+  name: JOB_NAME,
   schedule: SCHEDULE,
   run: runWeeklyPayout,
 };

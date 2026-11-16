@@ -1,6 +1,6 @@
 ---
 name: outlet-privacy-decision-wired-to-one-route
-description: "FIXED 3 Sept 2026 — the owner decision hiding PR identity docs from outlets was middleware wired to /user and nothing else, so /pr shipped icNo + dob and /shift-assignment shipped cancel fees and GPS. Carries the two-sided proof a privacy fix needs"
+description: "Outlet PR-privacy redaction failed 3 times — wired to one route (3 Sep), and decided per ACCOUNT not per console (7 Oct: dual-role venue console got IC/DOB/GPS). Carries the two-sided proof"
 metadata: 
   node_type: memory
   type: project
@@ -85,6 +85,23 @@ discriminating, NO LEAKS.** A one-sided check would have passed just as happily 
 Also **deleted rather than shipped**: a derive-age-from-`dob` fallback in the redactor. `age` is
 already derived upstream (verified — no live profile carries a `dob` without an `age`), so the
 branch never fired, and a branch that never runs is one nobody notices going wrong.
+
+## 🔴→🟢 Third failure, 7 Oct 2026: decided per ACCOUNT, served per CONSOLE
+
+The middleware cleared the flag for any account holding an agency or admin role. The scope
+resolvers decide per REQUEST and honour `x-org-kind: outlet`. So the 3 live accounts that run a
+venue AND staff an agency (one also admin) got the **venue's row set with the agency's field set**
+in the venue console — IC + DOB on 52 `/pr` rows, fines/GPS/MC on `/shift-assignment`.
+
+**Rule:** the field set must answer the same question as the row set. Fixed three ways:
+`x-org-kind: outlet` ⇒ redact for everyone, unverified (a claim may be trusted only in the direction
+that REMOVES data); the controllers redact any venue scope regardless of the flag; the web sends no
+org headers from `/admin` pages (`activeOrgForPath`) — the pick outlived the portal it was made in.
+
+How it was proven: `_probe-dual-console-redaction.ts --local` mounts the CHECKOUT's routers (7777
+runs whatever started it, so it cannot prove an uncommitted fix); `_probe-outlet-privacy-sweep.ts`
+now mints (`PROBE_MINT_EMAIL`) and sends console headers, so a dual-role person can be swept as the
+venue — 55 routes, nothing else of this class.
 
 Related: [[pr-spend-excluded-commission]] (the deduction rule that prompted this),
 [[org-scope-guard-family]], [[outlet-read-a-foreign-agencys-tier]], [[agency-read-paths-ungated]].

@@ -2,7 +2,51 @@ import { z } from 'zod';
 import { outletStatusValues, outletUserSubRoleValues } from '@/features/outlet/outlet.model';
 import { MEMBERSHIP_STATUSES } from '@/util/membership-status';
 
-export const CreateOutletSchema = z.object({
+/**
+ * A PIN IS TWO NUMBERS, SAVED TOGETHER (12 Nov 2026).
+ *
+ * Every write already holds latitude to ±90 and longitude to ±180, so a fully
+ * swapped Malaysian pair (a longitude of ~101 in the latitude field) is refused.
+ * What still got through was HALF a pin: `PUT /outlet/:id` and the admin
+ * `POST /outlet` accepted `lat` or `lng` on its own, so one wrong number could
+ * land beside an old one and move the venue's check-in fence somewhere nobody
+ * chose — and every PR check-in there is distance-checked. The pin card
+ * (`PATCH /outlet/:id/geo-fence`) always sends both, and the web's outlet edit
+ * sends neither, so no screen sends one alone.
+ *
+ * (0, 0) is refused too: it is a point in the Gulf of Guinea, and the value a
+ * client sends when it defaulted a missing pin to zero. There is deliberately
+ * NO Malaysia bounding box — that would refuse a venue outside Malaysia, which
+ * is the owner's call, not a validation's.
+ */
+type PinFields = { lat?: number | undefined; lng?: number | undefined };
+
+const PIN_HALF_MESSAGE =
+  'Send latitude and longitude together — a pin needs both, or neither to leave it as it is.';
+const PIN_ZERO_MESSAGE =
+  'Latitude 0, longitude 0 is not a venue — place the pin on the outlet’s address.';
+
+function checkPin(pin: PinFields, ctx: z.RefinementCtx): void {
+  if ((pin.lat === undefined) !== (pin.lng === undefined)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: PIN_HALF_MESSAGE,
+      path: [pin.lat === undefined ? 'lat' : 'lng'],
+    });
+    return;
+  }
+  if (pin.lat === 0 && pin.lng === 0) {
+    ctx.addIssue({ code: 'custom', message: PIN_ZERO_MESSAGE, path: ['lat'] });
+  }
+}
+
+/**
+ * ⚠️ THE UNREFINED BASE — keep it that way. Under zod 4, `.partial()` (and
+ * `.pick()` / `.omit()`) on an object carrying a `.refine`/`.superRefine`
+ * THROWS AT IMPORT, which would take the whole backend down. So the pin rule
+ * is added to each DERIVED schema, after `.partial()` / `.extend()`, never here.
+ */
+const OutletBaseSchema = z.object({
   /**
    * The catalog plan (`main.subscription.id`) this venue is created on.
    *
@@ -28,7 +72,9 @@ export const CreateOutletSchema = z.object({
   geoFenceRadius: z.number().int().min(10).max(1000).default(50),
 });
 
-export const UpdateOutletSchema = CreateOutletSchema.partial().extend({
+export const CreateOutletSchema = OutletBaseSchema.superRefine(checkPin);
+
+export const UpdateOutletSchema = OutletBaseSchema.partial().extend({
   /**
    * Re-declared WITHOUT the create-time `.default(50)`, and that is the whole
    * point of the line.
@@ -58,7 +104,7 @@ export const UpdateOutletSchema = CreateOutletSchema.partial().extend({
     .optional(),
   /** Clear `logo_image` without uploading a replacement. */
   clearLogo: z.boolean().optional(),
-});
+}).superRefine(checkPin);
 
 /**
  * Admin links a venue to the agency that fulfils its PR requests.
@@ -72,11 +118,14 @@ export const SetOutletOnboardingAgencySchema = z.object({
   agencyId: z.string().uuid('Invalid agency ID').nullable(),
 });
 
-export const UpdateGeoFenceSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-  geoFenceRadius: z.number().int().min(10).max(1000).optional(),
-});
+// Both coordinates are already required here; `checkPin` adds the (0, 0) rule.
+export const UpdateGeoFenceSchema = z
+  .object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    geoFenceRadius: z.number().int().min(10).max(1000).optional(),
+  })
+  .superRefine(checkPin);
 
 /**
  * Free-text address lookup. Read-only: the result is a SUGGESTION the operator

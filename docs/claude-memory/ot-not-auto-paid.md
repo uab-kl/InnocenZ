@@ -1,11 +1,11 @@
 ---
 name: ot-not-auto-paid
-description: Overtime is no longer auto-sealed onto a voucher at check-out — it renders as pending agency approval. The approve/pay flow does not exist yet.
+description: Overtime is no longer auto-sealed onto a voucher at check-out — it renders as pending agency approval. The agency approve flow NOW EXISTS (PATCH /shift-assignment/:id/overtime, owner + finance; re-checked 21 Oct 2026).
 metadata: 
   node_type: memory
   type: project
   originSessionId: 989c3550-d0c3-4dc7-81a9-b6eec4955c1f
-  modified: 2026-07-28T08:19:34.084Z
+  modified: 2026-10-21T08:38:53.014Z
 ---
 
 Settled on the SL↔main merge (`2df9282`, 28 Jul 2026). jk's `7aebd4a` won the design argument and
@@ -25,8 +25,10 @@ Three guards stack, and all three matter:
 3. **`overtimeRate()`** derives `daily_wage / 6 × 1.5` (Tier I → RM125/h). Never quote
    `rate.otAfterHours` as ringgit — despite the name it is `standard_shift_hours`, and it is 6.
 
-## What does not exist
-**The agency approve/pay flow.** OT is displayed and then goes nowhere — no endpoint, no UI, no
-record. A PR who works overtime currently has no way to be paid for it. That is the open item, not
-a bug in the above. See [[pv-money-classification]] for how a line's `component` gets classified
-once one is finally written.
+## The approve flow — BUILT since (re-checked 21 Oct 2026)
+This section used to say the agency approve/pay flow did not exist ("no endpoint, no UI, no record").
+That is no longer true: `shift-assignment.routes.ts` has `GET /overtime/pending` (line 54) and
+`PATCH /:id/overtime` → `decideOvertime` (line 72), gated `agencyOwnerOrFinance` because deciding
+overtime raises money onto a payment voucher. Still true: OT is never money until the agency decides
+it — so marketing must never say overtime is paid automatically. See [[pv-money-classification]]
+for how the resulting line's `component` is classified.

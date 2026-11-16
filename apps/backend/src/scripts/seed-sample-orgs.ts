@@ -5,7 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { SubscriptionTable } from '@/features/subscription/subscription.model';
 import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model';
-import { AgencyOutletTable } from '@/features/agency/agency-outlet.model';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
@@ -19,6 +19,7 @@ import { logger } from '@/util/logger';
 // Demo agencies + outlets so the admin Agency and Outlet list pages show real rows.
 // Idempotent: rows are stamped createdBy='seed-sample' and re-running wipes them first.
 const ACTOR = 'seed-sample';
+const agencyOutletRepository = new AgencyOutletRepository();
 
 // Names + owner contacts mirror the InnocenZ-proto demo data.
 const AGENCIES = [
@@ -122,18 +123,13 @@ export async function seedSampleOrgs(): Promise<void> {
       // `approved` because a seed exists to produce a WORKING fixture — leaving
       // it `pending` would mean every fresh dev database starts with venues that
       // cannot post until somebody clicks Approve.
+      //
+      // Through `ensureLink`, not a raw insert, so the link's first
+      // `agency_outlet_event` is written with it — a seeded partnership then
+      // has the same history a real one has.
       const linkedAgencyId = agencyIdByName.get(o.onboardedBy);
       if (linkedAgencyId) {
-        await db
-          .insert(AgencyOutletTable)
-          .values({
-            agencyId: linkedAgencyId,
-            outletId: row.id,
-            approveStatus: 'approved',
-            createdBy: ACTOR,
-            updatedBy: ACTOR,
-          })
-          .onConflictDoNothing();
+        await agencyOutletRepository.ensureLink(row.id, linkedAgencyId, ACTOR, 'approved');
       }
       // The outlet's plan lives on member_subscription, not on the outlet row
       // (outlet.subscription_id was dropped in migration 0034).

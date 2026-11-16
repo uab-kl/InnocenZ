@@ -540,7 +540,51 @@ export function resolveRestAction(method: string, path: string): string {
   }
 }
 
-function resolveEntityIdFromRequest(req: Request): string | null {
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A uuid, in the lower-case form every stored `entity_id` already uses. */
+function asUuid(value: unknown): string | null {
+  const v = Array.isArray(value) ? value[0] : value;
+  return typeof v === 'string' && UUID_PATTERN.test(v) ? v.toLowerCase() : null;
+}
+
+/**
+ * THE FIRST ROUTE PARAM THAT HOLDS A UUID, WHATEVER THE ROUTE CALLED IT.
+ *
+ * The reader below used to know five names — `id`, `roleId`, `userId`,
+ * `moduleId`, `permissionId` — so every route that named its id anything else
+ * wrote a NULL `entity_id`: `/payment-voucher/mine/:voucherId/sign`,
+ * `/receipts/:receiptId`, `/disputes/:disputeId/resolve`,
+ * `/outlet-workspace/:outletId` (56 of 56 rows) and `/links/:outletId`.
+ *
+ * FIRST, because Express fills `req.params` in the route's own key order, and
+ * the first id on a nested path (`/:id/lines/:lineId`) is the parent — the
+ * resource the row is filed under by `resolveEntityFromPath`.
+ */
+export function firstUuidParam(params: Record<string, unknown> | undefined): string | null {
+  for (const value of Object.values(params ?? {})) {
+    const id = asUuid(value);
+    if (id) return id;
+  }
+  return null;
+}
+
+/**
+ * The id a successful write's RESPONSE names, when it is a uuid.
+ *
+ * A CREATE has no id anywhere in its request (the row did not exist yet), so
+ * 7,897 CREATE rows went to the log with none, while 1,141 successful CREATE
+ * and UPDATE rows with no `entity_id` carry it in `new_data.id`. Taken only
+ * from a single object (`data`, or the body itself), never from a list: a list
+ * names many rows, not one.
+ */
+export function entityIdFromResponse(responseBody: unknown): string | null {
+  const data = extractNewData(responseBody);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  return asUuid((data as Record<string, unknown>).id);
+}
+
+export function resolveEntityIdFromRequest(req: Request): string | null {
   /*
    * ⚠️ `req.params ?? {}` — it really can be undefined here, and reading `.id`
    * off it threw "Cannot read properties of undefined (reading 'id')" straight
@@ -555,7 +599,14 @@ function resolveEntityIdFromRequest(req: Request): string | null {
    * the caller saw: it was the audit row being dropped in silence, which is the
    * one thing an audit log may never do quietly.
    */
-  const params = (req.params ?? {}) as Record<string, string | undefined>;
+  const params = (req.params ?? {}) as Record<string, string | string[] | undefined>;
+  const uuidParam = firstUuidParam(params);
+  if (uuidParam) {
+    return uuidParam;
+  }
+
+  // The named params keep their old meaning for a value that is not a uuid
+  // (a numeric id), so no row that used to carry an id loses it.
   const paramIdValue =
     params.id ?? params.roleId ?? params.userId ?? params.moduleId ?? params.permissionId;
 
@@ -610,7 +661,11 @@ export async function logRestMutation(
   const entity = resolveEntityFromPath(path);
   const baseAction = resolveRestAction(req.method, path);
   const action = statusCode >= 400 ? `${baseAction}_FAILED` : baseAction;
-  const entityId = resolveEntityIdFromRequest(req);
+  // A refused write's response names no row it made, so only a success may
+  // fall back to the response's id.
+  const entityId =
+    resolveEntityIdFromRequest(req) ??
+    (statusCode < 400 ? entityIdFromResponse(responseBody) : null);
   const oldData = req.auditOldData;
   const newData =
     statusCode >= 400
@@ -652,13 +707,20 @@ export async function logGraphQLMutation(
   roleOverride?: string | null,
 ): Promise<void> {
   const action = resolveGraphqlAction(fieldName, errorMessage);
+  // Was a constant null. The same two sources as the REST lane, in the same
+  // order: an `id` the caller named, else the row a successful mutation returned.
+  const named = asUuid(variables?.id);
+  const returned =
+    !errorMessage && result && typeof result === 'object' && !Array.isArray(result)
+      ? asUuid((result as Record<string, unknown>).id)
+      : null;
 
   await writeAuditLog(
     req,
     {
       action,
       entity: fieldName,
-      entityId: null,
+      entityId: named ?? returned,
       oldData: variables,
       newData: errorMessage ? { result, error: errorMessage } : result,
     },

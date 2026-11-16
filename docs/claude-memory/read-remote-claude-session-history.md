@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: e03eb10b-304b-437d-b23f-ca2a81413a4e
-  modified: 2026-10-08T06:02:45.662Z
+  modified: 2026-10-21T07:29:35.984Z
 ---
 
 On 8 Oct 2026 the owner said "continue memory from this session https://claude.ai/code/session_017zFyAuQH9zyhcWAd5R4hRN". It was a Remote Control session on the other PC (jinkg), and it had hit its weekly limit.
@@ -18,3 +18,9 @@ On 8 Oct 2026 the owner said "continue memory from this session https://claude.a
 - Put the digest into a `<pre>` and read it with `get_page_text` in chunks of about 48K characters.
 
 That session's working files live only on the other PC's scratchpad, so its results must be redone or re-derived from the workbook.
+
+**Share links (`claude.ai/share/<id>`), 21 Oct 2026:** they also need a signed-in browser. The built-in browser hangs on
+"Loading…", and `/api/chat_snapshots/<id>` returns 403 "Authentication required" in BOTH browsers. What worked: open the
+share page in the owner's Chrome, where it renders, then read `document.querySelector('main').innerText`. The JS tool
+truncates its output at about 1,000 characters, so keep the text in `window.__s` (with `=?&` and URLs swapped out) and
+read it in 1,000-character slices.

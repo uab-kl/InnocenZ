@@ -24,7 +24,10 @@ import {
 } from '@/features/member-subscription/member-subscription.model.js';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
+import { writeSystemAudit } from '@/features/audit-log/audit-log.system.js';
 import type { JobDefinition } from './scheduler.js';
+
+const JOB_NAME = 'agency-tier';
 
 /**
  * The agency tier rule, RUN BY THE SERVER.
@@ -266,6 +269,15 @@ async function runAgencyTier(): Promise<void> {
   let moved = 0;
   let flagged = 0;
   let frozen = 0;
+  /** Each tier move that LANDED, for the run's audit row. */
+  const moves: {
+    agencyId: string;
+    fromPlanId: string | null;
+    toPlanId: string;
+    memberSubscriptionId: string | null;
+    pvCount: number;
+    proration: string | null;
+  }[] = [];
   for (const row of live) {
     const current = plans.find((p) => p.id === row.subscriptionId) ?? null;
 
@@ -372,8 +384,9 @@ async function runAgencyTier(): Promise<void> {
       continue;
     }
 
+    let applied: Awaited<ReturnType<typeof applyPlanChangeToLedger>>;
     try {
-      await applyPlanChangeToLedger({
+      applied = await applyPlanChangeToLedger({
         memberSubscriptionRepository,
         subscriptionRepository,
         // The week opens at 03:00 and this job moves the tier at 03:30: the
@@ -430,6 +443,16 @@ async function runAgencyTier(): Promise<void> {
       continue;
     }
     moved += 1;
+    // Recorded OUTSIDE the try above, so nothing here can be mistaken for the
+    // move failing; read defensively, so it cannot stop the loop either.
+    moves.push({
+      agencyId: row.subscriberId,
+      fromPlanId: row.subscriptionId ?? null,
+      toPlanId: banded.id,
+      memberSubscriptionId: applied?.opened?.id ?? null,
+      pvCount: issued,
+      proration: applied?.proration ?? null,
+    });
     logger.info(
       `[agency-tier] ${row.subscriberName}: ${issued} PV -> ${banded.name} (was ${row.planName})`,
     );
@@ -456,6 +479,27 @@ async function runAgencyTier(): Promise<void> {
     `[agency-tier] week ${weekStart}..${weekEnd}: ${live.length} agency subscription(s) checked, ` +
       `${moved} moved, ${flagged} past the rate card, ${frozen} awaiting a Custom price`,
   );
+
+  // The run's audit row, after every move above has committed — and only on a
+  // week that moved somebody, since a statement changes no row. `ids` are the
+  // plan rows each move OPENED; the helper never throws, so it cannot make a
+  // re-pricing run that succeeded read as a failed one.
+  await writeSystemAudit({
+    job: JOB_NAME,
+    entity: 'member-subscription',
+    action: 'BULK_UPDATE',
+    changed: moves.length,
+    ids: moves.map((m) => m.memberSubscriptionId).filter((id): id is string => Boolean(id)),
+    summary: {
+      weekStart,
+      weekEnd,
+      checked: live.length,
+      moved: moves.length,
+      pastRateCard: flagged,
+      awaitingCustom: frozen,
+      moves,
+    },
+  });
 
   /*
    * Reporting only, and after the money work — so it is wrapped. The scheduler
@@ -622,7 +666,7 @@ export async function reportPlanlessAgencies(params: {
 }
 
 export const AGENCY_TIER_JOB: JobDefinition = {
-  name: 'agency-tier',
+  name: JOB_NAME,
   schedule: SCHEDULE,
   run: runAgencyTier,
 };

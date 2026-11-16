@@ -5,7 +5,10 @@ import { SYSTEM_ACTOR } from '@/util/actor.js';
 import { shiftWindowInstants } from '@/util/slot-window.js';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model.js';
 import { ShiftTable } from '@/features/shift/shift.model.js';
+import { writeSystemAudit } from '@/features/audit-log/audit-log.system.js';
 import type { JobDefinition } from './scheduler.js';
+
+const JOB_NAME = 'no-show-sweep';
 
 /**
  * A SHIFT NOBODY TURNED UP FOR IS A NO-SHOW, AND SOMETHING HAS TO SAY SO.
@@ -231,7 +234,9 @@ export async function runNoShowSweep(
   // The status and check-in terms are REPEATED here rather than assumed from
   // the read above: a PR who checks in between the two queries must win.
   // Losing that race would stamp a no-show on somebody standing at the venue.
-  await db
+  // `returning` names the rows the WHERE actually let through — the ones a
+  // race left alone are not claimed as swept in the audit row below.
+  const marked = await db
     .update(ShiftAssignmentTable)
     .set({ status: 'no_show', updatedAt: new Date(), updatedBy: SYSTEM_ACTOR })
     .where(
@@ -243,17 +248,37 @@ export async function runNoShowSweep(
         eq(ShiftAssignmentTable.status, 'assigned'),
         isNull(ShiftAssignmentTable.checkInAt),
       ),
-    );
+    )
+    .returning({ id: ShiftAssignmentTable.id });
 
   logger.info(
     `[no-show-sweep] marked ${due.length} assignment(s) no_show` +
       (skippedNoWindow > 0 ? ` · ${skippedNoWindow} skipped (no clock in the slot)` : ''),
   );
+
+  // The tick's audit row — after the write, and only when it changed a row:
+  // this runs every 15 minutes, and almost every tick changes nothing. The
+  // helper never throws, so an audit failure cannot undo or repeat a sweep.
+  // Each row's prior status was `assigned` with no check-in, by the WHERE.
+  await writeSystemAudit({
+    job: JOB_NAME,
+    entity: 'shift-assignment',
+    action: 'BULK_UPDATE',
+    changed: marked.length,
+    ids: marked.map((m) => m.id),
+    summary: {
+      from: 'assigned',
+      to: 'no_show',
+      due: due.length,
+      skippedNoWindow,
+      tooOld: tooOld.length,
+    },
+  });
   return { swept: due.length, skippedNoWindow, tooOld: tooOld.length, rows: due };
 }
 
 export const NO_SHOW_SWEEP_JOB: JobDefinition = {
-  name: 'no-show-sweep',
+  name: JOB_NAME,
   schedule: SCHEDULE,
   run: async () => {
     await runNoShowSweep();

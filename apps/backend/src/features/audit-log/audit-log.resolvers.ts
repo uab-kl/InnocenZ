@@ -1,6 +1,6 @@
 import { auditLogRepository } from '@/composition-root';
 import { GraphQLContext } from '@/graphql/context';
-import { AuditLogFilter, AuditLogSort } from './audit-log.repository';
+import { AuditLogFilter, AuditLogSort, sanitiseAuditData } from './audit-log.repository';
 import { PaginationParams } from '@/util/pagination';
 
 function transformAuditLog(auditLog: {
@@ -33,8 +33,17 @@ function transformAuditLog(auditLog: {
     action: auditLog.action,
     entity: auditLog.entity,
     entityId: auditLog.entityId,
-    oldData: auditLog.oldData,
-    newData: auditLog.newData,
+    /*
+     * MASKED ON READ AS WELL AS ON WRITE. The insert has redacted credentials
+     * only since the rules were written, and dropped embedded files only since
+     * 12 Nov 2026 — rows from before still hold both (4 carried a raw TOTP
+     * secret and its otpauth:// link, readable here by every admin). Rewriting
+     * the stored rows is the owner's call (`_redact-audit-secrets.ts`,
+     * `_strip-audit-blobs.ts`); this keeps them off the screen meanwhile, and
+     * keeps a 2 MB photo out of a ten-row page.
+     */
+    oldData: sanitiseAuditData(auditLog.oldData),
+    newData: sanitiseAuditData(auditLog.newData),
     ipAddress: auditLog.ipAddress,
     userAgent: auditLog.userAgent,
     createdAt: auditLog.createdAt.toISOString(),

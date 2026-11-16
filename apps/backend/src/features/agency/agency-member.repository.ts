@@ -3,6 +3,7 @@ import { db } from '@/db/index';
 import { ActorUser, actorJoinOn, actorNameColumn } from '@/util/actor-name';
 import { logger } from '@/util/logger';
 import type { MembershipStatus } from '@/util/membership-status';
+import { membershipPickOrder } from '@/util/membership-pick-order';
 import {
   ensureAccountCodeFromMembership,
   nextOrgMemberCode,
@@ -217,6 +218,14 @@ export class AgencyMemberRepositoryClass {
     return { ...member, subRole: member.subRole as AgencyUserSubRole };
   }
 
+  /**
+   * THE row for this person at this agency — active first, then an open
+   * request, then a former membership, and a decline only when nothing else
+   * exists. A person may legitimately hold several rows here (the active index
+   * is partial, 0160), so the choice is ORDERED rather than left to Postgres —
+   * see `util/membership-pick-order.ts` for what an unordered `limit(1)` did to
+   * invite-accept.
+   */
   async getByAgencyAndUser(
     agencyId: string,
     userId: string,
@@ -231,6 +240,7 @@ export class AgencyMemberRepositoryClass {
             eq(AgencyUserTable.userId, userId),
           ),
         )
+        .orderBy(...membershipPickOrder(AgencyUserTable))
         .limit(1);
       return member ?? null;
     } catch (error) {

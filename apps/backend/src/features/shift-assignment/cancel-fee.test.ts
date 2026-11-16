@@ -116,6 +116,23 @@ describe('computeCancelFee — the band is measured in venue time', () => {
     expect(fee.feeRm).toBe('0.00');
   });
 
+  /**
+   * PINS TODAY'S READING, NOT A DECISION. A blank short-notice boundary falls
+   * through to the late band; the phone reads the same blank as 2h. Which is
+   * right is the owner's call — this test exists so that changing it is a
+   * visible, deliberate edit. The save now refuses such a row while enabled.
+   */
+  it('prices a blank short-notice boundary at the LATE band (owner decision pending)', () => {
+    const fee = computeCancelFee({
+      rule: { ...RULE, shortNoticeHours: null } as AgencyPenaltyRule,
+      dailyWageRm: '300.00',
+      ...shift,
+      now: new Date('2026-08-05T22:00:00Z'), // 16h — the short band if it existed
+    });
+    expect(fee.pct).toBe(100);
+    expect(fee.feeRm).toBe('300.00');
+  });
+
   it('charges nothing when the agency has no rule, or switched it off', () => {
     const base = {
       dailyWageRm: '300.00',
