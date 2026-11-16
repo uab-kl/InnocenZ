@@ -17,6 +17,42 @@ const NO_ALERTS: NavAlertMap = Object.freeze({});
 export const NavAlertContext = createContext<NavAlertMap>(NO_ALERTS);
 
 /**
+ * The SEPARATE counts behind the badges, for the Today page's To do panel
+ * (owner, 16 Nov 2026: "everything at todo and todays page will guide the user
+ * where they need todo actions"). The rail sums payroll's four queues into one
+ * pill; the panel names each one with its own button. Fed by the SAME provider
+ * and the same queries, so the panel and the rail can never disagree.
+ */
+export interface PortalTodoCounts {
+	/**
+	 * True while any count behind the panel is still loading. The panel must
+	 * not say "All clear" until it KNOWS — an empty list mid-load is not a
+	 * finding, and an all-clear that turns into four rows a second later
+	 * teaches people not to trust it.
+	 */
+	loading: boolean;
+	counts: Readonly<Record<string, number>>;
+}
+export const PortalTodoCountsContext = createContext<PortalTodoCounts>(
+	Object.freeze({ loading: false, counts: Object.freeze({}) }),
+);
+export function usePortalTodoCounts(): PortalTodoCounts {
+	return useContext(PortalTodoCountsContext);
+}
+
+/**
+ * The menu paths THIS role can open, as the shell built them. A To do row is
+ * shown only when its destination is one of them — a row the role cannot act
+ * on is a button that leads to a refusal. `null` outside the shell.
+ */
+export const PortalNavPathsContext = createContext<ReadonlySet<string> | null>(
+	null,
+);
+export function usePortalNavPaths(): ReadonlySet<string> | null {
+	return useContext(PortalNavPathsContext);
+}
+
+/**
  * What each nav row should badge, keyed by its `to` path.
  *
  * Returns `{}` outside a provider rather than throwing. Every nav surface in

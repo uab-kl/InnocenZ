@@ -1,4 +1,7 @@
-import { NavAlertContext } from "@agency-portal/components/portal/NavAlertBadge";
+import {
+	NavAlertContext,
+	PortalTodoCountsContext,
+} from "@agency-portal/components/portal/NavAlertBadge";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
@@ -34,11 +37,18 @@ import { type ReactNode, useMemo } from "react";
  */
 function AgencyNavAlerts({ children }: { children: ReactNode }) {
 	const approvals = useAgencyApprovalQueue();
-	const { pvs } = useAgencyPvs();
-	const { disputes } = useAgencyDisputes();
-	const { receipts } = useAgencyReceipts();
-	const { claims: overtime } = useAgencyOvertime();
+	const { pvs, isLoading: pvsLoading } = useAgencyPvs();
+	const { disputes, isLoading: disputesLoading } = useAgencyDisputes();
+	const { receipts, isLoading: receiptsLoading } = useAgencyReceipts();
+	const { claims: overtime, isLoading: overtimeLoading } = useAgencyOvertime();
 	const billing = useUnpaidBilling("agency");
+	const todoLoading =
+		approvals.isLoading ||
+		pvsLoading ||
+		disputesLoading ||
+		receiptsLoading ||
+		overtimeLoading ||
+		billing.isLoading;
 
 	const alerts = useMemo(
 		() =>
@@ -79,9 +89,30 @@ function AgencyNavAlerts({ children }: { children: ReactNode }) {
 		],
 	);
 
+	// The same numbers, kept apart for the Today page's To do panel — one
+	// computation, so a row and the pill it sits behind cannot disagree.
+	const todo = useMemo(
+		() => ({
+			loading: todoLoading,
+			counts: {
+				approvals: approvals.total,
+				vouchers: countPvsNeedingAction(
+					pvs,
+					voucherIdsWithOpenDispute(disputes),
+				),
+				disputes: disputes.length,
+				receipts: countReceiptsNeedingAction(receipts),
+				overtime: overtime.length,
+			},
+		}),
+		[todoLoading, approvals.total, pvs, disputes, receipts, overtime.length],
+	);
+
 	return (
 		<NavAlertContext.Provider value={alerts}>
-			{children}
+			<PortalTodoCountsContext.Provider value={todo}>
+				{children}
+			</PortalTodoCountsContext.Provider>
 		</NavAlertContext.Provider>
 	);
 }
@@ -126,9 +157,24 @@ function OutletNavAlerts({ children }: { children: ReactNode }) {
 		[today.shifts, billing.periods, pendingMembers],
 	);
 
+	const todoLoading =
+		today.isLoading || billing.isLoading || memberRows.isLoading;
+	const todo = useMemo(
+		() => ({
+			loading: todoLoading,
+			counts: {
+				shiftsNeedingStaff: countShiftsNeedingStaff(today.shifts),
+				pendingMembers,
+			},
+		}),
+		[todoLoading, today.shifts, pendingMembers],
+	);
+
 	return (
 		<NavAlertContext.Provider value={alerts}>
-			{children}
+			<PortalTodoCountsContext.Provider value={todo}>
+				{children}
+			</PortalTodoCountsContext.Provider>
 		</NavAlertContext.Provider>
 	);
 }

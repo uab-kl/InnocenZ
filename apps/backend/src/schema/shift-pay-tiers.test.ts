@@ -121,3 +121,31 @@ describe('payTiers — one row per tier', () => {
     expect(UpdateShiftSchema.parse({ payTiers: [] }).payTiers).toEqual([]);
   });
 });
+
+/**
+ * A per-shift commission is the rate card's commission, so it carries the rate
+ * card's 0-100 bound (Support Desk risk, 16 Nov 2026). Parse only — never a write.
+ */
+describe('per-shift commission percentages are 0-100', () => {
+  const withFirstRow = (patch: Record<string, unknown>) => {
+    const rows = composerRows();
+    rows[0] = { ...rows[0], ...patch } as (typeof rows)[number];
+    return { ...base, payTiers: rows };
+  };
+
+  it.each([
+    ['drinkPct', 250],
+    ['tipPct', 101],
+    ['happyHourDrinkPct', 100.01],
+    ['drinkPct', -1],
+  ])('refuses %s = %s', (field, value) => {
+    expect(CreateShiftSchema.safeParse(withFirstRow({ [field]: value })).success).toBe(false);
+    expect(UpdateShiftSchema.safeParse(withFirstRow({ [field]: value })).success).toBe(false);
+  });
+
+  it('keeps 0 and 100 and a blank happy-hour rate', () => {
+    for (const patch of [{ drinkPct: 0, tipPct: 100 }, { happyHourDrinkPct: null }, { happyHourDrinkPct: 100 }]) {
+      expect(CreateShiftSchema.safeParse(withFirstRow(patch)).success).toBe(true);
+    }
+  });
+});

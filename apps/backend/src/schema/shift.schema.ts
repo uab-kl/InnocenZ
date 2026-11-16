@@ -45,12 +45,25 @@ const optionalNumeric = z
   .transform((n) => (n == null ? null : n.toFixed(2)));
 
 // Required percentage → fixed(2) string, defaulting to '0' (numeric(6,2) NOT NULL).
+// 0-100, the rate card's own bound (`pct` in outlet-workspace.schema.ts): a
+// per-shift override is the same commission, and without the ceiling a shift
+// could pay 250% of a drink while the venue's card refused anything over 100
+// (Support Desk risk, 16 Nov 2026 — no live row exceeds it).
 const requiredPct = z
   .number()
-  .min(0)
+  .min(0, 'A commission percentage cannot be negative')
+  .max(100, 'A commission percentage cannot be more than 100%')
   .optional()
   .default(0)
   .transform((n) => n.toFixed(2));
+
+// The nullable twin, for the happy-hour drink commission.
+const optionalPct = z
+  .number()
+  .min(0, 'A commission percentage cannot be negative')
+  .max(100, 'A commission percentage cannot be more than 100%')
+  .nullish()
+  .transform((n) => (n == null ? null : n.toFixed(2)));
 
 /**
  * One per-shift pay-tier override the outlet composes at post time. Mirrors an
@@ -72,7 +85,7 @@ const ShiftPayTierSchema = z
       .transform((v) => v ?? null),
     wagePerHour: optionalNumeric,
     drinkPct: requiredPct,
-    happyHourDrinkPct: optionalNumeric,
+    happyHourDrinkPct: optionalPct,
     tipPct: requiredPct,
     otAfterHours: optionalNumeric,
     targetSalesRm: optionalNumeric,

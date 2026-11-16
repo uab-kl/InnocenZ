@@ -1,0 +1,155 @@
+/*
+ * The Today page's To do panel (owner, 16 Nov 2026). Its rows ARE the approved
+ * design's alert strip (`.iz-alert`, prototype-theme.css): tone wash, tone label,
+ * full-strength figure, muted reason, pill button. Reusing it is the point — the
+ * subscription and price banners already in that look sit in the same list, so
+ * every "you need to act" row on Today reads as one family.
+ *
+ * Sizes come from the ladder only (`--iz-fs-*`); the family is inherited.
+ */
+.iz-todo {
+	display: grid;
+	gap: 12px;
+	margin: 12px 0 20px;
+	padding: 16px;
+	border: 1px solid var(--iz-line);
+	border-radius: 16px;
+	background: var(--iz-panel);
+}
+
+.iz-todo__head {
+	display: grid;
+	gap: 2px;
+}
+
+.iz-todo__title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: var(--iz-fs-title);
+	font-weight: 800;
+	line-height: 1.25;
+	color: var(--iz-title, var(--iz-txt));
+}
+
+.iz-todo__title-icon {
+	width: 20px;
+	height: 20px;
+	flex: none;
+	color: var(--iz-gold);
+}
+
+.iz-todo__sub {
+	margin: 0;
+	font-size: var(--iz-fs-caption);
+	line-height: 1.45;
+	color: var(--iz-muted);
+}
+
+/* Nothing to say about an empty list but the all-clear below it. */
+.iz-todo:has(.iz-todo__list:empty) .iz-todo__sub {
+	display: none;
+}
+
+.iz-todo__list {
+	display: grid;
+	gap: 8px;
+}
+.iz-todo__list:empty {
+	display: none;
+}
+/* The strip carries its own bottom margin for when it stands alone. */
+.iz-todo__list > * {
+	margin-bottom: 0;
+}
+
+/* Every row answers the pointer: it lifts, and presses back on click. */
+.iz-todo__list > a.iz-alert {
+	min-height: 48px;
+	transition:
+		transform 0.15s ease,
+		background 0.15s ease,
+		border-color 0.15s ease;
+}
+.iz-todo__list > a.iz-alert:hover {
+	transform: translateY(-1px);
+}
+.iz-todo__list > a.iz-alert:active {
+	transform: translateY(0);
+}
+.iz-todo__list > a.iz-alert:focus-visible {
+	outline: 2px solid var(--iz-gold);
+	outline-offset: 2px;
+}
+
+.iz-todo__clear,
+.iz-todo__checking {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	padding: 12px 16px;
+	border-radius: 14px;
+	font-size: var(--iz-fs-label);
+	line-height: 1.4;
+}
+
+/* Green = settled (owner's colour code). Shown only when the list is empty,
+   and only after a beat, so a row that lands a moment later never follows an
+   all-clear that was never true. */
+.iz-todo__clear {
+	border: 1px solid rgba(141, 201, 169, 0.4);
+	background: rgba(141, 201, 169, 0.08);
+	color: var(--iz-txt);
+	animation: iz-todo-settle 0.2s ease 0.6s both;
+}
+.iz-todo__clear strong {
+	color: var(--iz-green);
+}
+.iz-todo__clear-icon {
+	width: 20px;
+	height: 20px;
+	flex: none;
+	color: var(--iz-green);
+}
+.iz-todo__list:not(:empty) ~ .iz-todo__clear {
+	display: none;
+}
+
+.iz-todo__checking {
+	border: 1px dashed var(--iz-line);
+	color: var(--iz-muted);
+}
+
+@keyframes iz-todo-settle {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.iz-todo__list > a.iz-alert,
+	.iz-todo__clear {
+		transition: none;
+		animation: none;
+	}
+	.iz-todo__list > a.iz-alert:hover {
+		transform: none;
+	}
+}
+
+/* Phone: the button takes the full row, so the one action is a full-width tap. */
+@media (max-width: 640px) {
+	.iz-todo {
+		padding: 12px;
+	}
+	.iz-todo__list .iz-alert__cta {
+		width: 100%;
+		justify-content: center;
+		min-height: 44px;
+	}
+}
