@@ -30,7 +30,7 @@ function AgencySpecialService() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.postJob.notAvailableYet}</IzPageTitle>
+					<IzPageTitle level={1}>{t.postJob.notAvailableYet}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
@@ -45,7 +45,7 @@ function AgencySpecialService() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">{t.agencyMisc.noAccessJobPostings}</p>
@@ -57,7 +57,7 @@ function AgencySpecialService() {
 	return (
 		<div className="iz-screen">
 			<header>
-				<IzPageTitle>{t.agencyMisc.jobPosting}</IzPageTitle>
+				<IzPageTitle level={1}>{t.agencyMisc.jobPosting}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">
 					{fill(t.agencyMisc.bookServicesSubtitle, {
 						org: agencyOwner.orgName,

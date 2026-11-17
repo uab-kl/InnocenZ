@@ -360,10 +360,18 @@ function PlanPaymentPage() {
 										{t.adminService.role}
 									</TableHead>
 									<TableHead>{t.adminService.colPlan}</TableHead>
-									<TableHead className="w-[210px]">
-										{t.adminService.colBillingPeriod}
+									{/*
+									  Billing period is GONE (owner, 16 Nov 2026: "no need to show
+									  the billing period show the status … dont show to much
+									  things outside be simple and important"). It printed
+									  `summary.periods` as "14 periods" while Status printed the
+									  very same number again inside "14 of 14 unpaid" — one fact
+									  in two columns, and the one dropped is the one that said
+									  nothing about what needs doing.
+									*/}
+									<TableHead className="w-[130px] whitespace-nowrap">
+										{t.adminService.colAmount} (RM)
 									</TableHead>
-									<TableHead>{t.adminService.colAmount} (RM)</TableHead>
 									<TableHead className="w-[110px]">
 										{t.admin.colStatus}
 									</TableHead>
@@ -378,13 +386,13 @@ function PlanPaymentPage() {
 							<TableBody>
 								{showLoading ? (
 									<TableRow>
-										<TableCell colSpan={8} className="py-10 text-center">
+										<TableCell colSpan={7} className="py-10 text-center">
 											<Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
 										</TableCell>
 									</TableRow>
 								) : invoicesQuery.isError ? (
 									<TableRow>
-										<TableCell colSpan={8} className="py-10 text-center">
+										<TableCell colSpan={7} className="py-10 text-center">
 											<AlertCircle className="mx-auto mb-2 h-5 w-5 text-red-400" />
 											<p className="text-sm text-muted-foreground">
 												{getErrorMessage(invoicesQuery.error)}
@@ -401,7 +409,7 @@ function PlanPaymentPage() {
 								) : groups.length === 0 ? (
 									<TableRow>
 										<TableCell
-											colSpan={8}
+											colSpan={7}
 											className="py-10 text-center text-muted-foreground"
 										>
 											{t.adminService.noBillingPeriods}
@@ -467,14 +475,6 @@ function PlanPaymentPage() {
 													className="text-base"
 												>
 													{summary.lanes.join(" · ")}
-												</TableCell>
-												<TableCell
-													data-label={t.adminService.colBillingPeriod}
-													className="text-base whitespace-nowrap text-muted-foreground"
-												>
-													{fill(t.adminService.periodsCount, {
-														n: summary.periods,
-													})}
 												</TableCell>
 												<TableCell
 													data-label={`${t.adminService.colAmount} (RM)`}

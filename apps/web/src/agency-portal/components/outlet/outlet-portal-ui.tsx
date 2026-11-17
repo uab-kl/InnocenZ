@@ -132,11 +132,20 @@ export function OutletPageHeader({
 						</TitleWithIcon>
 					</p>
 				)}
-				<h2 className="iz-heading text-2xl font-extrabold leading-snug text-[var(--iz-title)]">
+				{/*
+				  <h1>, not <h2>: this header is only ever a PAGE's title (8 outlet
+				  pages and agency History), so it is the page's one top heading.
+				  As an <h2> those pages had no <h1> at all — the sweep of 17 Nov
+				  found it — leaving a screen reader's headings list with no page
+				  name in it. Pages that also render an `IzPageTitle` do so only in
+				  an early-return branch (no access), never beside this one, so a
+				  page still carries exactly one <h1>.
+				*/}
+				<h1 className="iz-heading text-2xl font-extrabold leading-snug text-[var(--iz-title)]">
 					<TitleWithIcon icon={iconForNav(iconKey ?? title)}>
 						{title}
 					</TitleWithIcon>
-				</h2>
+				</h1>
 				{hint && <p className="iz-outlet-page-hint">{hint}</p>}
 			</div>
 			{trailing}

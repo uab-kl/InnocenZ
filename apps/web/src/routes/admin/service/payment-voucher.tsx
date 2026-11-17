@@ -17,6 +17,12 @@ import {
 	RECEIPT_STATUS_BADGE,
 } from "@/components/admin/pv-status-tone";
 import {
+	DateTimeCell,
+	nextSortState,
+	SortableHead,
+	type SortState,
+} from "@/components/admin/table-sort";
+import {
 	agencySignLine,
 	prSignLine,
 	voucherNumberLabel,
@@ -79,6 +85,7 @@ import {
 	type PaymentVoucherStatus,
 	type PaymentVouchersQueryParams,
 	resolveDispute,
+	type VoucherSortField,
 } from "@/services/payment-voucher";
 
 export const Route = createFileRoute("/admin/service/payment-voucher")({
@@ -127,12 +134,35 @@ function PaymentVoucherPage() {
 
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [search, setSearch] = useState("");
+	const [fromDate, setFromDate] = useState("");
+	const [toDate, setToDate] = useState("");
 	const [page, setPage] = useState(1);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 
+	/*
+	 * SORTED BY THE SERVER. The list is paginated, so ordering the rows already
+	 * in the browser would reorder one page of many beneath a header claiming
+	 * to have sorted the table. null = the backend default (newest week first).
+	 */
+	const [sort, setSort] = useState<SortState<VoucherSortField> | null>(null);
+	const toggleSort = (field: VoucherSortField) => {
+		// A name reads A-Z first; a date or an amount reads newest/largest first.
+		setSort((current) =>
+			nextSortState(current, field, field === "prName" ? "asc" : "desc"),
+		);
+		// Back to page 1: page 3 of one order is not page 3 of another.
+		setPage(1);
+	};
+
 	const queryParams: PaymentVouchersQueryParams = { page, pageSize: PAGE_SIZE };
 	if (statusFilter !== "all") queryParams.status = statusFilter;
-	if (search.trim()) queryParams.prName = search.trim();
+	if (search.trim()) queryParams.search = search.trim();
+	if (fromDate) queryParams.fromDate = fromDate;
+	if (toDate) queryParams.toDate = toDate;
+	if (sort) {
+		queryParams.sortBy = sort.field;
+		queryParams.sortDir = sort.direction;
+	}
 
 	const vouchersQuery = useQuery({
 		queryKey: ["payment-vouchers", queryParams],
@@ -170,12 +200,17 @@ function PaymentVoucherPage() {
 						<AdminFilters className="admin-finance-filters">
 							<div className="admin-finance-filter-row flex flex-col gap-3 sm:flex-row sm:items-end">
 								<div className="space-y-1.5">
+									{/* The PV NUMBER is the reference every escalation and
+									    every bank line quotes, and it was the one thing this
+									    box could not find — an admin holding "PV-000004" had
+									    to page through reading the Voucher column. Matched
+									    server-side, so it searches every page, not this one. */}
 									<Label htmlFor="pv-search">
-										{t.adminService.searchPrName}
+										{t.adminService.searchVoucherOrPr}
 									</Label>
 									<Input
 										id="pv-search"
-										placeholder={t.adminService.searchPrNamePlaceholder}
+										placeholder={t.adminService.searchVoucherOrPrPlaceholder}
 										className="sm:w-56"
 										value={search}
 										onChange={(event) => {
@@ -221,6 +256,37 @@ function PaymentVoucherPage() {
 										</SelectContent>
 									</Select>
 								</div>
+
+								{/* The backend has bounded `issued_date` by fromDate/toDate
+								    since this endpoint was written; the console simply never
+								    offered it. Server-side, so it narrows the whole result set
+								    and the count under the table keeps matching the rows. */}
+								<div className="space-y-1.5">
+									<Label htmlFor="pv-from">{t.adminService.issuedFrom}</Label>
+									<Input
+										id="pv-from"
+										type="date"
+										className="sm:w-40"
+										value={fromDate}
+										onChange={(event) => {
+											setFromDate(event.target.value);
+											setPage(1);
+										}}
+									/>
+								</div>
+								<div className="space-y-1.5">
+									<Label htmlFor="pv-to">{t.adminService.issuedTo}</Label>
+									<Input
+										id="pv-to"
+										type="date"
+										className="sm:w-40"
+										value={toDate}
+										onChange={(event) => {
+											setToDate(event.target.value);
+											setPage(1);
+										}}
+									/>
+								</div>
 							</div>
 						</AdminFilters>
 					</div>
@@ -229,17 +295,52 @@ function PaymentVoucherPage() {
 				<CardContent>
 					<Table className="admin-finance-table">
 						<TableHeader>
+							{/*
+							  COLUMN ORDER: who, then where, then when, then how much
+							  (owner, 16 Nov 2026 — "from the left need to be the name or
+							  organisation then is the date and time, the sequence from the
+							  important"). The voucher NUMBER moved off the left edge: it is
+							  how a row is quoted afterwards, not how it is found. Cycle is
+							  gone entirely — it read "Weekly" on every row and wrapped as
+							  "Weekl y", spending width on a column that never varies.
+							*/}
 							<TableRow>
-								<TableHead>{t.adminService.colVoucher}</TableHead>
-								<TableHead>{t.adminService.colPrName}</TableHead>
+								<SortableHead
+									field="prName"
+									sort={sort}
+									onSort={toggleSort}
+									className="w-[180px]"
+								>
+									{t.adminService.colPrName}
+								</SortableHead>
 								<TableHead>{t.table.outlet}</TableHead>
-								<TableHead>{t.adminService.colCycle}</TableHead>
-								<TableHead className="w-[140px]">
+								<SortableHead
+									field="issuedDate"
+									sort={sort}
+									onSort={toggleSort}
+									className="w-[130px]"
+								>
 									{t.adminService.issued}
-								</TableHead>
+								</SortableHead>
+								<SortableHead
+									field="net"
+									sort={sort}
+									onSort={toggleSort}
+									align="right"
+									className="w-[120px] text-right"
+								>
+									{t.table.net} (RM)
+								</SortableHead>
+								<SortableHead
+									field="status"
+									sort={sort}
+									onSort={toggleSort}
+									className="w-[130px]"
+								>
+									{t.admin.colStatus}
+								</SortableHead>
+								<TableHead>{t.adminService.colVoucher}</TableHead>
 								<TableHead>{t.adminService.colSigned}</TableHead>
-								<TableHead className="text-right">{t.table.net} (RM)</TableHead>
-								<TableHead className="w-[130px]">{t.admin.colStatus}</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -274,16 +375,6 @@ function PaymentVoucherPage() {
 										className="cursor-pointer"
 										onClick={() => setSelectedId(voucher.id)}
 									>
-										{/* The number never travels without its agency: numbering
-										    is per agency, so two companies each hold a PV-000001. */}
-										<TableCell data-label={t.adminService.colVoucher}>
-											<div className="font-medium tabular-nums">
-												{voucherNumberLabel(voucher)}
-											</div>
-											<div className="text-xs text-muted-foreground">
-												{voucher.agencyName ?? "—"}
-											</div>
-										</TableCell>
 										<TableCell
 											data-label={t.adminService.colPrName}
 											className="font-medium"
@@ -293,27 +384,10 @@ function PaymentVoucherPage() {
 										<TableCell data-label={t.table.outlet}>
 											{voucher.outletName ?? voucher.outlet ?? "—"}
 										</TableCell>
-										<TableCell data-label={t.adminService.colCycle}>
-											{voucher.cycle ?? "—"}
-										</TableCell>
 										<TableCell data-label={t.adminService.issued}>
-											{voucher.issuedDate ? formatDay(voucher.issuedDate) : "—"}
-										</TableCell>
-										{/* Both halves of the dual signature, with their times —
-										    the first two questions an escalation asks. */}
-										<TableCell
-											data-label={t.adminService.colSigned}
-											className="text-xs"
-										>
-											<div>
-												{t.adminService.agency}:{" "}
-												{voucher.financeHeadSignedAt
-													? fmtDateTime(voucher.financeHeadSignedAt)
-													: "—"}
-											</div>
-											<div>
-												{t.table.pr}: {prSignLine(voucher, fmtDateTime) ?? "—"}
-											</div>
+											{/* issued_date is a Postgres `date`: DateTimeCell renders the day
+											    and no time line, because there is no time stored to show. */}
+											<DateTimeCell value={voucher.issuedDate} />
 										</TableCell>
 										<TableCell
 											data-label={`${t.table.net} (RM)`}
@@ -335,6 +409,46 @@ function PaymentVoucherPage() {
 											>
 												{t.rbac.review}
 											</Button>
+										</TableCell>
+										{/* The reference, now that the row has been found by WHO and
+										    WHEN. The number never travels without its agency: numbering
+										    is per agency, so two companies each hold a PV-000001. */}
+										<TableCell data-label={t.adminService.colVoucher}>
+											<div className="font-medium tabular-nums">
+												{voucherNumberLabel(voucher)}
+											</div>
+											<div className="text-xs text-muted-foreground">
+												{voucher.agencyName ?? "—"}
+											</div>
+										</TableCell>
+										{/* Both halves of the dual signature — the first two questions
+										    an escalation asks. These ARE real timestamps, so each one
+										    splits into a date over its time; the glued single line broke
+										    mid-value in this narrow column. */}
+										<TableCell
+											data-label={t.adminService.colSigned}
+											className="text-xs"
+										>
+											<div className="flex items-baseline gap-1.5">
+												<span className="text-muted-foreground">
+													{t.adminService.agency}:
+												</span>
+												{voucher.financeHeadSignedAt ? (
+													<DateTimeCell value={voucher.financeHeadSignedAt} />
+												) : (
+													"—"
+												)}
+											</div>
+											<div className="mt-1 flex items-baseline gap-1.5">
+												<span className="text-muted-foreground">
+													{t.table.pr}:
+												</span>
+												{voucher.prSignedAt ? (
+													<DateTimeCell value={voucher.prSignedAt} />
+												) : (
+													"—"
+												)}
+											</div>
 										</TableCell>
 									</TableRow>
 								))

@@ -26,6 +26,7 @@ import { DbTransaction } from '@/types/db-transaction';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { PenaltyChargeTable } from '@/features/agency/penalty-charge.model';
 import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
+import type { VoucherSort } from './voucher-sort';
 import { klToday, paymentDueDate } from './payment-voucher-week';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
@@ -211,6 +212,48 @@ export class VoucherLockedError extends Error {
  * so every consumer needs a fallback, not a placeholder image.
  */
 type AgencyBadge = { agencyName: string | null; agencyLogo: string | null };
+
+/**
+ * The whitelisted sort field → its actual column. Separate from
+ * `voucher-sort.ts` so that module stays pure and dependency-free: the parsing
+ * and the whitelist are tested without a database, and only the mapping to
+ * drizzle columns lives here.
+ */
+const VOUCHER_SORT_COLUMNS = {
+  issuedDate: PaymentVoucherTable.issuedDate,
+  createdAt: PaymentVoucherTable.createdAt,
+  weekStart: PaymentVoucherTable.weekStart,
+  net: PaymentVoucherTable.net,
+  prName: PaymentVoucherTable.prName,
+  status: PaymentVoucherTable.status,
+} as const;
+
+/**
+ * The ORDER BY for the paginated list.
+ *
+ * ⚠️ `createdAt` is always the LAST term, on every chosen column. Two vouchers
+ * issued the same day would otherwise come back in whatever order Postgres
+ * felt like, which changes between pages of the same sort and makes a row
+ * appear twice or not at all as the reader pages through.
+ *
+ * ⚠️ No sort chosen keeps the established default — newest WEEK first, because
+ * that is the week the money belongs to; `createdAt` only breaks ties, since a
+ * back-dated self-log can open a draft for an earlier week and would otherwise
+ * jump ahead of the weeks it comes after.
+ */
+function voucherOrderBy(sort: VoucherSort | null | undefined) {
+  if (!sort) {
+    return [
+      desc(PaymentVoucherTable.weekStart),
+      desc(PaymentVoucherTable.createdAt),
+    ];
+  }
+  const column = VOUCHER_SORT_COLUMNS[sort.field];
+  const direction = sort.direction === 'asc' ? asc : desc;
+  return sort.field === 'createdAt'
+    ? [direction(column)]
+    : [direction(column), desc(PaymentVoucherTable.createdAt)];
+}
 
 export class PaymentVoucherRepositoryClass {
   /**
@@ -805,6 +848,11 @@ export class PaymentVoucherRepositoryClass {
     filter?: PaymentVoucherFilter;
     page: number;
     pageSize: number;
+    /**
+     * Omitted, the default order below stands. Already whitelisted by
+     * `parseVoucherSort` — this never receives a raw query-string value.
+     */
+    sort?: VoucherSort | null;
   }): Promise<{
     vouchers: (PaymentVoucherType & {
       prNickname: string | null;
@@ -827,6 +875,24 @@ export class PaymentVoucherRepositoryClass {
         conditions.push(
           ilike(PaymentVoucherTable.prName, `%${filter.prName}%`),
         );
+      /*
+       * ONE BOX, EITHER FIELD. `or` is wrapped in a single condition so it
+       * joins the rest with AND — a bare `or` beside the status and agency
+       * conditions would widen the whole clause and hand an agency caller
+       * every agency's vouchers.
+       *
+       * `!` on the result: drizzle types `or` as possibly-undefined for an
+       * empty argument list, and both arguments here are always present.
+       */
+      if (filter?.search?.trim()) {
+        const term = `%${filter.search.trim()}%`;
+        conditions.push(
+          or(
+            ilike(PaymentVoucherTable.prName, term),
+            ilike(PaymentVoucherTable.voucherNo, term),
+          )!,
+        );
+      }
       if (filter?.fromDate)
         conditions.push(gte(PaymentVoucherTable.issuedDate, filter.fromDate));
       if (filter?.toDate)
@@ -881,10 +947,17 @@ export class PaymentVoucherRepositoryClass {
         // `createdAt` only breaks ties — a voucher can be created late (a
         // back-dated self-log opening a draft for an earlier week) and would
         // otherwise jump ahead of the weeks it comes after.
-        .orderBy(
-          desc(PaymentVoucherTable.weekStart),
-          desc(PaymentVoucherTable.createdAt),
-        )
+        /*
+         * ⚠️ ORDERED BEFORE `limit`/`offset`, which is the whole point. The
+         * console cannot do this for itself: sorting the ten rows a page
+         * handed it would reorder one page of many under a header claiming to
+         * have sorted the table.
+         *
+         * `createdAt` stays as the final tiebreaker on every chosen column, so
+         * two vouchers sharing an issue date keep a stable, meaningful order
+         * instead of whatever Postgres returns.
+         */
+        .orderBy(...voucherOrderBy(params.sort))
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 

@@ -40,6 +40,12 @@ jobs:
       # menus, TEST_SCRIPT §11). Fails while they are stale or would publish a
       # personal value / internal name — `pnpm chat:facts` fixes the first.
       - run: pnpm chat:facts:check
+      # One type ladder for every role on the website — admin, agency and
+      # outlet all 16 · 20 · 24 (owner, 17 Nov 2026). A ratchet over the raw
+      # sizes that already exist: it fails only when a change ADDS one. It was
+      # written on 8 Sep but never wired in here, so it only ran when someone
+      # remembered — `pnpm check:type:update` banks a fix, never a new breach.
+      - run: pnpm check:type
       # mobile is excluded from `build`: it requires `eas` CLI + cloud credentials
       # this runner doesn't have — mobile app builds happen via EAS separately.
       - run: npx nx run-many -t lint test typecheck e2e

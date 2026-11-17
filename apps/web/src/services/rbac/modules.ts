@@ -15,9 +15,28 @@ export async function fetchModules(
 	onRefreshFail: () => void,
 ): Promise<ModulesApiResponse> {
 	const client = getClient(onRefreshFail);
+
+	/*
+	 * The portals are awaited FIRST, not in parallel, whenever a portal filter
+	 * is set: the API filters on `portalId` and the console holds a code, so
+	 * the id has to exist before the query string is built. Without a filter
+	 * nothing waits on anything — the two calls still go together.
+	 */
+	const portalsPromise = fetchPortals(onRefreshFail).catch(() => []);
+	const portalId = params.portalCode
+		? (await portalsPromise).find((p) => p.code === params.portalCode)?.id
+		: undefined;
+
 	const queryString = buildQueryParams({
 		moduleName: params.moduleName,
 		status: params.status,
+		/*
+		 * ⚠️ A filter the portal list could not resolve must NOT fall through to
+		 * "no filter": that would quietly answer a narrowed question with every
+		 * row. `__none__` matches no module, so a portal we cannot name shows an
+		 * empty list — visibly wrong, rather than invisibly wrong.
+		 */
+		portalId: params.portalCode ? (portalId ?? "__none__") : undefined,
 		page: params.page,
 		pageSize: params.pageSize,
 	});
@@ -29,7 +48,7 @@ export async function fetchModules(
 			data: BackendModule[];
 			pagination: ModulesApiResponse["pagination"];
 		}>(`/rbac/module${queryString}`),
-		fetchPortals(onRefreshFail).catch(() => []),
+		portalsPromise,
 	]);
 
 	const portalCodeById = new Map(portals.map((p) => [p.id, p.code] as const));

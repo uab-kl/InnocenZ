@@ -112,8 +112,13 @@ import {
 	canResolveDispute,
 	canSendToPr,
 } from "@agency-portal/lib/pv-money-actions";
+import { pvPayoutBuckets } from "@agency-portal/lib/pv-payout-buckets";
 import { downloadPvBreakdownCsv } from "@agency-portal/lib/pv-pdf";
 import { voucherPayeeIc } from "@agency-portal/lib/pv-roster-pr";
+import {
+	type AgencyPvSortField,
+	sortAgencyPvs,
+} from "@agency-portal/lib/pv-table-sort";
 import {
 	buildAgencyPayee,
 	formatPvSignStamp,
@@ -142,7 +147,47 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import type { SortState } from "@/lib/table-sort-state";
 import { createVoucherExportTicket } from "@/services/payment-voucher";
+
+/**
+ * The Sort choices in the payroll "Filter & sort" panel. Each names the
+ * question it answers, in the reader's words, rather than a column and an
+ * arrow — Issued is not a column on this page (the date sits inside the
+ * PR / voucher cell), so a header click could not have offered it.
+ */
+const PV_SORT_OPTIONS: {
+	key: string;
+	sort: SortState<AgencyPvSortField>;
+	label: (t: PortalTranslations) => string;
+}[] = [
+	{
+		key: "issued-desc",
+		sort: { field: "issued", direction: "desc" },
+		label: (t) => t.payroll.sortIssuedNewest,
+	},
+	{
+		key: "issued-asc",
+		sort: { field: "issued", direction: "asc" },
+		label: (t) => t.payroll.sortIssuedOldest,
+	},
+	{
+		key: "pr-asc",
+		sort: { field: "pr", direction: "asc" },
+		label: (t) => t.payroll.sortPrAz,
+	},
+	{
+		key: "net-desc",
+		sort: { field: "net", direction: "desc" },
+		label: (t) => t.payroll.sortNetHigh,
+	},
+	{
+		key: "net-asc",
+		sort: { field: "net", direction: "asc" },
+		label: (t) => t.payroll.sortNetLow,
+	},
+];
+
 export const Route = createFileRoute("/agency/pv")({
 	component: AgencyPV,
 	validateSearch: (
@@ -419,6 +464,11 @@ function AgencyPV() {
 	const [statusFilter, setStatusFilter] = useState<PvStatusFilter>("all");
 	/* Free text — a PV number, a name, an IC or a venue. See `pvMatchesSearch`. */
 	const [search, setSearch] = useState("");
+	/*
+	 * "field-direction", or "" for the default order. A string because it
+	 * drives a <select>; decoded once by `PV_SORT_OPTIONS` below.
+	 */
+	const [pvSortKey, setPvSortKey] = useState("");
 	// The plan the agency is actually billed on, for the header. A demo session
 	// has no plan row and keeps the demo line.
 	const livePlan = useAgencyLivePlan();
@@ -1034,17 +1084,27 @@ function AgencyPV() {
 	 * chip you are standing on. The chips choose which CARDS to show; this is
 	 * what the selected PR is owed for the week either way.
 	 */
+	/*
+	 * ⚠️ THREE FIGURES THAT ADD UP, not one that looks wrong.
+	 *
+	 * This was a single total of the SIGNED vouchers under the heading "Pending
+	 * Payout". The rule is right — only a signed voucher is owed and payable —
+	 * but alone it reads as a contradiction: an agency looking at a RM 150.00
+	 * voucher saw "RM 0.00" directly above it, because that voucher was still
+	 * awaiting review. `pvPayoutBuckets` keeps the same payable figure and adds
+	 * the two stages the money can otherwise be sitting in, so the card says
+	 * where it is instead of appearing to deny it exists.
+	 *
+	 * The COUNTS travel with the totals so each figure can say what it is made
+	 * of. They count VOUCHERS by status, not the cards on screen — those differ
+	 * whenever a status chip is on, and a total explained by the wrong number
+	 * of vouchers is worse than one left unexplained.
+	 */
 	const filteredPendingPayout = useMemo(() => {
 		const rows = prFilter
 			? weekTabPvs.filter((p) => p.prId === prFilter)
 			: weekTabPvs;
-		const owed = rows.filter((p) => p.status === "SIGNED");
-		const total = owed.reduce((sum, p) => sum + getPvNetTotal(p), 0);
-		// The COUNT travels with the total so the card can say what the figure is
-		// made of. It counts the signed vouchers, not the cards on screen — those
-		// differ whenever a status chip is on, and a total explained by the wrong
-		// number of vouchers is worse than one left unexplained.
-		return { total: Math.round(total * 100) / 100, count: owed.length };
+		return pvPayoutBuckets(rows);
 	}, [weekTabPvs, prFilter]);
 
 	/**
@@ -1087,10 +1147,20 @@ function AgencyPV() {
 	// were bypassed there because that tab held only SIGNED vouchers and a filter
 	// over one status is pointless — now that it shows unsigned ones too, "To pay"
 	// is what narrows it back down to the payment run.
-	const filteredVouchers = useMemo(
-		() => sortPvsBySales(statusFilteredPvs, "default"),
-		[statusFilteredPvs],
-	);
+	/*
+	 * The panel above this list was titled "Filter & sort" and offered no sort
+	 * at all. Sorting happens HERE, in the browser, and that is correct for this
+	 * page: the week tabs are derived from vouchers already loaded in full, so
+	 * there is no pagination for a client sort to fall foul of (the admin list,
+	 * which IS paginated, sorts on the server instead).
+	 */
+	const filteredVouchers = useMemo(() => {
+		const base = sortPvsBySales(statusFilteredPvs, "default");
+		const chosen = PV_SORT_OPTIONS.find((o) => o.key === pvSortKey);
+		return sortAgencyPvs(base, chosen?.sort ?? null, (pv) =>
+			resolvePvPrName(pv, voucherRoster),
+		);
+	}, [statusFilteredPvs, pvSortKey, voucherRoster]);
 
 	// Not memoised: `isBulkEligible` is rebuilt every render (it closes over
 	// `bulkMode`), so a dependency list naming it would recompute regardless —
@@ -1240,12 +1310,16 @@ function AgencyPV() {
 	}, [weekTabPvs]);
 
 	const hasActiveFilters =
-		statusFilter !== "all" || prFilter !== "" || search.trim() !== "";
+		statusFilter !== "all" ||
+		prFilter !== "" ||
+		search.trim() !== "" ||
+		pvSortKey !== "";
 
 	const clearFilters = () => {
 		setStatusFilter("all");
 		setPrFilter("");
 		setSearch("");
+		setPvSortKey("");
 	};
 
 	const detail = prPaymentVouchers.find((p) => p.id === detailId);
@@ -1286,6 +1360,7 @@ function AgencyPV() {
 				    than forming a second one: they are more facts about today, not a
 				    separate subtitle. */}
 				<IzPageTitle
+					level={1}
 					dateTime
 					meta={
 						<>
@@ -1725,6 +1800,24 @@ function AgencyPV() {
 										))}
 									</IzSelect>
 								</div>
+								<div className="iz-filter-group">
+									<span className="iz-payroll-filter-label">
+										{t.payroll.sortBy}
+									</span>
+									<IzSelect
+										block
+										aria-label={t.payroll.sortBy}
+										value={pvSortKey}
+										onChange={(e) => setPvSortKey(e.target.value)}
+									>
+										<option value="">{t.payroll.sortDefault}</option>
+										{PV_SORT_OPTIONS.map((o) => (
+											<option key={o.key} value={o.key}>
+												{o.label(t)}
+											</option>
+										))}
+									</IzSelect>
+								</div>
 							</div>
 						</IzCard>
 					</OutletMobileFilters>
@@ -1767,18 +1860,48 @@ function AgencyPV() {
 											: t.receipts.allPrs}{" "}
 										·{" "}
 										{fill(t.payroll.pendingPayoutCount, {
-											n: filteredPendingPayout.count,
+											n: filteredPendingPayout.toPay.count,
 										})}
 									</p>
 								</div>
 							</div>
-							<div className="shrink-0 text-right">
-								<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
-									{formatRM(filteredPendingPayout.total)}
+							{/*
+							  WHERE THE MONEY IS, in figures that add up to the total.
+							  "To pay" is the one that goes to the bank and keeps the gold;
+							  the other two explain the rest instead of leaving the reader
+							  to wonder why a RM 150.00 voucher sat under "RM 0.00".
+							  A bucket with nothing in it is not drawn — an empty row is
+							  width spent saying nothing.
+							*/}
+							<div className="iz-payout-split shrink-0">
+								<div className="iz-payout-split__item iz-payout-split__item--pay">
+									<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
+										{formatRM(filteredPendingPayout.toPay.total)}
+									</div>
+									<p className="iz-tiny iz-muted2 mt-0.5">
+										{t.payroll.toPayNow}
+									</p>
 								</div>
-								<p className="iz-tiny iz-muted2 mt-0.5">
-									{t.payroll.netPayable}
-								</p>
+								{filteredPendingPayout.awaiting.count > 0 && (
+									<div className="iz-payout-split__item">
+										<div className="iz-ledger iz-heading text-base font-bold">
+											{formatRM(filteredPendingPayout.awaiting.total)}
+										</div>
+										<p className="iz-tiny iz-muted2 mt-0.5">
+											{t.payroll.awaitingSignature}
+										</p>
+									</div>
+								)}
+								{filteredPendingPayout.disputed.count > 0 && (
+									<div className="iz-payout-split__item">
+										<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-red)]">
+											{formatRM(filteredPendingPayout.disputed.total)}
+										</div>
+										<p className="iz-tiny iz-muted2 mt-0.5">
+											{t.payroll.heldDisputed}
+										</p>
+									</div>
+								)}
 							</div>
 						</IzCard>
 					)}

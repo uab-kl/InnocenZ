@@ -9770,7 +9770,7 @@ button.iz-pr-offer-row:hover {
 	gap: 6px;
 }
 .iz-outlet-hist-metric__label .iz-shift-metric-label__text {
-	font-size: 11px;
+	font-size: var(--iz-fs-micro); /* was 11px — one size for this label everywhere (17 Nov) */
 	font-weight: 700;
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
@@ -9778,7 +9778,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-metric__label
 	.iz-shift-metric-label--lg
 	.iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 }
 .iz-outlet-hist-metric__label .iz-shift-metric-label__icon {
 	width: 16px;
@@ -9834,7 +9834,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 }
 .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 	font-weight: 700;
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
@@ -9848,7 +9848,7 @@ button.iz-pr-offer-row:hover {
 	height: 18px;
 }
 .iz-shift-metric-label--lg .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 	letter-spacing: 0.04em;
 }
 .iz-shift-metric-label--earned,
@@ -9954,7 +9954,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-metrics-guide__item
 	.iz-shift-metric-label--lg
 	.iz-shift-metric-label__text {
-	font-size: 16px;
+	font-size: var(--iz-fs-micro); /* was 16px — one size for this label everywhere (17 Nov) */
 	font-weight: 800;
 	letter-spacing: 0.02em;
 	text-transform: none;
@@ -9986,7 +9986,7 @@ button.iz-pr-offer-row:hover {
 	}
 }
 .iz-txn-metric .label .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 	letter-spacing: 0.04em;
 }
 .iz-txn-metric .label .iz-shift-metric-label__icon {
@@ -9994,7 +9994,7 @@ button.iz-pr-offer-row:hover {
 	height: 17px;
 }
 .iz-txn-metric .label .iz-shift-metric-label--lg .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 }
 .iz-txn-metric .label .iz-shift-metric-label--lg .iz-shift-metric-label__icon {
 	width: 18px;
@@ -10028,7 +10028,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-hist-bar__label {
 	flex-shrink: 0;
-	font-size: 11px;
+	font-size: var(--iz-fs-micro); /* was 11px — one size for this label everywhere (17 Nov) */
 	font-weight: 600;
 	color: var(--iz-muted2);
 	white-space: nowrap;

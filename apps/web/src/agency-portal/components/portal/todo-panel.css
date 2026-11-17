@@ -153,3 +153,85 @@
 		min-height: 44px;
 	}
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * THE LIST READS AS A RANKING (16 Nov 2026)
+ *
+ * The panel said "most urgent first" and then drew every row the same: four
+ * gold titles, four outline buttons, four identical weights. A claim the eye
+ * cannot verify is decoration. Three changes, all scoped under `.iz-todo` so
+ * the shared `.iz-alert` used by banners elsewhere keeps its own look:
+ *
+ *  1. TITLES COME OFF GOLD. The house rule is that champagne gold is reserved
+ *     for ACT on buttons (CLAUDE.md, 7 Sep) — with gold titles, gold figures
+ *     AND gold buttons, nothing in the row was emphasised because everything
+ *     was. Titles take `--iz-title`; the gold is spent on the one control.
+ *  2. THE COUNT BECOMES A COLUMN. A bordered, fixed-width, tabular chip, so
+ *     "2", "1", "1" line up under each other and can be compared at a glance
+ *     instead of being read out of the middle of a sentence.
+ *  3. THE FIRST ROW IS THE LOUD ONE. It gets the filled button and a brighter
+ *     leading edge; the rest step back. Rank is then visible, not asserted.
+ *
+ * No font-size or font-family is set here: sizes stay on the `--iz-fs-*`
+ * ladder inherited from the row, which is what `pnpm check:type` enforces.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* 1 · Titles stop competing with the button. */
+.iz-todo__list .iz-alert__title {
+	color: var(--iz-title, var(--iz-txt));
+}
+
+/* 2 · The figure is a column, not a word in a sentence. */
+.iz-todo__list .iz-alert__figure {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 2.25rem;
+	padding: 0.1rem 0.5rem;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+	/* The chip's ring reads as a container, not as text — at full strength it
+	   would draw harder than the title it belongs to. */
+	border-color: color-mix(in srgb, currentColor 38%, transparent);
+	background: color-mix(in srgb, currentColor 10%, transparent);
+	font-variant-numeric: tabular-nums;
+	line-height: 1.3;
+}
+
+/* 3 · Rank: a leading edge that fades down the list. */
+.iz-todo__list > a.iz-alert {
+	position: relative;
+	overflow: hidden;
+}
+.iz-todo__list > a.iz-alert::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: 3px;
+	background: currentColor;
+	opacity: 0.55;
+}
+.iz-todo__list > a.iz-alert:nth-child(n + 2)::before {
+	opacity: 0.3;
+}
+.iz-todo__list > a.iz-alert:nth-child(n + 4)::before {
+	opacity: 0.18;
+}
+
+/* The top row owns the one filled button on the page. */
+.iz-todo__list > a.iz-alert:first-child .iz-alert__cta {
+	background: color-mix(in srgb, var(--iz-gold) 22%, transparent);
+	border-color: var(--iz-gold);
+	font-weight: 800;
+}
+.iz-todo__list > a.iz-alert:first-child:hover .iz-alert__cta {
+	background: color-mix(in srgb, var(--iz-gold) 32%, transparent);
+}
+
+/* A hovered row lights its own edge, so the pointer confirms the target
+   before the click rather than after it. */
+.iz-todo__list > a.iz-alert:hover::before,
+.iz-todo__list > a.iz-alert:focus-visible::before {
+	opacity: 0.9;
+}

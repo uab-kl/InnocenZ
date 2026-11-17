@@ -682,13 +682,36 @@ export interface PaymentVouchersQueryParams {
 	prId?: string;
 	status?: PaymentVoucherStatus;
 	prName?: string;
+	/** One box matching the voucher NUMBER or the PR name (server-side). */
+	search?: string;
+	/** Both bound issued_date — the day the voucher was issued. */
 	fromDate?: string;
 	toDate?: string;
 	// Admin-only; agency callers are pinned to their own agency server-side.
 	agencyId?: string;
+	/**
+	 * Which column orders the list, and which way.
+	 *
+	 * ⚠️ SERVER-side on purpose. This list is paginated, so the order has to be
+	 * chosen before the server picks which rows the page contains — sorting the
+	 * ten rows already in the browser would reorder one page of many under a
+	 * header claiming to have sorted the table. The backend whitelists the
+	 * field (`parseVoucherSort`); an unknown one keeps the default order.
+	 */
+	sortBy?: VoucherSortField;
+	sortDir?: "asc" | "desc";
 	page?: number;
 	pageSize?: number;
 }
+
+/** Mirrors the backend whitelist in `features/payment-voucher/voucher-sort.ts`. */
+export type VoucherSortField =
+	| "issuedDate"
+	| "createdAt"
+	| "weekStart"
+	| "net"
+	| "prName"
+	| "status";
 
 export interface PaymentVouchersApiResponse {
 	success: boolean;
@@ -749,9 +772,12 @@ export async function fetchPaymentVouchers(
 		prId: params.prId,
 		status: params.status,
 		prName: params.prName,
+		search: params.search,
 		fromDate: params.fromDate,
 		toDate: params.toDate,
 		agencyId: params.agencyId,
+		sortBy: params.sortBy,
+		sortDir: params.sortDir,
 		page: params.page,
 		pageSize: params.pageSize,
 	});

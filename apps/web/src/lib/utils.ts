@@ -1,6 +1,7 @@
 import type { ClassValue } from "clsx";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { STATUS_TONE_CLASS } from "@/lib/status-tone";
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -106,10 +107,20 @@ export function formatPriceRm(
 	return `${num < 0 && /[1-9]/.test(amount) ? "−" : ""}RM ${amount}`;
 }
 
+/**
+ * A record status as a badge class. The two tones it still spells out are
+ * DERIVED from the one colour code in `lib/status-tone.ts` — see that file's
+ * header for what each tone means.
+ *
+ * ⚠️ Prefer `statusToneClass(status)` in new code. This map holds `active` and
+ * `inactive` only, so indexing it with any third value yields `undefined`;
+ * `modules-table.tsx` and `roles-grid.tsx` did exactly that with no `??`
+ * fallback and would have rendered a badge carrying no colour class at all.
+ * Both now call `statusToneClass`, which cannot return `undefined`.
+ */
 export const statusColors: Record<string, string> = {
-	active:
-		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-	inactive: "border-muted-foreground/30 bg-muted text-muted-foreground",
+	active: STATUS_TONE_CLASS.safe,
+	inactive: STATUS_TONE_CLASS.neutral,
 };
 
 export const auditActionColors: Record<string, string> = {

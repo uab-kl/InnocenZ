@@ -2278,3 +2278,48 @@ body[data-outlet-design]
 	background-repeat: no-repeat;
 	background-attachment: local, local, scroll, scroll;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * EVERY ROLE, ONE LADDER (owner, 17 Nov 2026: "for the website all roles must
+ * follow the same font size" · "no too much suddenly big and small").
+ *
+ * A computed-size sweep of 9 lanes × 73 pages left these classes rendering OFF
+ * the 16 · 20 · 24 ladder — each sized by several competing rules from older
+ * design generations (`.iz-pill` alone has six, one of them `11px !important`),
+ * so editing any single source rule would just hand the win to the next. This
+ * block is the one place that settles them, last in the approved layer:
+ *
+ *   .iz-pill (words in a pill, "Active")    11 → 16
+ *   roster filter labels / count, Auto-assign hint, "22 Active"   12–14 → 16
+ *   Manage PR "22 PRs"                      22 → 20 (a section-level figure)
+ *
+ * Specificity (0,3,0) + `!important` beats the strongest competitor, the
+ * `(0,2,0) !important` pill rule. Digit-only COUNT badges (`.iz-nav-alert`,
+ * rank badges) are deliberately not here: a 16px number bursts its pill.
+ * Re-measure after any change — the type check reads source and cannot see
+ * which of several rules wins.
+ */
+:is([data-portal="agency"], [data-portal="outlet"])
+	.iz-portal-main
+	:is(
+		.iz-pill,
+		.iz-roster-filterbar__label,
+		.iz-roster-filterbar__count,
+		.iz-roster-filterbar__dash,
+		.iz-roster-auto-assign,
+		.iz-pr-manage-stats__active,
+		/* Manage PR's card: "Age 36", "163cm · 49kg", the "+2" languages tag. */
+		.iz-portfolio-comcard__line,
+		.iz-pr-manage-card__more-langs
+	) {
+	font-size: var(--iz-fs-micro) !important;
+}
+:is([data-portal="agency"], [data-portal="outlet"])
+	.iz-portal-main
+	:is(
+		.iz-pr-manage-stats__count,
+		/* The PR's name on their card — 19px, between steps. */
+		.iz-portfolio-comcard__name
+	) {
+	font-size: var(--iz-fs-title) !important;
+}

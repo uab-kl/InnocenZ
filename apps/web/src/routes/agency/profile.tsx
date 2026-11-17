@@ -448,7 +448,7 @@ function AgencyProfile() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">{t.profile.noAccess}</p>
@@ -466,7 +466,7 @@ function AgencyProfile() {
 		<div className="iz-screen iz-agency-settings">
 			<header className="iz-agency-settings-header">
 				<div>
-					<IzPageTitle>{t.agencyMisc.settings}</IzPageTitle>
+					<IzPageTitle level={1}>{t.agencyMisc.settings}</IzPageTitle>
 					<p className="iz-muted mt-2">
 						{locale === "zh"
 							? "机构资料、团队权限和您的个人账户。"

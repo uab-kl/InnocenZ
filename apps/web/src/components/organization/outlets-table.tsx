@@ -1,5 +1,6 @@
 import {
 	AlertCircle,
+	Eye,
 	Loader2,
 	MoreHorizontal,
 	RefreshCw,
@@ -7,7 +8,7 @@ import {
 	Store,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -45,7 +46,6 @@ import type { Outlet, OutletPagination } from "@/services/outlet";
 import {
 	ORG_STATUSES,
 	type OrgStatusFilter,
-	orgStatusBadgeColors,
 	orgStatusLabel,
 } from "./org-status";
 
@@ -214,7 +214,9 @@ export function OutletsTable({
 									return (
 										<TableRow
 											key={outlet.id}
-											className="cursor-pointer"
+											// See agencies-table: `cursor-pointer` alone was the
+											// only sign the row opened anything.
+											className="iz-admin-row-open"
 											onClick={() => onSelect(outlet)}
 										>
 											<TableCell>
@@ -241,60 +243,75 @@ export function OutletsTable({
 												)}
 											</TableCell>
 											<TableCell data-label={t.admin.colStatus}>
-												<Badge
-													variant="outline"
-													className={`text-sm ${orgStatusBadgeColors[outlet.status]}`}
-												>
-													{orgStatusLabel(outlet.status, t)}
-												</Badge>
+												<StatusPill
+													status={outlet.status}
+													label={orgStatusLabel(outlet.status, t)}
+													className="text-sm"
+												/>
 												<div className="iz-admin-record-secondary">
 													{formatDate(outlet.createdAt)}
 												</div>
 											</TableCell>
 											<TableCell onClick={(event) => event.stopPropagation()}>
-												<DropdownMenu>
-													<DropdownMenuTrigger asChild>
-														<Button
-															variant="outline"
-															size="icon"
-															aria-label={`${t.admin.colActions} · ${outlet.name}`}
-															disabled={busy}
-														>
-															<MoreHorizontal aria-hidden className="h-4 w-4" />
-														</Button>
-													</DropdownMenuTrigger>
-													<DropdownMenuContent align="end">
-														<DropdownMenuItem onSelect={() => onSelect(outlet)}>
-															{t.admin.viewOutletDetails}
-														</DropdownMenuItem>
-														{outlet.status === "pending_review" && (
-															<DropdownMenuItem
+												<div className="flex items-center justify-end gap-2">
+													<Button
+														variant="outline"
+														size="sm"
+														className="iz-admin-row-view"
+														onClick={() => onSelect(outlet)}
+													>
+														<Eye aria-hidden className="h-4 w-4" />
+														{t.common.view}
+													</Button>
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button
+																variant="outline"
+																size="icon"
+																aria-label={`${t.admin.colActions} · ${outlet.name}`}
 																disabled={busy}
-																onSelect={() => onApprove(outlet.id)}
 															>
-																{t.common.approve}
-															</DropdownMenuItem>
-														)}
-														{(outlet.status === "active" ||
-															outlet.status === "suspended") && (
+																<MoreHorizontal
+																	aria-hidden
+																	className="h-4 w-4"
+																/>
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
 															<DropdownMenuItem
-																className="text-destructive"
-																disabled={busy}
-																onSelect={() => onDeactivate(outlet.id)}
+																onSelect={() => onSelect(outlet)}
 															>
-																{t.adminOrg.setInactive}
+																{t.admin.viewOutletDetails}
 															</DropdownMenuItem>
-														)}
-														{outlet.status === "suspended" && (
-															<DropdownMenuItem
-																disabled={busy}
-																onSelect={() => onApprove(outlet.id)}
-															>
-																{t.adminUsers.reactivate}
-															</DropdownMenuItem>
-														)}
-													</DropdownMenuContent>
-												</DropdownMenu>
+															{outlet.status === "pending_review" && (
+																<DropdownMenuItem
+																	disabled={busy}
+																	onSelect={() => onApprove(outlet.id)}
+																>
+																	{t.common.approve}
+																</DropdownMenuItem>
+															)}
+															{(outlet.status === "active" ||
+																outlet.status === "suspended") && (
+																<DropdownMenuItem
+																	className="text-destructive"
+																	disabled={busy}
+																	onSelect={() => onDeactivate(outlet.id)}
+																>
+																	{t.adminOrg.setInactive}
+																</DropdownMenuItem>
+															)}
+															{outlet.status === "suspended" && (
+																<DropdownMenuItem
+																	disabled={busy}
+																	onSelect={() => onApprove(outlet.id)}
+																>
+																	{t.adminUsers.reactivate}
+																</DropdownMenuItem>
+															)}
+														</DropdownMenuContent>
+													</DropdownMenu>
+												</div>
 											</TableCell>
 										</TableRow>
 									);
