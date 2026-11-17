@@ -134,17 +134,34 @@
 	max-height: 75vh;
 	overflow-y: auto;
 }
+/*
+ * A REQUEST ROW LOOKS LIKE SOMETHING YOU CAN OPEN (owner, 17 Nov 2026 — "user
+ * dont know this can click"). The rows were drawn with a TRANSPARENT border and
+ * fill, and that rule out-ranked the base hover, so at rest AND under the
+ * pointer a row was a line of text — the affordance audit (ui-ux-pro-max
+ * "Hover States") flagged 21 of them on Agency Approvals. Linear's inbox rows
+ * (`docs/design/reference/linear.DESIGN.md`): a hairline at rest, one surface
+ * step up on hover, the selected row strongest.
+ */
 .iz-portal .iz-approvals-page .iz-approvals-list-item {
 	position: relative;
 	display: flex;
 	padding: 16px;
 	margin: 0 0 6px;
-	border: 1px solid transparent;
+	border: 1px solid var(--iz-line);
 	border-radius: 8px;
 	background: transparent;
 	box-shadow: none;
 	text-align: left;
 	color: var(--iz-txt);
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		background-color 0.15s ease;
+}
+.iz-portal .iz-approvals-page .iz-approvals-list-item:not(.on):hover {
+	border-color: var(--iz-line2);
+	background: var(--iz-panel2);
 }
 .iz-portal .iz-approvals-page .iz-approvals-list-item.on {
 	border-color: var(--iz-violet);
@@ -386,12 +403,21 @@
 	}
 }
 
+/* Same treatment as the request rows above, for the members list. */
 .iz-portal .iz-approvals-sidebar .iz-approvals-member-row {
 	padding: 16px;
-	border: 1px solid transparent;
+	border: 1px solid var(--iz-line);
 	border-radius: 8px;
 	background: transparent;
 	box-shadow: none;
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		background-color 0.15s ease;
+}
+.iz-portal .iz-approvals-sidebar .iz-approvals-member-row:not(.on):hover {
+	border-color: var(--iz-line2);
+	background: var(--iz-panel2);
 }
 .iz-portal .iz-approvals-sidebar .iz-approvals-member-row.on {
 	border-color: var(--iz-violet);

@@ -157,6 +157,26 @@
 	transition-duration: 0ms;
 }
 
+/*
+ * A POINTER ON EVERYTHING CLICKABLE (owner, 17 Nov 2026 — "user dont know this
+ * can click"; ui-ux-pro-max "Hover States": change the cursor on clickable
+ * elements). Tailwind v4's preflight gives <button> the DEFAULT arrow, so the
+ * affordance audit found the language switch, Icon guide, filter chips, stat
+ * cards and Manage PR's Broadcast/penalty buttons answering the pointer with
+ * an arrow on every page. Zero specificity (`:where`) on purpose: any cursor a
+ * component sets deliberately (grab, text, not-allowed) still wins.
+ */
+:where(
+		body[data-admin-design],
+		body[data-agency-design],
+		body[data-outlet-design]
+	)
+	:where(button, [role="button"], [role="tab"], summary, select, a[href]):where(
+		:not(:disabled):not([aria-disabled="true"])
+	) {
+	cursor: pointer;
+}
+
 /* ── REDUCED MOTION ─────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

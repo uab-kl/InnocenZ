@@ -37,6 +37,8 @@ import "@agency-portal/approved-portal-design.css";
 // One hover/press/focus language for all three portals — after the portal's
 // own CSS so it wins the cascade. See styles/portal-interaction.css.
 import "@/styles/portal-interaction.css";
+// One selected-tab look (gold, dark ink) for all three portals.
+import "@/styles/portal-tabs.css";
 
 export const Route = createFileRoute("/agency")({
 	// Agency-only tree: admin/outlet sessions are sent to their own portal.

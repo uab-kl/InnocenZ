@@ -281,6 +281,46 @@ body:is([data-outlet-design], [data-agency-design])
 	color: var(--iz-txt);
 	box-shadow: none;
 }
+/*
+ * THE SELECTED TAB IS UNMISTAKABLE (owner, 17 Nov 2026 — "user dont know where
+ * he at"; ui-ux-pro-max "Active State": highlight the current item, and "Hover
+ * States"). Five tab strips each had their own selected look, all a fill one
+ * shade off its neighbours (#372d45 on #231f2e), and unselected tabs gave no
+ * answer under the pointer. One look for all five, matching the admin source
+ * filter: the selected tab wears the accent border and a lavender-tinted fill
+ * at full ink and weight; an unselected tab steps up a surface on hover.
+ * Linear's selected pill (`docs/design/reference/linear.DESIGN.md`): selected
+ * = surface lift, never a second colour.
+ */
+body:is([data-outlet-design], [data-agency-design]) .iz-portal
+	:is(
+		.iz-payroll-tab,
+		.iz-filter-chip,
+		.iz-approvals-group,
+		.iz-post-job-event-type-pill,
+		.iz-approvals-tab,
+		.iz-approvals-subfilter > button,
+		.iz-roster-toggle > button
+	):is(.on, [aria-pressed="true"]) {
+	border-color: var(--iz-violet);
+	background: color-mix(in srgb, var(--iz-violet) 20%, var(--iz-panel));
+	color: var(--iz-txt);
+	font-weight: 600;
+}
+body:is([data-outlet-design], [data-agency-design])
+	.iz-portal
+	:is(
+		.iz-payroll-tab,
+		.iz-filter-chip,
+		.iz-approvals-group,
+		.iz-post-job-event-type-pill,
+		.iz-approvals-tab,
+		.iz-approvals-subfilter > button,
+		.iz-roster-toggle > button
+	):not(.on):not([aria-pressed="true"]):hover {
+	background: var(--iz-panel2);
+	color: var(--iz-txt);
+}
 body:is([data-outlet-design], [data-agency-design])
 	:is(
 		.iz-card,
@@ -1683,9 +1723,46 @@ body:is([data-outlet-design], [data-agency-design])
 	margin-top: 20px;
 	padding-top: 16px;
 }
+/*
+ * "More filters" reads as a button, not a line of text (owner, 17 Nov 2026 —
+ * "user dont know this can click"; affordance audit, ui-ux-pro-max "Hover
+ * States"). The soft button of DESIGN.md §6, with a chevron that turns open.
+ */
 .iz-approved-more-filters summary {
-	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
 	min-height: 44px;
+	padding: 8px 14px;
+	border: 1px solid var(--iz-line);
+	border-radius: 8px;
+	background: var(--iz-panel);
+	color: var(--iz-txt);
+	font-weight: 600;
+	list-style: none;
+	cursor: pointer;
+	transition:
+		border-color 0.15s ease,
+		background-color 0.15s ease;
+}
+.iz-approved-more-filters summary::-webkit-details-marker {
+	display: none;
+}
+.iz-approved-more-filters summary::after {
+	content: "";
+	width: 8px;
+	height: 8px;
+	border-right: 2px solid currentColor;
+	border-bottom: 2px solid currentColor;
+	transform: translateY(-2px) rotate(45deg);
+	transition: transform 0.15s ease;
+}
+.iz-approved-more-filters[open] summary::after {
+	transform: translateY(2px) rotate(225deg);
+}
+.iz-approved-more-filters summary:hover {
+	border-color: var(--iz-violet);
+	background: var(--iz-panel2);
 }
 .iz-portal .iz-agency-pr-management .iz-roster-filterbar__row {
 	display: grid;

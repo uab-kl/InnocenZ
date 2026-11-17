@@ -1,0 +1,123 @@
+/*
+ * ONE SELECTED-TAB LOOK IN ALL THREE PORTALS (owner, 17 Nov 2026).
+ *
+ *   "the select tab can design so user know where they at" — pointing at the
+ *   admin dashboard's gold "All" filter (`--gradient-royal`, dark ink);
+ *   "all the others also follow"; "admin, outlet, and agency portal page".
+ *
+ * Every strip used to say "selected" its own way, and most said it with a fill
+ * one shade off its neighbours (#372d45 on #231f2e) — the Organization /
+ * Settings tabs not at all (selected and unselected were the same #231f2e).
+ * Measured by walking every page of all three portals for elements marked
+ * selected (`.on`, `.is-active`, `aria-pressed`, `aria-selected`,
+ * `data-state=active`): 13 strips in agency + outlet, 3 patterns in admin.
+ * Now the selected tab is a SOLID gold pill with dark ink everywhere, the one
+ * thing on the strip the eye lands on (ui-ux-pro-max "Active State").
+ *
+ * ⚠️ Gold here means "you are here", NOT "waiting": waiting is a small amber
+ * COUNT badge, a different shape. To change the selected colour for every
+ * portal at once, change the two tokens below — nothing else.
+ *
+ * SPECIFICITY: `:is(#iz-tab-wins, …)` — no element has that id; inside :is() it
+ * lifts the rule above every page-level class rule (one held the Post Job pill
+ * on its old fill under our dark ink — unreadable) without `!important`.
+ *
+ * Selected LIST ROWS (e.g. the Approvals request on the left) are not tabs and
+ * keep their own violet edge; only tab/segment/filter strips are listed here.
+ */
+:is(
+		body[data-admin-design],
+		body[data-agency-design],
+		body[data-outlet-design]
+	) {
+	--iz-tab-selected-bg: var(
+		--gradient-royal,
+		linear-gradient(120deg, #f7e6b0 0%, #e8c874 45%, #c69f43 100%)
+	);
+	--iz-tab-selected-ink: #1a1726;
+}
+
+/* ── Agency + outlet ─────────────────────────────────────────────────────── */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-payroll-tab,
+		.iz-filter-chip,
+		.iz-approvals-groups > button,
+		.iz-approvals-tab,
+		.iz-approvals-subfilter .iz-chip,
+		.iz-approvals-subfilter > button,
+		.iz-approvals-doc-tabs > button,
+		.iz-post-job-event-type-pill,
+		.iz-event-picker__tabs > button,
+		.iz-roster-toggle > button,
+		.iz-agency-home-tabs > button,
+		.iz-agency-settings-tabs > button,
+		.iz-outlet-settings-tabs > button,
+		.iz-outlet-report-tabs > button
+	):is(
+		.on,
+		.is-active,
+		.iz-outlet-report-tabs__btn--active,
+		[aria-pressed="true"],
+		[aria-selected="true"]
+	) {
+	border-color: transparent;
+	background: var(--iz-tab-selected-bg);
+	box-shadow: none;
+	color: var(--iz-tab-selected-ink);
+	font-weight: 700;
+}
+/* Inner labels and counts take the dark ink too (several set their own muted
+   colour); the red/amber count BADGES keep theirs. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-payroll-tab,
+		.iz-filter-chip,
+		.iz-approvals-groups > button,
+		.iz-approvals-tab,
+		.iz-approvals-subfilter .iz-chip,
+		.iz-approvals-subfilter > button,
+		.iz-approvals-doc-tabs > button,
+		.iz-post-job-event-type-pill,
+		.iz-event-picker__tabs > button,
+		.iz-roster-toggle > button,
+		.iz-agency-home-tabs > button,
+		.iz-agency-settings-tabs > button,
+		.iz-outlet-settings-tabs > button,
+		.iz-outlet-report-tabs > button
+	):is(
+		.on,
+		.is-active,
+		.iz-outlet-report-tabs__btn--active,
+		[aria-pressed="true"],
+		[aria-selected="true"]
+	)
+	:where(:not(.iz-nav-alert):not(.iz-nav-alert *)) {
+	color: inherit;
+}
+
+/* ── Admin ───────────────────────────────────────────────────────────────── */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(
+		[data-slot="tabs-trigger"][data-state="active"],
+		[role="tab"][aria-selected="true"],
+		.iz-admin-source-tabs > .iz-admin-source-tab[data-active="true"]
+	) {
+	border-color: transparent;
+	background: var(--iz-tab-selected-bg);
+	box-shadow: none;
+	color: var(--iz-tab-selected-ink);
+	font-weight: 700;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(
+		[data-slot="tabs-trigger"][data-state="active"],
+		[role="tab"][aria-selected="true"],
+		.iz-admin-source-tabs > .iz-admin-source-tab[data-active="true"]
+	)
+	:where(:not([data-slot="badge"]):not([data-slot="badge"] *)) {
+	color: inherit;
+}

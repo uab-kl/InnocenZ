@@ -589,9 +589,11 @@ const en = {
 		adminAgenciesCta: "Review agencies",
 		adminOutletsTitle: "Venues waiting for approval",
 		adminOutletsCta: "Review venues",
-		adminOrgsMeta: "They can sign in, but cannot use the portal until you approve.",
+		adminOrgsMeta:
+			"They can sign in, but cannot use the portal until you approve.",
 		adminPlanChangesTitle: "Plan changes to decide",
-		adminPlanChangesMeta: "A venue asked to switch plan. Nothing changes until you decide.",
+		adminPlanChangesMeta:
+			"A venue asked to switch plan. Nothing changes until you decide.",
 		adminPlanChangesCta: "Decide plan changes",
 		adminPlanRequestsTitle: "Plan requests to answer",
 		adminPlanRequestsMeta: "Each one waits for your reply.",

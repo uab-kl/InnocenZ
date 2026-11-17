@@ -119,8 +119,14 @@ One dark theme, shared by admin, agency and outlet (the token values are the sam
 - **Surfaces step up, they do not cast shadows.** canvas → panel → panel-2. Separate things
   with a 1px `hairline` and a surface step, as Linear does; a shadow is reserved for things
   that float (sheets, menus, dialogs).
-- **Lavender `accent` is scarce:** focus ring, the selected tab/rail item, links. It is not a
+- **Lavender `accent` is scarce:** focus ring, the current rail item, links. It is not a
   background and not a text colour for body copy.
+- **The selected TAB is solid gold with dark ink — in all three portals** (owner, 17 Nov
+  2026: "the select tab can design so user know where they at", pointing at the admin
+  dashboard's gold filter; "all the others also follow"). One file,
+  `styles/portal-tabs.css`, two tokens (`--iz-tab-selected-bg` = `--gradient-royal`,
+  `--iz-tab-selected-ink`). Gold here means "you are here"; "waiting" is the small amber
+  COUNT badge, a different shape. A new tab strip is added to that file's list.
 - **`act` (deep violet) fills the one button that does the thing.** Historically called
   "gold" in class names (`.iz-btn-gold`, `--iz-gold`) — the value is violet; do not
   "restore" a gold colour.
@@ -136,7 +142,8 @@ One dark theme, shared by admin, agency and outlet (the token values are the sam
 
   Authorities: `cellReviewTone()` (mobile), `STATUS_VARIANT` (agency receipts),
   `lib/status-tone.ts` (admin). A new status gets a tone there — never a hand-picked colour.
-- The `wordmark` gold (`#e0be73`) belongs to the logo alone.
+- The `wordmark` gold (`#e0be73`) belongs to the logo; the selected-tab gold above is the
+  only other gold on screen.
 
 ## 4. Type
 
@@ -237,6 +244,13 @@ A design change is done only when all of these hold (Fix Rules in `CLAUDE.md`):
    page renders, no console errors, buttons still lead where they did, no demo data.
 3. Measure, don't trust the source: `getComputedStyle` sizes on the rendered page stay on
    16 · 20 · 24; nothing overflows at 1440px and at phone width.
+3a. **Everything clickable looks clickable** (ui-ux-pro-max "Hover States", "Active State",
+   "Input Affordance"): a pointer cursor (`styles/portal-interaction.css` gives every
+   button/tab/link one), a visible boundary at rest — border, fill or underline — a hover
+   answer, and a selected tab in solid gold with dark ink (`styles/portal-tabs.css`), never
+   a fill one shade off its neighbours. A clickable list row is a box at rest (hairline), not a line of text.
+   Audit it by walking every page and listing interactive elements with no border, fill,
+   underline, tint or icon — on 17 Nov that found 21 request rows on Agency Approvals.
 4. Never click a write button to "see if it works" — prove it by reading code and rows.
 5. Record the slice in `TEST_SCRIPT.md` (§10 row; §11 if a user can see it).
 
