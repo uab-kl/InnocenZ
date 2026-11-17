@@ -317,11 +317,17 @@
 .outlet-post-job-design .iz-event-card__pick {
 	cursor: pointer;
 }
-.outlet-post-job-design .iz-event-card:has(.iz-event-card__pick:hover) {
+/* Only when the card can actually be used: a view-only role (Director) gets
+   the picker inside a disabled <fieldset>, and an arrow there would promise a
+   click that does nothing. */
+.outlet-post-job-design
+.iz-event-card:has(.iz-event-card__pick:not(:disabled):hover) {
 	border-color: var(--iz-violet);
 	transform: translateY(-2px);
 }
-.outlet-post-job-design .iz-event-card__pick .iz-event-card__name::after {
+.outlet-post-job-design
+	.iz-event-card__pick:not(:disabled)
+	.iz-event-card__name::after {
 	content: " →" / "";
 	color: var(--iz-violet);
 }
@@ -329,7 +335,8 @@
 	.outlet-post-job-design .iz-event-card {
 		transition: none;
 	}
-	.outlet-post-job-design .iz-event-card:has(.iz-event-card__pick:hover) {
+	.outlet-post-job-design
+		.iz-event-card:has(.iz-event-card__pick:not(:disabled):hover) {
 		transform: none;
 	}
 }
