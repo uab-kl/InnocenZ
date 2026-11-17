@@ -121,3 +121,83 @@ html
 	:where(:not([data-slot="badge"]):not([data-slot="badge"] *)) {
 	color: inherit;
 }
+
+/*
+ * THE SIDE PANEL SAYS "YOU ARE HERE" IN THE SAME GOLD (owner, 17 Nov 2026:
+ * "side panel can design ?"). The current page was a fill of #2c2539 on the
+ * rail's own near-black — one shade apart — with a 2px violet sliver, and the
+ * other items gave no answer to the pointer. The rail is the first place a
+ * reader looks for "where am I", so the current page now wears the selected-
+ * tab gold as a TINT (not a block — a whole gold row would shout over the
+ * page), a full-height gold bar and a gold icon, at full ink and weight. Every
+ * other item steps up a surface on hover. The scrollbar is thinned to the
+ * rail's own line colour (it showed as a bright grey bar). Same treatment in
+ * admin's rail. Badges, labels, order and links are untouched.
+ */
+:is(
+		body[data-admin-design],
+		body[data-agency-design],
+		body[data-outlet-design]
+	) {
+	--iz-rail-here-tint: color-mix(in srgb, #e8c874 16%, transparent);
+	--iz-rail-here-icon: #e8c874;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-nav-link.on {
+	background: var(--iz-rail-here-tint);
+	color: #fff;
+	font-weight: 700;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-nav-link.on::before {
+	top: 8px;
+	bottom: 8px;
+	width: 3px;
+	background: var(--iz-tab-selected-bg);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-nav-link.on
+	svg {
+	color: var(--iz-rail-here-icon);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-nav-link:not(.on):not(.iz-portal-sign-out):hover {
+	background: var(--iz-panel2);
+	color: #fff;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.iz-portal-sidebar-nav {
+	scrollbar-width: thin;
+	scrollbar-color: var(--iz-line2) transparent;
+}
+
+/* Admin's rail, the same "you are here". */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item-active {
+	position: relative;
+	background: var(--iz-rail-here-tint);
+	color: #fff;
+	font-weight: 700;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item-active
+	svg {
+	color: var(--iz-rail-here-icon);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item:not(.admin-sidebar-nav-item-active):hover {
+	background: var(--sidebar-accent, #2c2539);
+	color: #fff;
+}

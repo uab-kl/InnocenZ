@@ -119,8 +119,13 @@ One dark theme, shared by admin, agency and outlet (the token values are the sam
 - **Surfaces step up, they do not cast shadows.** canvas → panel → panel-2. Separate things
   with a 1px `hairline` and a surface step, as Linear does; a shadow is reserved for things
   that float (sheets, menus, dialogs).
-- **Lavender `accent` is scarce:** focus ring, the current rail item, links. It is not a
-  background and not a text colour for body copy.
+- **Lavender `accent` is scarce:** focus ring, links. It is not a background and not a text
+  colour for body copy.
+- **"You are here" is gold, in two places only:** the selected tab (solid gold, below) and
+  the current page in the side menu (a gold tint, a full-height gold bar and a gold icon —
+  never a solid gold row, which would shout over the page). Admin, agency and outlet alike;
+  both live in `styles/portal-tabs.css` (admin's legacy `!important` rule in
+  `admin-design.css` reads the same tokens).
 - **The selected TAB is solid gold with dark ink — in all three portals** (owner, 17 Nov
   2026: "the select tab can design so user know where they at", pointing at the admin
   dashboard's gold filter; "all the others also follow"). One file,

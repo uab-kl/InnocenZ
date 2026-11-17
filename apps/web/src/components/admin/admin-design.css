@@ -481,21 +481,32 @@ body[data-admin-design] .admin-sidebar-nav-item {
 	line-height: 1.5;
 	color: var(--foreground);
 }
-/* The legacy sidebar marks active colors important; keep the override scoped. */
+/* The legacy sidebar marks active colors important; keep the override scoped.
+   "You are here" in the same gold as the agency/outlet rail and every selected
+   tab (owner, 17 Nov 2026 — "side panel can design ?"): a gold TINT, a full
+   gold bar and a gold icon (styles/portal-tabs.css). It was #2c2539, one shade
+   off the rail. The tokens live in portal-tabs.css; fallbacks keep it gold if
+   that file is ever not loaded. */
 body[data-admin-design] .admin-sidebar-nav-item-active,
 body[data-admin-design] .admin-sidebar-nav-item-active:hover {
-	background: #2c2539 !important;
-	color: #eee9f5 !important;
+	background: var(
+		--iz-rail-here-tint,
+		color-mix(in srgb, #e8c874 16%, transparent)
+	) !important;
+	color: #fff !important;
 	box-shadow: none;
 }
 body[data-admin-design] .admin-sidebar-nav-item-active::before {
 	content: "";
 	position: absolute;
-	inset-block: 14px;
+	inset-block: 8px;
 	left: 0;
-	width: 2px;
+	width: 3px;
 	border-radius: 2px;
-	background: #d5c5e5;
+	background: var(
+		--iz-tab-selected-bg,
+		linear-gradient(120deg, #f7e6b0 0%, #e8c874 45%, #c69f43 100%)
+	);
 }
 /* Collapsed rail: the pill's place is taken by a corner dot (16 Nov 2026). */
 body[data-admin-design] .admin-sidebar-dot {
