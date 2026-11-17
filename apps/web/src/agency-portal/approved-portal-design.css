@@ -184,6 +184,44 @@ body:is([data-outlet-design], [data-agency-design])
 	outline: 2px solid var(--iz-violet);
 	outline-offset: 3px;
 }
+/*
+ * A FIELD DRAWN BY ITS SHELL — `.iz-job-posting-control`, the Post Job pencil
+ * fields (template name, event name, …). Owner's screenshot, 17 Nov 2026: the
+ * ring cut through the field. Measured: the bare input took the 46px minimum
+ * above while its shell is 38px tall, so it poked out of the box, and the ring
+ * was drawn round that input alone (190px of a 234px shell), leaving the pencil
+ * outside it, while the shell itself turned the retired gold. Now the input
+ * fills the shell and draws nothing; the SHELL carries the one lavender ring.
+ * Repeats the 46px rule's own selector so it outranks it.
+ */
+body:is([data-outlet-design], [data-agency-design]) .iz-job-posting-control
+	:is(
+		input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+				[type="file"]
+			),
+		select,
+		textarea
+	) {
+	min-height: 0;
+}
+/* A select keeps `.iz-select`'s 10px block padding — 43px in a 38px shell. */
+body:is([data-outlet-design], [data-agency-design]) .iz-job-posting-control
+	select {
+	height: 100%;
+	padding-block: 0;
+}
+body:is([data-outlet-design], [data-agency-design])
+	.iz-job-posting-control
+	:is(input, select, textarea):focus-visible {
+	outline: none;
+}
+body:is([data-outlet-design], [data-agency-design])
+	.iz-job-posting-control:has(:is(input, select, textarea):focus-visible) {
+	border-color: var(--iz-violet);
+	background: var(--iz-panel);
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 3px;
+}
 body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-btn, [data-slot="button"]) {
 	min-height: 46px;
