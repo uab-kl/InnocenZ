@@ -24,7 +24,13 @@ import {
 	datesToQueryParam,
 } from "@/components/admin/date-multi-filter";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import {
+	QueueRowButton,
+	QueueWaitingStrip,
+	queueRowState,
+} from "@/components/admin/queue-cues";
 import { SourceToggle } from "@/components/admin/source-toggle";
+import { DateTimeCell } from "@/components/admin/table-sort";
 import {
 	currentOrgName,
 	useCurrentOrgNames,
@@ -65,6 +71,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useAdminTodoCounts } from "@/hooks/use-sidebar-badges";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -306,6 +313,9 @@ function PlanChangesPage() {
 	const [view, setView] = useState<"latest" | "all">("all");
 	const [searchInput, setSearchInput] = useState("");
 	const [search, setSearch] = useState("");
+	// The rail badge's own number for this page (same query, same cache), so the
+	// "waiting for your decision" strip can never disagree with the badge.
+	const { counts: waitingCounts } = useAdminTodoCounts();
 
 	// Debounce the search box so a keystroke doesn't fire a request each time.
 	useEffect(() => {
@@ -449,6 +459,19 @@ function PlanChangesPage() {
 							</CardDescription>
 						</div>
 
+						<QueueWaitingStrip
+							count={waitingCounts.planChanges}
+							showingWaiting={statusFilter === "pending"}
+							onShowWaiting={() => {
+								setStatusFilter("pending");
+								setPage(1);
+							}}
+							onShowAll={() => {
+								setStatusFilter("all");
+								setPage(1);
+							}}
+						/>
+
 						<AdminFilters className="admin-finance-filters">
 							<div className="admin-finance-filter-row flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
 								<SourceToggle
@@ -547,18 +570,23 @@ function PlanChangesPage() {
 						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
+									{/* Role rides under the name in Who (17 Nov 2026), so the
+									    row action gets its own column without squeezing the
+									    plans into breaking mid-word. */}
 									<TableHead>{t.adminRequests.colWho}</TableHead>
-									<TableHead className="w-[100px]">
-										{t.adminRequests.colRole}
-									</TableHead>
 									<TableHead>{t.adminRequests.colFromPlan}</TableHead>
 									<TableHead>{t.adminRequests.colToPlan}</TableHead>
-									<TableHead>{t.adminRequests.colPrice}</TableHead>
+									<TableHead className="whitespace-nowrap">
+										{t.adminRequests.colPrice}
+									</TableHead>
 									<TableHead className="w-[110px]">
 										{t.admin.colStatus}
 									</TableHead>
-									<TableHead className="w-[170px]">
+									<TableHead className="w-[150px]">
 										{t.adminRequests.colSwitchedAt}
+									</TableHead>
+									<TableHead className="w-[1%]">
+										<span className="sr-only">{t.admin.colActions}</span>
 									</TableHead>
 								</TableRow>
 							</TableHeader>
@@ -610,11 +638,16 @@ function PlanChangesPage() {
 										const toPlan = toPlanOf(request, planById);
 										const price = priceOf(request, planById, t);
 
+										// Only a PENDING switch can be approved or declined — the
+										// edit form's own `needsApproval` test, and what the rail
+										// badge counts. Everything else is history: "View".
+										const queueState = status === "pending" ? "decide" : "done";
 										return (
 											<TableRow
 												key={request.id}
 												className="cursor-pointer hover:bg-muted/30"
 												onClick={() => setEditRequest(request)}
+												{...queueRowState(queueState)}
 											>
 												<TableCell data-label={t.adminRequests.colWho}>
 													<div className="text-base font-medium">
@@ -630,17 +663,13 @@ function PlanChangesPage() {
 															{request.contactName}
 														</div>
 													)}
-												</TableCell>
-												<TableCell data-label={t.adminRequests.colRole}>
-													{request.subscriberType ? (
+													{request.subscriberType && (
 														<Badge
 															variant="outline"
-															className={`${roleBadgeColors[request.subscriberType]} w-fit`}
+															className={`${roleBadgeColors[request.subscriberType]} mt-1 w-fit`}
 														>
 															{roleLabels[request.subscriberType](t)}
 														</Badge>
-													) : (
-														<span className="text-muted-foreground">—</span>
 													)}
 												</TableCell>
 												<TableCell
@@ -666,7 +695,9 @@ function PlanChangesPage() {
 												>
 													{price.amount != null ? (
 														<div className="flex flex-col leading-tight">
-															<span>RM {formatPrice(price.amount)}</span>
+															<span className="whitespace-nowrap tabular-nums">
+																RM {formatPrice(price.amount)}
+															</span>
 															{price.note && (
 																<span className="text-sm text-muted-foreground">
 																	{price.note}
@@ -693,19 +724,13 @@ function PlanChangesPage() {
 													data-label={t.adminRequests.colSwitchedAt}
 													className="text-base text-muted-foreground"
 												>
-													{formatDate(request.createdAt)}
-													<Button
-														type="button"
-														variant="outline"
-														size="sm"
-														className="admin-finance-review"
-														onClick={(event) => {
-															event.stopPropagation();
-															(() => setEditRequest(request))();
-														}}
-													>
-														{t.rbac.review}
-													</Button>
+													<DateTimeCell value={request.createdAt} />
+												</TableCell>
+												<TableCell className="iz-queue-cell">
+													<QueueRowButton
+														state={queueState}
+														onOpen={() => setEditRequest(request)}
+													/>
 												</TableCell>
 											</TableRow>
 										);

@@ -1049,3 +1049,69 @@ body[data-admin-design] .iz-admin-request-footer > button {
 		transform: none;
 	}
 }
+
+/*
+ * QUEUE PAGES — WHAT IS WAITING FOR YOU (DESIGN.md §7, 17 Nov 2026).
+ * `components/admin/queue-cues.tsx` stamps `data-queue-state` on each row and
+ * renders the strip; these rules only paint them. The same amber and the same
+ * leading edge as the To do panel above, so "waiting on you" looks identical on
+ * the dashboard and inside the queue it links to.
+ */
+tr[data-queue-state="decide"] > td:first-child {
+	box-shadow: inset 3px 0 0 var(--signal-warn);
+}
+/* The row's own action: its own narrow column, never squeezed under a date. */
+table td.iz-queue-cell {
+	width: 1%;
+	white-space: nowrap;
+	text-align: right;
+}
+/* Admin buttons may wrap (long labels in sheets); a one-word row action must
+   not — squeezed, it rendered "Review" one letter per line. */
+body[data-admin-design] [data-slot="button"].iz-queue-action {
+	white-space: nowrap;
+	max-width: none;
+}
+.iz-queue-waiting {
+	position: relative;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 12px;
+	padding: 10px 14px 10px 16px;
+	border: 1px solid color-mix(in srgb, var(--signal-warn) 30%, var(--border));
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--signal-warn) 7%, transparent);
+	color: var(--signal-warn);
+	overflow: hidden;
+}
+.iz-queue-waiting::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: 3px;
+	background: var(--signal-warn);
+}
+.iz-queue-waiting__text {
+	flex: 1 1 12rem;
+	margin: 0;
+	color: var(--foreground);
+	font-weight: 700;
+}
+@media (max-width: 767px) {
+	/* Rows become cards on a phone: the edge moves to the card itself. */
+	.admin-finance-table > tbody > tr[data-queue-state="decide"] {
+		border-left: 3px solid var(--signal-warn);
+	}
+	.admin-finance-table
+		> tbody
+		> tr[data-queue-state="decide"]
+		> td:first-child {
+		box-shadow: none;
+	}
+	.iz-queue-waiting > button {
+		width: 100%;
+		min-height: 44px;
+	}
+}

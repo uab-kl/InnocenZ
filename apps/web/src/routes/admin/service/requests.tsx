@@ -25,7 +25,13 @@ import {
 	datesToQueryParam,
 } from "@/components/admin/date-multi-filter";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import {
+	QueueRowButton,
+	QueueWaitingStrip,
+	queueRowState,
+} from "@/components/admin/queue-cues";
 import { SourceToggle } from "@/components/admin/source-toggle";
+import { DateTimeCell } from "@/components/admin/table-sort";
 import {
 	currentOrgName,
 	useCurrentOrgNames,
@@ -66,6 +72,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useAdminTodoCounts } from "@/hooks/use-sidebar-badges";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -159,7 +166,11 @@ function billingCycleLabel(cycle: string, t: PortalTranslations): string {
 const statusBadgeColors: Record<AdminRequestStatus, string> = {
 	pending:
 		"border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-	contacted: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+	// Contacted is still WAITING on the admin (`isAwaitingAnswer`), so it wears
+	// the owner's waiting amber — it was sky blue, a fifth colour the status
+	// code (green settled · amber waiting · red stopped · grey off) never had.
+	contacted:
+		"border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
 	resolved:
 		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 	// Plan-change statuses — rows live on /admin/service/plan-changes, kept here
@@ -352,6 +363,9 @@ function RequestsPage() {
 	const [editRequest, setEditRequest] = useState<AdminRequest | null>(null);
 	const [searchInput, setSearchInput] = useState("");
 	const [search, setSearch] = useState("");
+	// The rail badge's own number for this page (same query, same cache), so the
+	// "waiting for your decision" strip can never disagree with the badge.
+	const { counts: waitingCounts } = useAdminTodoCounts();
 
 	// Debounce the search box so a keystroke doesn't fire a request each time.
 	useEffect(() => {
@@ -551,6 +565,19 @@ function RequestsPage() {
 							<CardDescription>{t.adminRequests.cardHint}</CardDescription>
 						</div>
 
+						<QueueWaitingStrip
+							count={waitingCounts.planRequests}
+							showingWaiting={statusFilter === "pending"}
+							onShowWaiting={() => {
+								setStatusFilter("pending");
+								setPage(1);
+							}}
+							onShowAll={() => {
+								setStatusFilter("all");
+								setPage(1);
+							}}
+						/>
+
 						<AdminFilters className="admin-finance-filters">
 							<div className="admin-finance-filter-row flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
 								<SourceToggle
@@ -625,10 +652,10 @@ function RequestsPage() {
 						<Table className="admin-finance-table">
 							<TableHeader>
 								<TableRow>
+									{/* Role rides under the name in Who (17 Nov 2026): a whole
+									    column for one word squeezed From/To plan into breaking
+									    mid-word once the row action got its own column. */}
 									<TableHead>{t.adminRequests.colWho}</TableHead>
-									<TableHead className="w-[100px]">
-										{t.adminRequests.colRole}
-									</TableHead>
 									<TableHead>{t.admin.colType}</TableHead>
 									{/*
 									  REMARKS HAS NO COLUMN (owner, 16 Nov 2026: "the remarks
@@ -643,12 +670,20 @@ function RequestsPage() {
 									*/}
 									<TableHead>{t.adminRequests.colFromPlan}</TableHead>
 									<TableHead>{t.adminRequests.colToPlan}</TableHead>
-									<TableHead>{t.adminRequests.colQuoted}</TableHead>
+									{/* nowrap: the header broke mid-word as "Quote d (RM)". */}
+									<TableHead className="whitespace-nowrap">
+										{t.adminRequests.colQuoted}
+									</TableHead>
 									<TableHead className="w-[110px]">
 										{t.admin.colStatus}
 									</TableHead>
-									<TableHead className="w-[170px]">
+									<TableHead className="w-[150px]">
 										{t.adminRequests.colRequestedAt}
+									</TableHead>
+									{/* The row's action — its own column, no longer squeezed
+									    under the date. The header is for screen readers. */}
+									<TableHead className="w-[1%]">
+										<span className="sr-only">{t.admin.colActions}</span>
 									</TableHead>
 								</TableRow>
 							</TableHeader>
@@ -714,11 +749,21 @@ function RequestsPage() {
 												: undefined,
 										);
 
+										// decide = new and untouched (what the rail badge counts);
+										// open = contacted, still decidable; both are the
+										// server's own `isAwaitingAnswer` set. done = closed.
+										const queueState =
+											request.status === "pending"
+												? "decide"
+												: isAwaitingAnswer(request.status)
+													? "open"
+													: "done";
 										return (
 											<TableRow
 												key={request.id}
 												className="cursor-pointer hover:bg-muted/30"
 												onClick={() => setEditRequest(request)}
+												{...queueRowState(queueState)}
 											>
 												<TableCell data-label={t.adminRequests.colWho}>
 													<div className="text-base font-medium">
@@ -734,17 +779,13 @@ function RequestsPage() {
 															{request.contactName}
 														</div>
 													)}
-												</TableCell>
-												<TableCell data-label={t.adminRequests.colRole}>
-													{request.subscriberType ? (
+													{request.subscriberType && (
 														<Badge
 															variant="outline"
-															className={`${roleBadgeColors[request.subscriberType]} w-fit`}
+															className={`${roleBadgeColors[request.subscriberType]} mt-1 w-fit`}
 														>
 															{roleLabels[request.subscriberType](t)}
 														</Badge>
-													) : (
-														<span className="text-muted-foreground">—</span>
 													)}
 												</TableCell>
 												<TableCell data-label={t.admin.colType}>
@@ -784,7 +825,7 @@ function RequestsPage() {
 												>
 													{request.quotedAmount ? (
 														<div className="flex flex-col leading-tight">
-															<span>
+															<span className="whitespace-nowrap tabular-nums">
 																RM {formatPrice(request.quotedAmount)}
 															</span>
 															{request.status !== "resolved" && (
@@ -798,7 +839,9 @@ function RequestsPage() {
 														plan &&
 														plan.name !== "Custom" ? (
 															<div className="flex flex-col leading-tight">
-																<span>RM {formatPrice(plan.price)}</span>
+																<span className="whitespace-nowrap tabular-nums">
+																	RM {formatPrice(plan.price)}
+																</span>
 																<span className="text-sm text-muted-foreground">
 																	{t.adminRequests.colFromPlan}
 																</span>
@@ -826,19 +869,13 @@ function RequestsPage() {
 													data-label={t.adminRequests.colRequestedAt}
 													className="text-base text-muted-foreground"
 												>
-													{formatDate(request.createdAt)}
-													<Button
-														type="button"
-														variant="outline"
-														size="sm"
-														className="admin-finance-review"
-														onClick={(event) => {
-															event.stopPropagation();
-															(() => setEditRequest(request))();
-														}}
-													>
-														{t.rbac.review}
-													</Button>
+													<DateTimeCell value={request.createdAt} />
+												</TableCell>
+												<TableCell className="iz-queue-cell">
+													<QueueRowButton
+														state={queueState}
+														onOpen={() => setEditRequest(request)}
+													/>
 												</TableCell>
 											</TableRow>
 										);
