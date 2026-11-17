@@ -62,6 +62,7 @@ import {
 	type PayrollWeekWork,
 	payrollWeekWork,
 	voucherIdsWithOpenDispute,
+	weekHoldingWork,
 } from "@agency-portal/lib/payroll-action-counts";
 import {
 	formatPayrollDay,
@@ -140,7 +141,14 @@ import {
 	Shield,
 	Wallet,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -267,6 +275,16 @@ function statusPill(status: PrPvStatus) {
 type PvStatusFilter = "all" | "TO_PAY" | "PENDING_ANY" | PrPvStatus;
 
 type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
+
+/**
+ * Where an arrival looks for work: the page's default (Last Week) first, then
+ * the payment week, then the week still running. See `weekHoldingWork`.
+ */
+const ARRIVAL_ORDER: readonly PayrollWeekTab[] = [
+	"last_week",
+	"last_last_week",
+	"this_week",
+];
 
 /*
  * "payouts" is GONE (owner's call, 3 Sep 2026): *"remove the payout run
@@ -442,6 +460,7 @@ function AgencyPV() {
 	const {
 		pvs: prPaymentVouchers,
 		isError: pvsFailed,
+		isLoading: pvsLoading,
 		bulkMarkPaid,
 		bulkSendToPr,
 	} = useAgencyPvs();
@@ -454,8 +473,10 @@ function AgencyPV() {
 	// used to sit open above the fold, and an undecided overtime claim is WHY the
 	// week below refuses to send — hiding that behind a click with no number
 	// would turn a visible blocker into an invisible one.
-	const { disputes: openDisputes } = useAgencyDisputes();
-	const { claims: pendingOtClaims } = useAgencyOvertime();
+	const { disputes: openDisputes, isLoading: disputesLoading } =
+		useAgencyDisputes();
+	const { claims: pendingOtClaims, isLoading: overtimeLoading } =
+		useAgencyOvertime();
 	/* Which PR's vouchers to show. Keyed on the PR ID, never the printed label:
 	   two people can share a legal name, and the label carries a nickname that
 	   an edit to the roster would change under a filter still holding the old
@@ -473,7 +494,8 @@ function AgencyPV() {
 	// has no plan row and keeps the demo line.
 	const livePlan = useAgencyLivePlan();
 	// Count only — the panel below runs the same query and React Query dedupes it.
-	const { receipts: backendReceipts } = useAgencyReceipts();
+	const { receipts: backendReceipts, isLoading: receiptsLoading } =
+		useAgencyReceipts();
 
 	const payrollActivePvs = useMemo(
 		() => prPaymentVouchers.filter((p) => p.status !== "PAID"),
@@ -926,6 +948,44 @@ function AgencyPV() {
 	const activeWeekWork = weekWork[payrollWeekTab];
 
 	/*
+	 * LAND WHERE THE WORK IS (owner, 17 Nov 2026 — users "dont know … where and
+	 * what he need to decide"). The page opened on Last Week, and every To do
+	 * link (`?tab=disputes`, …) landed there too, so with the work under Payment
+	 * Week the reader arrived on an empty list beside a red badge. Once — after
+	 * ALL FOUR sources have loaded, so the pick is never made on half the data —
+	 * an EMPTY opening week gives way to the first week that holds the work
+	 * (`ARRIVAL_ORDER`), for the pile `?tab=` names or the week's total.
+	 *
+	 * What it never does: move off a week that has work, override an explicit
+	 * `?status` / `?pv` / `?receipt` (each has its own week rule above), run a
+	 * second time, or run after the reader has clicked a tab — so deciding the
+	 * last claim of a week cannot snap them to another week mid-task.
+	 */
+	const arrivalSettled = useRef(false);
+	const workLoaded =
+		!pvsLoading && !disputesLoading && !overtimeLoading && !receiptsLoading;
+	useEffect(() => {
+		if (arrivalSettled.current || !workLoaded) return;
+		arrivalSettled.current = true;
+		if (statusFromSearch || pvFromSearch || receiptFromSearch) return;
+		const kind = tabFromSearch ?? undefined;
+		const here = kind
+			? weekWork[payrollWeekTab][kind]
+			: weekWork[payrollWeekTab].total;
+		if (here > 0) return;
+		const pick = weekHoldingWork(weekWork, ARRIVAL_ORDER, kind);
+		if (pick) setPayrollWeekTab(pick);
+	}, [
+		workLoaded,
+		weekWork,
+		payrollWeekTab,
+		statusFromSearch,
+		pvFromSearch,
+		receiptFromSearch,
+		tabFromSearch,
+	]);
+
+	/*
 	 * IS THE OVERTIME TAB OFFERED ON THIS WEEK?
 	 *
 	 * Everywhere except the payment week: yes. On the PAYMENT week it was hidden
@@ -1005,6 +1065,8 @@ function AgencyPV() {
 	};
 
 	const selectPayrollWeekTab = (tab: PayrollWeekTab) => {
+		// The reader chose: the one-time arrival pick must never override them.
+		arrivalSettled.current = true;
 		setPayrollWeekTab(tab);
 		setStatusFilter("all");
 		// NEITHER queue is bounced any more. `showOvertimeTab` / `showDisputesTab`
@@ -1032,6 +1094,7 @@ function AgencyPV() {
 	 * seconds after they clicked Receipts.
 	 */
 	const selectPvSubTab = (next: PvSubTab) => {
+		arrivalSettled.current = true;
 		setPvSubTab(next);
 		clearLandingParams();
 	};
