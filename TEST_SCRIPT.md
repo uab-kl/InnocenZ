@@ -509,6 +509,14 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    authenticator secrets; keep it with the other secrets — changing or losing it locks enrolled admins out.
 10. **Not walked in a browser:** the Workspace time picker and refusal toast, and the Penalty rules editor clamps —
    unit-tested and API-checked only; click through on a dev build.
+13. **IN PROGRESS — portal motion (owner 17 Nov: *"i still cant see any animation style design for
+   agency and outlet protal"*).** A design → judge → implement → verify workflow is writing
+   `apps/web/src/agency-portal/portal-motion.css` (untracked, NOT committed). Do not commit or ship it
+   until the workflow's three checks (signed-in browser sweep per role incl. reduced motion and
+   "nothing left hidden", adversarial code review incl. PV export capture and fixed/sticky containing
+   blocks, ui-ux-pro-max rule check) have run and the lead has re-measured it; then it gets its own
+   §10 row and commit. A parallel read-only workflow is reviewing 6 public reference sites (Linear,
+   Stripe, Wise, Cal.com, Mercury, Superhuman) with the design tools to pick patterns for the next slices.
 12. **Design next (17 Nov, `DESIGN.md`):** (a) ~~agency Payroll opens on an empty week~~ DONE 17 Nov (§10
    2026-11-17 (vi)). ⚠️ The earlier line here said its sub-tabs "carry NO counts" — WRONG: every week tab
    and sub-tab already had its own week-scoped badge; they read 0 only because Last Week was empty. Still
