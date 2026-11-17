@@ -237,6 +237,13 @@ A design change is done only when all of these hold (Fix Rules in `CLAUDE.md`):
    page renders, no console errors, buttons still lead where they did, no demo data.
 3. Measure, don't trust the source: `getComputedStyle` sizes on the rendered page stay on
    16 · 20 · 24; nothing overflows at 1440px and at phone width.
+3a. **Everything clickable looks clickable** (ui-ux-pro-max "Hover States", "Active State",
+   "Input Affordance"): a pointer cursor (`styles/portal-interaction.css` gives every
+   button/tab/link one), a visible boundary at rest — border, fill or underline — a hover
+   answer, and a selected tab that wears the accent border + tint, never a fill one shade
+   off its neighbours. A clickable list row is a box at rest (hairline), not a line of text.
+   Audit it by walking every page and listing interactive elements with no border, fill,
+   underline, tint or icon — on 17 Nov that found 21 request rows on Agency Approvals.
 4. Never click a write button to "see if it works" — prove it by reading code and rows.
 5. Record the slice in `TEST_SCRIPT.md` (§10 row; §11 if a user can see it).
 

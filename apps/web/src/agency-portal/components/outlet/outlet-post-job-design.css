@@ -303,6 +303,35 @@
 .outlet-post-job-design .iz-event-card {
 	min-width: 0;
 	background: var(--iz-card, #241f30);
+	transition:
+		border-color 0.18s ease,
+		transform 0.18s ease;
+}
+/*
+ * THE PICTURE IS THE BUTTON (owner, 17 Nov 2026 — "user dont know this can
+ * click"). Clicking a saved event's picture + name USES it, but the card only
+ * showed "Edit template" as a button, so the main action read as decoration.
+ * The card lifts 2px with the accent border under the pointer (DESIGN.md §8)
+ * and the name carries a "→" — the same cue on a phone, where there is no hover.
+ */
+.outlet-post-job-design .iz-event-card__pick {
+	cursor: pointer;
+}
+.outlet-post-job-design .iz-event-card:has(.iz-event-card__pick:hover) {
+	border-color: var(--iz-violet);
+	transform: translateY(-2px);
+}
+.outlet-post-job-design .iz-event-card__pick .iz-event-card__name::after {
+	content: " →" / "";
+	color: var(--iz-violet);
+}
+@media (prefers-reduced-motion: reduce) {
+	.outlet-post-job-design .iz-event-card {
+		transition: none;
+	}
+	.outlet-post-job-design .iz-event-card:has(.iz-event-card__pick:hover) {
+		transform: none;
+	}
 }
 .outlet-post-job-design .iz-event-card__img,
 .outlet-post-job-design .iz-event-card__placeholder {
