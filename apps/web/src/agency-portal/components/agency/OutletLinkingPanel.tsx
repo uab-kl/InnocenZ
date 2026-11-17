@@ -522,7 +522,7 @@ export function OutletLinkingDetail({
 
 	return (
 		<div className="flex flex-col gap-4">
-			<div className="iz-approvals-detail-head">
+			<div key={link.outletId} className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
 					{/* The venue's REAL logo. `logoImage` is an R2 object key, so it goes
 					    through the shared tile rather than into a bare <img> — that

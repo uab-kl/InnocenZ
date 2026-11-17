@@ -59,7 +59,7 @@ export function CutlostDetailPanel({
 
 	return (
 		<>
-			<div className="iz-approvals-detail-head">
+			<div key={req.id} className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
 					<span className="iz-approvals-cutlost-icon">
 						<Icon className="h-5 w-5" />

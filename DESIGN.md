@@ -101,8 +101,13 @@ fancy will lead to the user misunderstanding or the page no function."*
 - **Too fancy, therefore banned in the consoles:** hero sections, gradients and gradient
   meshes, glass/blur panels, parallax or scroll-triggered animation, decorative
   illustrations, icons that replace words, carousels, tracked ALL-CAPS body text, more
-  than one accent colour, motion longer than 200 ms. (The public homepage may use more —
-  it is a marketing page — but the consoles are tools.)
+  than one accent colour. (The public homepage may use more — it is a marketing page —
+  but the consoles are tools.)
+- **Motion in the consoles is capped, not banned** (owner, 17 Nov 2026: *"i still cant see
+  any animation style design for agency and outlet protal"*): a state change ≤ 450 ms, a
+  one-shot ring ≤ 700 ms, a continuous loop only while something loads. Still no parallax
+  and no scroll-triggered motion. This replaces the old "nothing longer than 200 ms" ban;
+  §8 lists what moves and why.
 - **Show less** (owner, 16 Nov 2026): a screen shows only what the reader must act on.
   Before adding a column, cell or strip, ask what decision it changes. Never show the same
   fact twice. Prefer words that name the action ("2 vouchers to sign") over words that name
@@ -215,10 +220,63 @@ never scroll sideways (wide tables scroll inside their own container).
 
 ## 8. Motion
 
-From `styles/portal-interaction.css` (one feel in all three portals): actions step up 1px on
-hover (150 ms), press sinks 1px and scales to .985 (90 ms); linked cards lift 2px; the focus
-ring appears at once. Transitions animate colour, opacity and transform only — never size or
-padding. Tabs, pickers and calendar cells do not move. `prefers-reduced-motion` turns it off.
+`styles/portal-interaction.css` (all three portals): actions step up 1px on hover (150 ms),
+press sinks 1px and scales to .985 (90 ms); linked cards lift 2px; the focus ring appears at
+once. `agency-portal/portal-motion.css` (agency + outlet only, owner 17 Nov 2026) holds the
+motion that GUIDES (M1-M9) and is where new agency/outlet motion goes. Older motion still
+lives where it was and portal-motion.css only overrides or guards it: the sheet, dialog and
+toast keyframes in `prototype-theme.css`, the To do row lift in `todo-panel.css`, the
+Approvals row transitions in `agency-approvals-design.css`.
+
+**The rule:** motion follows a user action (a click, a pick, a hover) or a mount (a page, a
+row, a badge appearing) — never a refetch that changes nothing, never a return to the
+window, and nothing plays on its own. The one deliberate exception is M4: a rail count that
+CHANGES is a new badge, and its pop is the news. Each motion
+answers one of §1's questions; none decorates. Only colour, opacity, translate, scale and
+box-shadow animate — never size or padding — and nothing leaves with motion (unmount is
+instant, so no state waits on an animation). Tabs never move; their gold answers instead.
+
+**Tokens** — Linear's extracted 100 / 160 / 400 / 700 ms plus two named in-betweens:
+`--iz-motion-press` 100 · `-fast` 160 · `-base` 240 (fades) · `-enter` 360 (travel) ·
+`-slow` 400 · `-ring` 700 (one-shot rings only) · `-step` 45 ms (stagger) · `-rise` 10px.
+Eases `--iz-ease-out` (arriving), `--iz-ease-settle` (settling), `--iz-ease-soft` (fades,
+colour). No rule types a raw duration or delay; the one loading loop is 4 × `-slow`.
+
+**What moves (M1-M9):**
+- **M1 page arrives** — the page root fades (opacity only: it holds the fixed Post Job
+  dock), its header rises 10px, and its first figures row (Today KPIs, Payroll metrics,
+  Roster stats, Calendar stats) rises 8px a step apart, at most 4 steps.
+- **M2 you are here** — the desktop rail's current item flashes gold and its bar draws; a
+  section the user opens settles in; on a phone the page name in the trail settles instead.
+- **M3 To do** — rows rise in urgency order a step apart; the top row's button rings once.
+  Every row runs the ring in a transparent tone and only the first sets a colour, so a row
+  that BECOMES first after a refetch does not ring.
+- **M4 counts** — a desktop-rail badge pops when it appears or its number changes; only a
+  red one also rings.
+- **M5 tabs** — the tab the user just clicked haloes and what it swapped in fades. Keyed on
+  `[data-iz-picked]`, which `agency-portal/lib/motion-pick.ts` puts on the strip for 700 ms
+  after a CLICK (mouse, tap, or Enter/Space), so nothing plays on page load, on keyboard
+  travel, or when the user comes back to the window. ⚠️ Never key it on `:focus` — that was
+  measured: `:focus` re-matches when the window regains focus and replayed the fade over
+  the voucher list at the same moment react-query refetched, which reads as "it reloaded".
+  The M2 section settle uses the same mark.
+- **M6 Approvals** — queue rows settle a step apart, a picked row's edge slides in, the
+  detail head rises on each new pick.
+- **M7 clickable** — To do rows, linked KPI tiles and outlet cards lift 2px for a real
+  pointer; the To do arrow slides toward where it goes.
+- **M8 overlays** — the phone menu slides in its full width; scrims fade.
+- **M9 loading** — the To do "Checking…" border breathes. The only loop.
+
+**Guards:** every motion sits inside `@media screen and (prefers-reduced-motion:
+no-preference)`, so reduced motion and print never see it; under reduced motion the legacy
+page, sheet and toast animations are switched off too; `@media print` stops every animation
+and transition in both portals. The two legacy loops that are not loading (the profile edit
+dot, the report range pulse) stop after three beats.
+
+**Measuring:** entrances use `backwards` fill, and a hidden Browser pane produces no frames,
+so an element mid-entrance there reads opacity 0 for as long as the pane stays hidden. Force
+a frame (front the pane, take a screenshot or hover) before any `getComputedStyle` sweep,
+and never filter a sweep on opacity.
 
 ## 9. Accessibility
 
@@ -267,6 +325,8 @@ A design change is done only when all of these hold (Fix Rules in `CLAUDE.md`):
 | Legacy portal base (being overridden) | `apps/web/src/agency-portal/prototype-theme.css` |
 | Admin tokens and look | `apps/web/src/components/admin/admin-design.css` |
 | Shared hover / press / focus | `apps/web/src/styles/portal-interaction.css` |
+| Selected tab (gold) and rail "you are here" | `apps/web/src/styles/portal-tabs.css` |
+| Agency + outlet motion (M1-M9) | `apps/web/src/agency-portal/portal-motion.css`, `agency-portal/lib/motion-pick.ts` |
 | Portal shell, rail, trail | `agency-portal/components/portal/PortalShell.tsx`, `PortalDesignChrome.tsx` |
 | Admin shell, rail, trail | `components/layout/sidebar.tsx`, `components/admin/admin-design-chrome.tsx`, `admin-trail.ts` |
 | To do panels | `agency-portal/components/portal/TodoPanel.tsx`, `components/admin/admin-todo-panel.tsx` |

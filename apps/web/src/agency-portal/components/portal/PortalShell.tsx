@@ -24,6 +24,7 @@ import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { agencySubRoleLabel } from "@agency-portal/lib/agency-rbac";
 import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
+import { listenForPicks } from "@agency-portal/lib/motion-pick";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { outletSubRoleLabel } from "@agency-portal/lib/outlet-rbac";
 import { sectionNavAlert } from "@agency-portal/lib/portal-nav-alerts";
@@ -559,7 +560,11 @@ function PortalHeader({
 							<span aria-hidden> / </span>
 						</span>
 					) : null}
-					<span className="iz-portal-crumb-leaf" aria-current="page">
+					<span
+						key={pageLabel || portalLabel}
+						className="iz-portal-crumb-leaf"
+						aria-current="page"
+					>
 						{pageLabel || portalLabel}
 					</span>
 				</p>
@@ -660,6 +665,10 @@ export function PortalShell({
 			delete document.body.dataset[attribute];
 		};
 	}, [portal]);
+	// Marks a tab strip or rail heading for a moment after a click, so the
+	// "what did I pick" motion (portal-motion.css M2/M5) follows a pick and never
+	// a return to the window. Presentation only — see lib/motion-pick.ts.
+	useEffect(() => listenForPicks(), []);
 
 	const orgProfileOnly =
 		getPortalSessionKind() === "real" &&

@@ -1,0 +1,694 @@
+/*
+ * MOTION THAT GUIDES — agency + outlet portals only (owner, 17 Nov 2026:
+ * "i still cant see any animation style design for agency and outlet protal").
+ *
+ * Every motion here answers one of DESIGN.md §1's questions — where am I, what
+ * is waiting for me, what did I just pick, what can I click. None decorates.
+ * Motion follows a USER ACTION (a click, a pick, a hover) or a MOUNT (a page, a
+ * row, a badge appearing) — never a refetch that changes nothing, never a return
+ * to the window, and nothing plays on its own. ONE deliberate exception: a rail
+ * count that CHANGES is a new badge and pops (M4) — that is the news.
+ * "What did I pick" (M2 section settle, M5) keys on `[data-iz-picked]`, which
+ * lib/motion-pick.ts sets for 700ms after a CLICK. `:focus` was tried and
+ * measured: it re-matches when the window regains focus, so every return to
+ * the tab replayed the halo and re-faded the voucher list.
+ *
+ * Durations: designlang's extraction of linear.app (linear-app-motion-tokens.json)
+ *   xs 100 / sm 160 / md 400 / lg 700 ms, plus TWO InnocenZ in-betweens, 240
+ *   (fades) and 360 (travel), each named and commented below. No rule types a
+ *   raw duration or delay; the one loading loop is 4 × md.
+ * Easing (same extraction):
+ *   ease-out-4   cubic-bezier(0.32, 0.72, 0, 1)        arriving
+ *   ease-out-212 cubic-bezier(0.165, 0.84, 0.44, 1)    settling
+ *   ease-out-312 cubic-bezier(0.25, 0.46, 0.45, 0.94)  fades + colour (301x on page)
+ *   ease-in-out  ease                                  the one loading loop
+ * ui-ux-pro-max: "Use shared motion tokens"; "Use deceleration when arriving".
+ *
+ * There is NO --iz-ease-in on purpose: nothing leaves with motion. Unmount is
+ * instant, so no state ever waits on animationend/transitionend
+ * (ui-ux-pro-max "Cancellable State Transitions").
+ *
+ * SCOPE: the same pair approved-portal-design.css uses for its tokens. In-page
+ * RULES use only `.iz-portal[data-portal]`: PortalShell sets the body attribute
+ * in a useEffect (PortalShell.tsx:656-662), i.e. after the first paint, so an
+ * entrance keyed to it would paint the page and then blank it for a frame on
+ * every hard load. Admin never matches either selector.
+ *
+ * Every new animation and transition sits inside
+ * `@media screen and (prefers-reduced-motion: no-preference)`: under reduced
+ * motion or print they never apply, so there is nothing to undo.
+ * No font-size / font-family anywhere (pnpm check:type ratchet).
+ *
+ * MEASURING: every entrance uses `backwards` fill. A hidden Browser pane makes
+ * no frames, so an entrance never starts and its element reads opacity 0 for
+ * as long as the pane stays hidden. Force a frame (front the pane, take a
+ * screenshot or hover) before any getComputedStyle sweep, and never filter a
+ * sweep on opacity.
+ */
+body:is([data-outlet-design], [data-agency-design]),
+.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) {
+	--iz-motion-press: 100ms; /* Linear xs — a press returns */
+	--iz-motion-fast: 160ms; /* Linear sm — hover, a picked row's edge */
+	--iz-motion-base: 240ms; /* in-between 1 — opacity fades and content swaps */
+	--iz-motion-enter: 360ms; /* in-between 2 — something travelling into place */
+	--iz-motion-slow: 400ms; /* Linear md — settles, the tab halo, "start here" */
+	--iz-motion-ring: 700ms; /* Linear lg — the red badge's one-shot ring ONLY */
+	--iz-motion-step: 45ms; /* stagger step and lead-in delay */
+	--iz-motion-rise: 10px; /* entrance distance (band 6-16px) */
+	--iz-ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+	--iz-ease-settle: cubic-bezier(0.165, 0.84, 0.44, 1);
+	--iz-ease-soft: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	--iz-ease-in-out: ease;
+	/* The selected-tab gold (portal-tabs.css gradient mid-stop) as a halo. */
+	--iz-motion-halo: color-mix(in srgb, #e8c874 45%, transparent);
+}
+
+/* ── M1 · WHERE AM I: the page arrives ──────────────────────────────────── */
+
+@keyframes iz-m-fade {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes iz-m-rise {
+	from {
+		opacity: 0;
+		translate: 0 var(--iz-motion-rise, 10px);
+	}
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+	/* The page ROOT fades, opacity only. Replaces the legacy `.iz-screen { animation:
+	   iz-fade 0.34s }`, which is opacity PLUS a translateY(8px) TRANSFORM: a
+	   transform on the page root becomes the containing block of the in-tree
+	   position:fixed phone Post Job dock and grows the scrolling viewport by 8px.
+	   (0,3,0) beats the legacy (0,1,0). */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	:is(.iz-portal-viewport > *, .iz-screen) {
+		animation: iz-m-fade var(--iz-motion-base) var(--iz-ease-soft) backwards;
+	}
+	/* A `.iz-screen` INSIDE a page root that already fades would fade twice (the
+	   page starts dimmer than every other) and would otherwise keep the legacy
+	   iz-fade transform. (0,4,0) beats the (0,3,0) above. */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) .iz-portal-viewport
+		> *
+		.iz-screen {
+		animation: none;
+	}
+	/* What TRAVELS is the page's own header — its <h1> and its one action — rising
+	   10px into place on every page. Every `.iz-screen > header` was read (routes/
+	   agency, routes/outlet, OutletPageHeader, AgencyOutletDetailView): none holds a
+	   fixed or sticky child. `.iz-topbar` is left out: it is the sticky back bar
+	   (prototype-theme.css:19970) a detail screen puts above its header.
+	   `translate`, not `transform`, so it composes with any hover transform.
+	   `.iz-app-header` is the same title block on the pages built with AppHeader
+	   (components/Nav.tsx — the outlet Profile page).
+	   The SOFT curve, not ease-out: ease-out is front-loaded (60% of the 10px in
+	   the first 67ms), so the rise was over before the eye found it. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	:is(.iz-screen > header:not(.iz-topbar), .iz-app-header) {
+		animation: iz-m-rise var(--iz-motion-enter) var(--iz-ease-soft) backwards;
+	}
+	/* The page's first row of figures follows, a step apart, 8px, at most 4 steps:
+	   agency Today's KPI tiles, Payroll's week metrics, Roster's stat strip and the
+	   outlet Calendar's month stats. Each container is grid or flex (its tiles are
+	   blocks `translate` can move) and holds no fixed or sticky child. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) :is(
+			.iz-portal-kpi-grid,
+			.iz-agency-payroll-metrics,
+			.iz-roster-stats,
+			.iz-approved-calendar-stats
+		)
+		> * {
+		--iz-motion-rise: 8px;
+		animation: iz-m-rise var(--iz-motion-enter) var(--iz-ease-out)
+			var(--iz-motion-step) backwards;
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		:is(
+			.iz-portal-kpi-grid,
+			.iz-agency-payroll-metrics,
+			.iz-roster-stats,
+			.iz-approved-calendar-stats
+		)
+		> :nth-child(2) {
+		animation-delay: calc(var(--iz-motion-step) * 2);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		:is(
+			.iz-portal-kpi-grid,
+			.iz-agency-payroll-metrics,
+			.iz-roster-stats,
+			.iz-approved-calendar-stats
+		)
+		> :nth-child(3) {
+		animation-delay: calc(var(--iz-motion-step) * 3);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		:is(
+			.iz-portal-kpi-grid,
+			.iz-agency-payroll-metrics,
+			.iz-roster-stats,
+			.iz-approved-calendar-stats
+		)
+		> :nth-child(n + 4) {
+		animation-delay: calc(var(--iz-motion-step) * 4);
+	}
+}
+
+/* ── M2 · WHERE AM I: the rail and the trail mark the page ──────────────── */
+
+/* The current rail item rests as a 16% gold tint (portal-tabs.css
+   --iz-rail-here-tint, 17 Nov 2026), so it flashes the same gold at about
+   twice that and settles into it. A violet flash would land on gold. */
+@keyframes iz-m-here {
+	from {
+		background-color: color-mix(in srgb, #e8c874 34%, transparent);
+	}
+}
+@keyframes iz-m-bar {
+	from {
+		opacity: 0;
+		scale: 1 0;
+	}
+}
+@keyframes iz-m-settle {
+	from {
+		opacity: 0;
+		translate: 0 -6px;
+	}
+}
+@keyframes iz-m-crumb {
+	from {
+		opacity: 0.35;
+		color: var(--iz-violet);
+	}
+}
+
+/* The legacy `transition: 0.15s` (prototype-theme.css:19817) is ALL properties, so
+   collapsing the rail animated the links' padding. Colour only. Not motion-gated:
+   it REMOVES motion. (0,3,0) beats the legacy (0,1,0). */
+.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+.iz-portal-nav-link {
+	transition-property: color, background-color, border-color;
+}
+
+/* DESKTOP RAIL ONLY: `> .iz-portal-sidebar` is the rail that is a direct child of
+   .iz-portal (PortalShell.tsx:779). The phone drawer mounts a second copy of the
+   same component on every open (PortalShell.tsx:873); there the drawer's own
+   slide is the one motion, and the trail below says where you are. */
+@media screen and (prefers-reduced-motion: no-preference) {
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		> .iz-portal-sidebar
+		.iz-portal-nav-link.on {
+		animation: iz-m-here var(--iz-motion-slow) var(--iz-ease-settle) backwards;
+	}
+	/* The ::before exists only while the link is .on, so it is generated, and draws,
+	   exactly when the page changes. `scale` keeps the bar's own box untouched. */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) > .iz-portal-sidebar
+		.iz-portal-nav-link.on::before {
+		animation: iz-m-bar var(--iz-motion-enter) var(--iz-ease-out)
+			var(--iz-motion-step) backwards;
+	}
+	/* A section the USER opens settles out of its heading, from ABOVE (the rail
+	   scrolls, and a box moved down would grow its scroll area). Nothing settles on
+	   a page load or when navigation opens a section for you: the heading button
+	   (the element just before its items, PortalShell.tsx:403-424) carries
+	   `[data-iz-picked]` only for a moment after a click (lib/motion-pick.ts). A
+	   CLOSING click hides the items, so `:not([hidden])` stops it there. */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) > .iz-portal-sidebar
+		.iz-outlet-nav-heading[data-iz-picked]
+		+ .iz-outlet-nav-items:not([hidden]) {
+		animation: iz-m-settle var(--iz-motion-base) var(--iz-ease-out) backwards;
+	}
+}
+/* Phone: the rail lives in the drawer, which closes as you tap, so the page name
+   in the trail is the only 'you are here' left on screen. Desktop keeps ONE
+   location cue (the rail). */
+@media screen and (prefers-reduced-motion: no-preference) and (max-width: 767px) {
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-portal-header
+		.iz-portal-crumb-leaf {
+		animation: iz-m-crumb var(--iz-motion-slow) var(--iz-ease-soft) backwards;
+	}
+}
+
+/* ── M3 · WHAT IS WAITING: To do arrives in urgency order ───────────────── */
+
+/* iz-m-rise is declared in M1. One-shot ring: its `to` differs from rest, so
+   fill stays `none`. */
+@keyframes iz-m-ring {
+	from {
+		box-shadow: 0 0 0 0 var(--iz-ring-tone, transparent);
+	}
+	to {
+		box-shadow: 0 0 0 var(--iz-ring-size, 6px) transparent;
+	}
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+	/* `translate`, not `transform`: it composes with the rows' hover lift
+	   (todo-panel.css:75 and M7). One step apart, capped at 8 (last at 360ms). */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) .iz-todo__list
+		> * {
+		animation: iz-m-rise var(--iz-motion-enter) var(--iz-ease-out)
+			var(--iz-motion-step) backwards;
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> :nth-child(2) {
+		animation-delay: calc(var(--iz-motion-step) * 2);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> :nth-child(3) {
+		animation-delay: calc(var(--iz-motion-step) * 3);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> :nth-child(4) {
+		animation-delay: calc(var(--iz-motion-step) * 4);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> :nth-child(5) {
+		animation-delay: calc(var(--iz-motion-step) * 5);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> :nth-child(6) {
+		animation-delay: calc(var(--iz-motion-step) * 6);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> :nth-child(7) {
+		animation-delay: calc(var(--iz-motion-step) * 7);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> :nth-child(n + 8) {
+		animation-delay: calc(var(--iz-motion-step) * 8);
+	}
+	/* "Start here": the one filled button (todo-panel.css:223) rings once, 360ms in,
+	   as the first row lands. 6px fits inside the row's 11px block padding
+	   (prototype-theme.css:21727), so the row's overflow:hidden never clips it.
+	   EVERY row's button runs the ring, invisible (transparent tone); only the
+	   first row sets a colour. So a row that BECOMES first later — a refetch took
+	   the top row away — changes a colour on a ring that already finished, and
+	   does not ring with nobody having done anything. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) .iz-todo__list
+		> a.iz-alert
+		.iz-alert__cta {
+		animation: iz-m-ring var(--iz-motion-slow) var(--iz-ease-soft)
+			var(--iz-motion-enter) 1;
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> a.iz-alert:first-child
+		.iz-alert__cta {
+		--iz-ring-tone: color-mix(in srgb, var(--iz-gold) 55%, transparent);
+	}
+}
+
+/* ── M4 · WHAT IS WAITING: rail counts pop when they change ─────────────── */
+
+/* Linear's extracted `pop` (0.9 → 1.03 → 1), a touch smaller at the start. */
+@keyframes iz-m-pop {
+	from {
+		opacity: 0;
+		scale: 0.88;
+	}
+	60% {
+		opacity: 1;
+		scale: 1.03;
+	}
+}
+/* iz-m-ring is declared in M3. */
+
+/* DESKTOP RAIL ONLY, for the reason given at M2. */
+@media screen and (prefers-reduced-motion: no-preference) {
+	/* `scale`, not `transform`: it composes with the collapsed rail's positioned dot. */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) > .iz-portal-sidebar
+		.iz-nav-alert {
+		animation: iz-m-pop var(--iz-motion-enter) var(--iz-ease-settle) backwards;
+	}
+	/* Red = disputed (the owner's colour code): ONLY it also rings, once, after
+	   the pop has landed. */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) > .iz-portal-sidebar
+		.iz-nav-alert[data-tone="red"] {
+		--iz-ring-tone: color-mix(in srgb, var(--iz-red) 60%, transparent);
+		--iz-ring-size: 6px;
+		animation:
+			iz-m-pop var(--iz-motion-enter) var(--iz-ease-settle) backwards,
+			iz-m-ring var(--iz-motion-ring) var(--iz-ease-soft) var(--iz-motion-enter)
+			1;
+	}
+}
+
+/* ── M5 · WHAT DID I PICK: the selected tab takes ───────────────────────── */
+
+/* The selected tab is the gold pill (portal-tabs.css). It never moves: its gold
+   brightens and a halo settles INTO it. box-shadow only. portal-tabs sets
+   `box-shadow: none` at rest with :is(#iz-tab-wins) specificity, and an animation
+   outranks any normal declaration while it runs. The inset wash is clipped by
+   the pill's own radius, so a strip with overflow:hidden still shows it. */
+@keyframes iz-m-take {
+	from {
+		box-shadow:
+			0 0 0 4px var(--iz-motion-halo),
+			inset 0 0 0 999px rgb(255 255 255 / 0.22);
+	}
+}
+
+/* Legacy `transition: 0.15s` (prototype-theme.css:12854) is ALL properties, so it
+   animated the selected tab's font-weight and therefore its width. Colours only.
+   Not motion-gated: it removes motion. */
+.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) .iz-payroll-tab {
+	transition-property: color, background-color, border-color;
+}
+
+/* M5 follows the USER'S PICK only — never a page load, never a return to the
+   window: lib/motion-pick.ts marks the strip `[data-iz-picked]` for 700ms after a
+   click (a mouse, a tap, or Enter/Space on the tab), in every browser. Keyboard
+   travel (Tab onto the selected tab) is not a click, so it plays nothing; the
+   focus ring answers the keyboard. */
+@media screen and (prefers-reduced-motion: no-preference) {
+	/* The SAME strip list as styles/portal-tabs.css, so tabs that look the same
+	   answer the same. `.iz-filter-chip` matches no rendered element today; it stays
+	   for parity with that list. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) [data-iz-picked]
+		:is(
+			.iz-payroll-tab,
+			.iz-filter-chip,
+			.iz-approvals-groups > button,
+			.iz-approvals-tab,
+			.iz-approvals-subfilter .iz-chip,
+			.iz-approvals-subfilter > button,
+			.iz-approvals-doc-tabs > button,
+			.iz-post-job-event-type-pill,
+			.iz-event-picker__tabs > button,
+			.iz-roster-toggle > button,
+			.iz-agency-home-tabs > button,
+			.iz-agency-settings-tabs > button,
+			.iz-outlet-settings-tabs > button,
+			.iz-outlet-report-tabs > button
+		):is(
+			.on,
+			.is-active,
+			.iz-outlet-report-tabs__btn--active,
+			[aria-pressed="true"],
+			[aria-selected="true"]
+		) {
+		animation: iz-m-take var(--iz-motion-slow) var(--iz-ease-settle);
+	}
+	/* What the pick swapped in fades, OPACITY ONLY (these hold sticky week and
+	   roster columns, forms, the profile edit dock and signature previews). It is
+	   the content AFTER the strip that has the picked tab:
+	   - Payroll's week strip and its sub-tab strip, and History's week strip: on a
+	     WEEK pick everything below the strip fades — the summary, the metrics, the
+	     sub-tabs and the voucher list, which keeps the same elements and only
+	     changes its figures, so a selector starting to match is the only way to
+	     replay it. A sub-tab pick fades the panel under the sub-tabs.
+	   - Today's hub tabs (the panel below them), the Post Job template picker (the
+	     template rows below it), the Roster Live/Planning toggle (everything below
+	     the toolbar), and every role="tablist" with its role="tabpanel" (Settings,
+	     Profile, an Approvals request's documents).
+	   NOT here, on purpose: Approvals groups, queue tabs and sub-filters (M6 settles
+	   the rows they swap), the sales report tabs (the report body is not their
+	   sibling), the Post Job event-type pills (they set a field, the form stays). */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	:is(
+		:is(
+				.iz-payroll-tabs,
+				.iz-agency-home-tabs,
+				.iz-event-picker__tabs
+			)[data-iz-picked]
+			~ *,
+		.iz-roster-toolbar:has(> .iz-roster-toggle[data-iz-picked]) ~ *,
+		[role="tablist"][data-iz-picked] ~ [role="tabpanel"]:not([hidden])
+	) {
+		animation: iz-m-fade var(--iz-motion-base) var(--iz-ease-soft) backwards;
+	}
+}
+
+/* ── M6 · WHAT DID I PICK: the Approvals queue and its detail ───────────── */
+
+/* iz-m-settle is declared in M2, iz-m-rise in M1. */
+@media screen and (prefers-reduced-motion: no-preference) {
+	/* Rows settle from ABOVE: the list is its own scroll box (overflow-y:auto,
+	   agency-approvals-design.css:132-136), and a row moved down would grow it and
+	   can flash a scrollbar. EVERY row keeps the same animation name, so an index
+	   shift after a decision only moves a delay and never starts a fresh entrance.
+	   One step apart, capped at 8 (last at 315ms). */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) .iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row) {
+		animation: iz-m-settle var(--iz-motion-base) var(--iz-ease-out) backwards;
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row):nth-child(2) {
+		animation-delay: var(--iz-motion-step);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row):nth-child(3) {
+		animation-delay: calc(var(--iz-motion-step) * 2);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row):nth-child(4) {
+		animation-delay: calc(var(--iz-motion-step) * 3);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row):nth-child(5) {
+		animation-delay: calc(var(--iz-motion-step) * 4);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row):nth-child(6) {
+		animation-delay: calc(var(--iz-motion-step) * 5);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row):nth-child(7) {
+		animation-delay: calc(var(--iz-motion-step) * 6);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-approvals-list
+		:is(.iz-approvals-list-item, .iz-approvals-member-row):nth-child(n + 8) {
+		animation-delay: calc(var(--iz-motion-step) * 7);
+	}
+	/* Picking a row is a STATE change, so it is a transition. A second animation
+	   name on `.on` would REPLAY the entrance on the row being deselected.
+	   (0,4,0) beats the existing 150ms colour-only transition (0,3,0). */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	:is(
+		.iz-approvals-page .iz-approvals-list-item,
+		.iz-approvals-sidebar .iz-approvals-member-row
+	) {
+		transition-property: border-color, background-color, box-shadow;
+		transition-duration: var(--iz-motion-fast);
+		transition-timing-function: var(--iz-ease-soft);
+	}
+	/* Who you are now deciding about rises into place (keyed per selection). */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) .iz-approvals-detail
+		:is(.iz-approvals-detail-head, [data-iz-motion="detail-head"]) {
+		--iz-motion-rise: 8px;
+		animation: iz-m-rise var(--iz-motion-enter) var(--iz-ease-out) backwards;
+	}
+}
+
+/* ── M7 · WHAT CAN I CLICK: clickable things answer the pointer ─────────── */
+
+/* Tonal hover. DESIGN.md §3: surfaces step up, they do not cast shadows. This is
+   colour, so it stays under reduced motion too. Only the <a> tile: a KPI with
+   no destination is a <div> and must not pretend it opens. */
+@media (hover: hover) and (pointer: fine) {
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		a.iz-portal-kpi:hover {
+		background-color: var(--iz-panel2);
+		border-color: color-mix(in srgb, var(--iz-violet) 55%, var(--iz-line));
+	}
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		:is(a.iz-portal-kpi, .iz-outlet-ta-card--interactive) {
+		transition-property: color, background-color, border-color, transform;
+		transition-duration: var(--iz-motion-press); /* the way out */
+		transition-timing-function: var(--iz-ease-settle);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> a.iz-alert
+		.iz-alert__cta
+		svg {
+		transition: translate var(--iz-motion-fast) var(--iz-ease-soft);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> a.iz-alert::before {
+		transition: opacity var(--iz-motion-fast) var(--iz-ease-soft);
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-todo__list
+		> a.iz-alert:focus-visible
+		.iz-alert__cta
+		svg {
+		translate: 4px 0;
+	}
+}
+/* Movement only for a real pointer: a tap must never leave a lifted card. */
+@media screen and (prefers-reduced-motion: no-preference) and (
+		hover: hover
+	) and (pointer: fine) {
+	/* (0,5,1) beats todo-panel.css's -1px hover (0,3,1). */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	:is(
+		a.iz-portal-kpi,
+		.iz-outlet-ta-card--interactive,
+		.iz-todo__list > a.iz-alert
+	):hover {
+		transform: translateY(-2px);
+		transition-duration: var(--iz-motion-fast); /* the way in */
+	}
+	/* The arrow points where the row goes. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) .iz-todo__list
+		> a.iz-alert:hover
+		.iz-alert__cta
+		svg {
+		translate: 4px 0;
+	}
+	/* Same specificity as the hover and later in the file, so a press wins. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	:is(
+		a.iz-portal-kpi,
+		.iz-outlet-ta-card--interactive,
+		.iz-todo__list > a.iz-alert
+	):active {
+		transform: translateY(0);
+		transition-duration: var(--iz-motion-press);
+	}
+}
+
+/* ── M8 · Overlays arrive from where they belong ────────────────────────── */
+
+@keyframes iz-m-drawer {
+	from {
+		translate: -100% 0;
+	}
+}
+/* iz-m-fade is declared in M1. */
+
+@media screen and (prefers-reduced-motion: no-preference) {
+	/* The whole width, from the edge the menu lives on. `translate` composes with
+	   the panel's resting `transform: none` (approved-portal-design.css:1243-1247).
+	   (0,3,0) replaces the legacy (0,1,0) drawer animation. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	.iz-portal-drawer__panel {
+		animation: iz-m-drawer var(--iz-motion-enter) var(--iz-ease-out) backwards;
+	}
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+		.iz-portal-drawer__scrim {
+		animation: iz-m-fade var(--iz-motion-base) var(--iz-ease-soft) backwards;
+	}
+	/* The sheet scrim FADES. Name only, so the legacy 0.25s timing stays.
+	   Body scope: IzSheet portals into document.body. (0,2,1) beats (0,1,0). */
+	body:is([data-outlet-design], [data-agency-design]) .iz-sheet-bg {
+		animation-name: iz-m-fade;
+	}
+}
+
+/* ── M9 · "Checking…" breathes until the counts are known ───────────────── */
+
+@keyframes iz-m-breathe {
+	50% {
+		border-color: color-mix(in srgb, var(--iz-violet) 60%, var(--iz-line));
+	}
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+	/* The ONLY loop: a loading line, unmounted the moment the counts are known
+	   (TodoPanel.tsx:56-60). 4 × md = 1600ms. Border only: the words keep full
+	   contrast at every frame (DESIGN.md §9). */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
+	.iz-todo__checking {
+		animation: iz-m-breathe calc(var(--iz-motion-slow) * 4)
+			var(--iz-ease-in-out) infinite;
+	}
+}
+
+/* ── G · GUARDS: legacy loops, reduced motion and print ─────────────────── */
+
+/* Two legacy loops that are NOT loading indicators (ui-ux-pro-max "Continuous
+   Animation": a loop is for loading only) — the profile "editing" dot
+   (prototype-theme.css:8298) and the report range's end-date pulse (:17596) —
+   now draw the eye three times and rest. Both keyframes end on the element's
+   resting look, so stopping never jumps. Longhand only, so the legacy timing
+   stays. Body scope, because the range legend can sit in a popover portalled
+   into the body. (0,2,1) beats (0,1,0); (0,5,1) beats (0,4,0). */
+@media screen and (prefers-reduced-motion: no-preference) {
+	body:is([data-outlet-design], [data-agency-design])
+		.iz-profile-edit-banner__dot,
+	body:is([data-outlet-design], [data-agency-design])
+		.iz-outlet-report-cal-popover[data-range-step="end"]
+		.iz-outlet-report-range-legend-item.is-end {
+		animation-iteration-count: 3;
+	}
+}
+
+/* Under reduced motion the new rules never apply. These switch off the LEGACY
+   animations that had no guard (only the side sheet and the drawer had one,
+   prototype-theme.css:11713 and 21696). Each element rests where its animation
+   ends: the bottom sheet at translateY(0) = no transform, the desktop dialog at
+   its own `transform: translate(-50%, -50%)`. Specificity, not !important:
+   (0,2,1) beats every legacy sheet rule (max (0,2,0)); (0,5,1) beats the range
+   pulse (0,4,0). */
+@media (prefers-reduced-motion: reduce) {
+	/* biome-ignore lint/style/noDescendingSpecificity: this query and M1's nested-screen rule (no-preference) never apply together, and both set animation: none. */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) .iz-screen,
+	body:is([data-outlet-design], [data-agency-design])
+		:is(.iz-sheet, .iz-sheet-bg, .iz-toast, .iz-profile-edit-banner__dot),
+	body:is([data-outlet-design], [data-agency-design])
+		.iz-outlet-report-cal-popover[data-range-step]
+		.iz-outlet-report-range-legend-item.is-end {
+		animation: none;
+	}
+}
+/* Nothing is ever printed mid-motion. !important only here, because print must
+   beat every legacy rule at any specificity. (The PV PDF and Excel are not
+   printed from a portal page at all: agency-portal/lib/pv-pdf.ts builds them in a
+   new window from their own HTML, with none of these stylesheets.) */
+@media print {
+	/* biome-ignore lint/style/noDescendingSpecificity: a print-only kill switch; it wins by !important, not by order, so a lower specificity after the screen rules is intended. */
+	body:is([data-outlet-design], [data-agency-design]) *,
+	body:is([data-outlet-design], [data-agency-design]) *::before,
+	body:is([data-outlet-design], [data-agency-design]) *::after {
+		/* biome-ignore lint/complexity/noImportantStyles: print must beat every legacy animation at any specificity, so no export or window.print() captures a mid-fade frame. */
+		animation: none !important;
+		/* biome-ignore lint/complexity/noImportantStyles: same reason as the animation kill above, for transitions. */
+		transition: none !important;
+	}
+}

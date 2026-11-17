@@ -81,7 +81,12 @@ export function NavAlertBadge({
 }) {
 	if (count <= 0) return null;
 	return (
-		<span className="iz-nav-alert" data-tone={tone} aria-hidden="true">
+		<span
+			key={count > 99 ? "99+" : count}
+			className="iz-nav-alert"
+			data-tone={tone}
+			aria-hidden="true"
+		>
 			{count > 99 ? "99+" : count}
 		</span>
 	);
