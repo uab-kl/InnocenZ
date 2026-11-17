@@ -515,7 +515,13 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    until the workflow's three checks (signed-in browser sweep per role incl. reduced motion and
    "nothing left hidden", adversarial code review incl. PV export capture and fixed/sticky containing
    blocks, ui-ux-pro-max rule check) have run and the lead has re-measured it; then it gets its own
-   §10 row and commit. A parallel read-only workflow is reviewing 6 public reference sites (Linear,
+   §10 row and commit. **Files the implementer has touched so far (17 Nov, all uncommitted, 25+/8−
+   lines plus the new CSS):** `agency-portal/portal-motion.css` (new, ~517 lines); import lines in
+   `routes/agency/route.tsx` + `routes/outlet/route.tsx`; small class/key hooks in `PortalShell.tsx`,
+   `NavAlertBadge.tsx`, `org/PendingMemberDetail.tsx`, `agency/CutlostDetailPanel.tsx`,
+   `agency/OutletLinkingPanel.tsx`, `routes/agency/pending.tsx`. Each TSX hook must be re-read before
+   commit: a motion change may only ADD a className / data-attribute / React key, never alter text,
+   handlers or data flow. A parallel read-only workflow is reviewing 6 public reference sites (Linear,
    Stripe, Wise, Cal.com, Mercury, Superhuman) with the design tools to pick patterns for the next slices.
 12. **Design next (17 Nov, `DESIGN.md`):** (a) ~~agency Payroll opens on an empty week~~ DONE 17 Nov (§10
    2026-11-17 (vi)). ⚠️ The earlier line here said its sub-tabs "carry NO counts" — WRONG: every week tab
