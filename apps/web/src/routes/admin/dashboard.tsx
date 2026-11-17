@@ -1,3 +1,4 @@
+import { AdminTodoPanel } from "@/components/admin/admin-todo-panel";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -788,6 +789,13 @@ function DashboardComponent() {
 					</Button>
 				</div>
 			</div>
+
+			{/*
+			  WHAT NEEDS YOU, before how much there is. The tiles below count;
+			  this says what to do and takes you there — the same To do the
+			  agency and outlet Today pages open with.
+			*/}
+			<AdminTodoPanel />
 
 			{/* KPI cards */}
 			<div className="admin-dashboard-kpis">

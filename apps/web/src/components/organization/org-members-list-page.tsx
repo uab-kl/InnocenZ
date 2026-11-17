@@ -8,6 +8,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	Building2,
+	Eye,
 	Loader2,
 	MoreHorizontal,
 	RefreshCw,
@@ -18,6 +19,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AdminFilters } from "@/components/admin/admin-filters";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { StatusPill } from "@/components/admin/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -461,7 +463,10 @@ export function OrgMembersListPage({
 									rows.map((row) => (
 										<TableRow
 											key={row.membershipId}
-											className="cursor-pointer"
+											// `cursor-pointer` alone never told a touch user, or
+											// anyone who had not already moved the pointer onto the
+											// row, that this opened the member's page.
+											className="iz-admin-row-open"
 											onClick={() => openMember(row)}
 										>
 											<TableCell>
@@ -499,55 +504,78 @@ export function OrgMembersListPage({
 												</div>
 											</TableCell>
 											<TableCell data-label={t.admin.colStatus}>
-												<Badge
-													variant="outline"
-													className="capitalize text-muted-foreground"
-												>
-													{memberStatusLabel(row.status, t)}
-												</Badge>
+												{/*
+												  This badge was `variant="outline"` with
+												  `text-muted-foreground` and NOTHING else: Active,
+												  Inactive, Pending and Rejected all rendered the same
+												  grey outline, so the colour code the rest of the
+												  console uses stopped at this page. The detail sheet
+												  beside it has always coloured the same value.
+												*/}
+												<StatusPill
+													status={row.status}
+													label={memberStatusLabel(row.status, t)}
+												/>
 												<div className="iz-admin-record-secondary">
 													{formatDate(row.createdAt)}
 												</div>
 											</TableCell>
 											<TableCell onClick={(event) => event.stopPropagation()}>
-												<DropdownMenu>
-													<DropdownMenuTrigger asChild>
-														<Button
-															variant="outline"
-															size="icon"
-															disabled={actionId === row.membershipId}
-															aria-label={
-																t.admin.colActions +
-																" · " +
-																(row.username || row.memberCode || row.userId)
-															}
-														>
-															<MoreHorizontal aria-hidden className="h-4 w-4" />
-														</Button>
-													</DropdownMenuTrigger>
-													<DropdownMenuContent align="end">
-														<DropdownMenuItem onSelect={() => openMember(row)}>
-															{t.adminOrg.memberPageTitle}
-														</DropdownMenuItem>
-														<DropdownMenuItem
-															disabled={actionId === row.membershipId}
-															onSelect={() => {
-																if (row.status !== "active") setRestoreLane("");
-																setPending({
-																	row,
-																	next:
-																		row.status === "active"
-																			? "inactive"
-																			: "active",
-																});
-															}}
-														>
-															{row.status === "active"
-																? t.adminOrg.setInactive
-																: t.adminOrg.activate}
-														</DropdownMenuItem>
-													</DropdownMenuContent>
-												</DropdownMenu>
+												<div className="flex items-center justify-end gap-2">
+													<Button
+														variant="outline"
+														size="sm"
+														className="iz-admin-row-view"
+														onClick={() => openMember(row)}
+													>
+														<Eye aria-hidden className="h-4 w-4" />
+														{t.common.view}
+													</Button>
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button
+																variant="outline"
+																size="icon"
+																disabled={actionId === row.membershipId}
+																aria-label={
+																	t.admin.colActions +
+																	" · " +
+																	(row.username || row.memberCode || row.userId)
+																}
+															>
+																<MoreHorizontal
+																	aria-hidden
+																	className="h-4 w-4"
+																/>
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
+															<DropdownMenuItem
+																onSelect={() => openMember(row)}
+															>
+																{t.adminOrg.memberPageTitle}
+															</DropdownMenuItem>
+															<DropdownMenuItem
+																disabled={actionId === row.membershipId}
+																onSelect={() => {
+																	if (row.status !== "active")
+																		setRestoreLane("");
+																	setPending({
+																		row,
+																		next:
+																			row.status === "active"
+																				? "inactive"
+																				: "active",
+																	});
+																}}
+															>
+																{row.status === "active"
+																	? t.adminOrg.setInactive
+																	: t.adminOrg.activate}
+															</DropdownMenuItem>
+														</DropdownMenuContent>
+													</DropdownMenu>
+												</div>
 											</TableCell>
 										</TableRow>
 									))

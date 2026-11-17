@@ -1,0 +1,208 @@
+/*
+ * ONE INTERACTION LANGUAGE FOR THE THREE PORTALS (16 Nov 2026).
+ *
+ * Owner: "can have a try use taste to design … do the admin, agency and outlet
+ * portal first." The taste skill's motion rules, cut down to the part that
+ * belongs in a working app (its heroes, scroll moments and photography are for
+ * marketing sites and stay out):
+ *
+ *   ACTIONS  hover: steps UP 1px            150ms in, 120ms out
+ *            press: sinks 1px, scales .985  90ms
+ *   CARDS    hover: lifts 2px, border one step darker   180ms in, 120ms out
+ *   FOCUS    a 2px ring, 2px off the control, drawn at once (never animated)
+ *
+ * What it replaced, read in the code:
+ *  - Admin buttons (shadcn) answered hover with a colour only and carried
+ *    Tailwind's `transition-all`; portal `.iz-btn` carried `transition: 0.18s`.
+ *    BOTH animate every property, size and padding included, which is what
+ *    makes a label reflow visibly when a busy state swaps it.
+ *  - Portal buttons had a press and NO hover answer at all, so on a desktop
+ *    nothing said a button was a button until it was clicked.
+ *  - Admin and the portals each pressed differently; several one-off buttons
+ *    had a third and fourth press of their own. One feel now, in all three.
+ *
+ * WHAT IS LEFT OUT ON PURPOSE: tabs, segmented controls, time pickers,
+ * collapsible triggers and calendar cells. Taste moves a tab by its indicator,
+ * never by hopping the tab, and a grid cell that jumps under the pointer makes
+ * a dense calendar feel unsteady. They keep their own states.
+ *
+ * Scoped to the portals' own `body` attributes (set by AdminLayout and
+ * PortalShell), so the public site and its sign-in screens are untouched.
+ *
+ * ⚠️ `transform` is safe here because Tailwind v4 positions with the separate
+ * `translate` property, which COMPOSES with `transform` rather than being
+ * replaced by it. A control positioned by a hand-written RESTING `transform`
+ * would jump on hover — every class below was checked for one (16 Nov) and
+ * none has it. Check a new class before adding it to either list.
+ *
+ * No colour is changed on the actions: each variant keeps the hover fill it
+ * already had, so a red button stays red and a gold one gold.
+ */
+
+/* ── ACTIONS ─────────────────────────────────────────────────────────────── */
+
+:is(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
+	:is(
+		[data-slot="button"],
+		.iz-btn,
+		.iz-pr-manage-header__btn,
+		.iz-roster-auto-assign,
+		.iz-outlet-action-btn,
+		.iz-txn-card-btn,
+		.iz-roster-mini-btn,
+		.iz-post-job-submit-btn,
+		.iz-outlet-applicant-btn,
+		.iz-portal-ai-btn,
+		.iz-topbar-action
+	) {
+	/* Only what may move: never width, height, padding or margin. */
+	transition-property:
+		color, background-color, border-color, box-shadow, opacity, transform;
+	transition-duration: 120ms; /* the way out */
+	transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Hover moves only for a real pointer — a tap must not leave a lifted button. */
+@media (hover: hover) and (pointer: fine) {
+	:is(
+			body[data-admin-design],
+			body[data-agency-design],
+			body[data-outlet-design]
+		)
+		:is(
+			[data-slot="button"],
+			.iz-btn,
+			.iz-pr-manage-header__btn,
+			.iz-roster-auto-assign,
+			.iz-outlet-action-btn,
+			.iz-txn-card-btn,
+			.iz-roster-mini-btn,
+			.iz-post-job-submit-btn,
+			.iz-outlet-applicant-btn,
+			.iz-portal-ai-btn,
+			.iz-topbar-action
+		):not(:disabled):not([aria-disabled="true"]):hover {
+		transform: translateY(-1px);
+		transition-duration: 150ms; /* the way in */
+	}
+}
+
+:is(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
+	:is(
+		[data-slot="button"],
+		.iz-btn,
+		.iz-pr-manage-header__btn,
+		.iz-roster-auto-assign,
+		.iz-outlet-action-btn,
+		.iz-txn-card-btn,
+		.iz-roster-mini-btn,
+		.iz-post-job-submit-btn,
+		.iz-outlet-applicant-btn,
+		.iz-portal-ai-btn,
+		.iz-topbar-action
+	):not(:disabled):not([aria-disabled="true"]):active {
+	transform: translateY(1px) scale(0.985);
+	transition-duration: 90ms;
+}
+
+/* ── LINKED CARDS ───────────────────────────────────────────────────────── */
+
+:is(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
+	:is(.iz-pr-manage-card, .iz-hub-quick-card) {
+	transition-property: border-color, box-shadow, transform;
+	transition-duration: 120ms;
+	transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+	:is(
+			body[data-admin-design],
+			body[data-agency-design],
+			body[data-outlet-design]
+		)
+		:is(.iz-pr-manage-card, .iz-hub-quick-card):hover {
+		transform: translateY(-2px);
+		border-color: var(--iz-line2, var(--border));
+		/* Soft, and only while hovered: blur 24px, ink at 10% at most. */
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+		transition-duration: 180ms;
+	}
+}
+
+/* ── FOCUS ──────────────────────────────────────────────────────────────── */
+
+/*
+ * A ring of the same strength in every portal, at once. Each portal's own
+ * accent drives it — `--ring` in admin, `--iz-gold` in agency/outlet — so it
+ * reads as theirs rather than as the browser's default.
+ */
+:is(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
+	:is(
+		[data-slot="button"],
+		.iz-btn,
+		.iz-pr-manage-header__btn,
+		.iz-roster-auto-assign,
+		.iz-outlet-action-btn,
+		.iz-txn-card-btn,
+		.iz-roster-mini-btn,
+		.iz-post-job-submit-btn,
+		.iz-outlet-applicant-btn,
+		.iz-portal-ai-btn,
+		.iz-topbar-action,
+		.iz-pr-manage-card,
+		.iz-hub-quick-card
+	):focus-visible {
+	outline: 2px solid var(--ring, var(--iz-gold, currentColor));
+	outline-offset: 2px;
+	transition-duration: 0ms;
+}
+
+/* ── REDUCED MOTION ─────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+	:is(
+			body[data-admin-design],
+			body[data-agency-design],
+			body[data-outlet-design]
+		)
+		:is(
+			[data-slot="button"],
+			.iz-btn,
+			.iz-pr-manage-header__btn,
+			.iz-roster-auto-assign,
+			.iz-outlet-action-btn,
+			.iz-txn-card-btn,
+			.iz-roster-mini-btn,
+			.iz-post-job-submit-btn,
+			.iz-outlet-applicant-btn,
+			.iz-portal-ai-btn,
+			.iz-topbar-action,
+			.iz-pr-manage-card,
+			.iz-hub-quick-card
+		) {
+		transition-property: color, background-color, border-color, opacity;
+	}
+	:is(
+			body[data-admin-design],
+			body[data-agency-design],
+			body[data-outlet-design]
+		)
+		:is(
+			[data-slot="button"],
+			.iz-btn,
+			.iz-pr-manage-header__btn,
+			.iz-roster-auto-assign,
+			.iz-outlet-action-btn,
+			.iz-txn-card-btn,
+			.iz-roster-mini-btn,
+			.iz-post-job-submit-btn,
+			.iz-outlet-applicant-btn,
+			.iz-portal-ai-btn,
+			.iz-topbar-action,
+			.iz-pr-manage-card,
+			.iz-hub-quick-card
+		):is(:hover, :active) {
+		transform: none;
+		box-shadow: none;
+	}
+}

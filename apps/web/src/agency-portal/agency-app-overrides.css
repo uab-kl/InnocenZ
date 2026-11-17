@@ -38,10 +38,16 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	max-width: none !important;
 }
 
-/* "Full roster" hub link — match the section title's font size (the portal's
- * scoped text-base computes to 22.5px, which 1rem does not). */
+/* "Full roster" hub link — match the section title's font size.
+ *
+ * ⚠️ It said `22px` because the section title it sits beside used to compute to
+ * 22.5px. The approved redesign (22 Oct) put section titles on the ladder at
+ * `--iz-fs-title` (20px), so a hard 22px matched NOTHING any more and made this
+ * one link the largest text in its section — measured 17 Nov, the only 22px on
+ * agency Today. Same intent, said as the token, so it follows the title if the
+ * ladder moves again. */
 [data-portal="agency"] .iz-portal-hub-link {
-	font-size: 22px !important;
+	font-size: var(--iz-fs-title) !important;
 }
 
 /* ── Collapse-to-icons sidebar ─────────────────────────────────────────────

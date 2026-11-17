@@ -361,7 +361,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 .iz-portal .iz-receipt-search input {
 	height: 46px;
 	padding-left: 38px;
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	background: var(--iz-panel);
 	border-radius: 8px;
 }
@@ -393,7 +393,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	background: transparent;
 	color: var(--iz-muted);
 	font: inherit;
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	white-space: nowrap;
 	cursor: pointer;
 }
@@ -411,7 +411,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 }
 .iz-receipt-status-count {
 	color: var(--iz-muted2);
-	font-size: 12px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 12px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	font-variant-numeric: tabular-nums;
 }
 @media (max-width: 600px) {
@@ -442,7 +442,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	align-items: center;
 	gap: 8px;
 	color: var(--iz-muted);
-	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 13px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 }
 .iz-portal .iz-agency-payroll .iz-agency-payroll-filters .iz-filter-groups {
 	display: contents;
@@ -451,7 +451,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	.iz-agency-payroll-filters
 	:is(.iz-payroll-filter-label, .iz-filter-group-label) {
 	display: block;
-	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 13px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	line-height: 20px;
 	font-weight: 400;
 	margin: 0 0 6px;
@@ -469,7 +469,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	border-radius: 8px;
 	background: var(--iz-panel);
 	color: var(--iz-txt);
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	font-weight: 400;
 	box-sizing: border-box;
 }
@@ -494,7 +494,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 }
 .iz-payroll-facet-label {
 	min-width: 42px;
-	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 13px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	color: var(--iz-muted);
 }
 .iz-payroll-facets-selects {
@@ -529,7 +529,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	background: transparent;
 	color: var(--iz-muted);
 	font: inherit;
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	white-space: normal;
 	cursor: pointer;
 }
@@ -551,7 +551,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	cursor: default;
 }
 .iz-payroll-facet-chip .iz-filter-chip__count {
-	font-size: 12px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 12px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	color: var(--iz-muted2);
 }
 .iz-payroll-queue-filters {
@@ -591,5 +591,51 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	}
 	.iz-portal .iz-payroll-facets-selects > * {
 		flex-basis: 100%;
+	}
+}
+
+/*
+ * WHERE THE WEEK'S MONEY IS — three figures beside each other (16 Nov 2026).
+ *
+ * The card showed one total, of the SIGNED vouchers alone. Correct, and
+ * unreadable in context: a RM 150.00 voucher awaiting review sat directly
+ * under "RM 0.00". The figures now say which stage the money is at, and the
+ * payable one keeps the gold so the eye still lands on the figure that goes
+ * to the bank.
+ *
+ * Each item is `text-align: right` and tabular, so the ringgit line up down
+ * the column rather than drifting with their digit counts. No font-size is
+ * set here — the sizes come from the ladder on the elements themselves, which
+ * is what `pnpm check:type` enforces.
+ */
+.iz-payout-split {
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-end;
+	gap: 18px;
+	flex-wrap: wrap;
+}
+.iz-payout-split__item {
+	text-align: right;
+	min-width: 0;
+}
+/* A quiet divider between stages, never before the first. */
+.iz-payout-split__item + .iz-payout-split__item {
+	padding-inline-start: 18px;
+	border-inline-start: 1px solid var(--iz-line);
+}
+
+/* Phone: the figures stack and sit left, under the heading they explain. */
+@media (max-width: 640px) {
+	.iz-payout-split {
+		width: 100%;
+		justify-content: flex-start;
+		gap: 14px;
+	}
+	.iz-payout-split__item {
+		text-align: left;
+	}
+	.iz-payout-split__item + .iz-payout-split__item {
+		padding-inline-start: 14px;
 	}
 }

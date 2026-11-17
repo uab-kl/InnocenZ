@@ -13,6 +13,33 @@ export type PortalNavSection = "workspace" | "management" | "organization";
 export type PortalNavSections = Record<PortalNavSection, boolean>;
 type DesignPortal = "agency" | "outlet";
 
+/**
+ * A sidebar group's name, in the reader's language.
+ *
+ * ONE copy, read by both the sidebar heading and the header breadcrumb. The
+ * names were written inline inside the sidebar, which is why the breadcrumb
+ * could not say "Workspace" at all: the only place that knew the word was the
+ * rail, and the header said "Agency portal / Today" — which page, but never
+ * which section. Admin got that answer earlier the same day; this gives it to
+ * the two portals without a second dictionary that could disagree with the
+ * first.
+ */
+export function portalSectionLabel(
+	section: PortalNavSection,
+	locale: string,
+): string {
+	if (locale === "zh") {
+		return { workspace: "工作区", management: "管理", organization: "组织" }[
+			section
+		];
+	}
+	return {
+		workspace: "Workspace",
+		management: "Management",
+		organization: "Organization",
+	}[section];
+}
+
 export function portalNavSection(path: string): PortalNavSection {
 	if (
 		path === "/outlet/settings" ||
@@ -32,26 +59,61 @@ export function portalNavSection(path: string): PortalNavSection {
 	return "workspace";
 }
 
-export function usePortalNavSections(portal: DesignPortal = "outlet") {
+/**
+ * A first visit opens the whole map.
+ *
+ * ⚠️ Every group used to start `false` and stay there: `saved?.workspace ===
+ * true` turns a MISSING preference into "closed", so a reader who had never
+ * touched the rail landed facing three shut doors with no sign of what was
+ * behind them. The admin rail does not have this problem because it opens the
+ * group holding the current page — a rule this hook never had.
+ *
+ * A SAVED preference still wins in full, closed groups included: someone who
+ * folded a group away meant it, and must not have it reopened every visit.
+ */
+const ALL_OPEN: PortalNavSections = {
+	workspace: true,
+	management: true,
+	organization: true,
+};
+
+export function usePortalNavSections(
+	portal: DesignPortal = "outlet",
+	/** The group holding the current page, opened on top of whatever is stored. */
+	activeSection?: PortalNavSection,
+) {
 	const storageKey = `iz-${portal}-navigation-sections`;
-	const [sections, setSections] = useState<PortalNavSections>({
-		workspace: false,
-		management: false,
-		organization: false,
-	});
+	const [sections, setSections] = useState<PortalNavSections>(ALL_OPEN);
 	useEffect(() => {
 		try {
 			const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
-			setSections({
-				workspace: saved?.workspace === true,
-				management: saved?.management === true,
-				organization: saved?.organization === true,
-			});
+			// `null` is "never chosen", NOT "chose closed" — the distinction the
+			// old `=== true` reading threw away.
+			setSections(
+				saved && typeof saved === "object"
+					? {
+							workspace: saved.workspace === true,
+							management: saved.management === true,
+							organization: saved.organization === true,
+						}
+					: ALL_OPEN,
+			);
 		} catch {
 			/* Private browsing may make storage unavailable. */
-			setSections({ workspace: false, management: false, organization: false });
+			setSections(ALL_OPEN);
 		}
 	}, [storageKey]);
+	// Declared AFTER the restore, like the admin rail: on mount both updates
+	// queue in this order, so the active group opens on top of the stored
+	// state rather than under it.
+	useEffect(() => {
+		if (!activeSection) return;
+		setSections((previous) =>
+			previous[activeSection]
+				? previous
+				: { ...previous, [activeSection]: true },
+		);
+	}, [activeSection]);
 	return {
 		sections,
 		toggleSection: (section: PortalNavSection) => {

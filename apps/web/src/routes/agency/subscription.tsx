@@ -290,7 +290,7 @@ function AgencySubscription() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">{t.subscription.noAccess}</p>
@@ -481,7 +481,7 @@ function AgencySubscription() {
 	return (
 		<div className="iz-screen iz-agency-subscription">
 			<header>
-				<IzPageTitle>{t.agencyMisc.subscription}</IzPageTitle>
+				<IzPageTitle level={1}>{t.agencyMisc.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{agencyOwner.orgName}</p>
 				{/* `!canEdit` — see the twin in routes/outlet/subscription.tsx. */}
 				{!canEdit && (

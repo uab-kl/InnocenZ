@@ -15,6 +15,7 @@ import {
 	type PortalNavSections,
 	portalNavSection,
 	portalPageLabel,
+	portalSectionLabel,
 	usePortalNavSections,
 } from "@agency-portal/components/portal/PortalDesignChrome";
 import { PortalNavAlerts } from "@agency-portal/components/portal/PortalNavAlerts";
@@ -278,6 +279,7 @@ function PortalSidebarLink({
 		<Link
 			to={item.to}
 			className={`iz-portal-nav-link${active ? " on" : ""}`}
+			aria-current={active ? "page" : undefined}
 			onClick={onNavigate}
 			/*
 			 * The count is announced HERE, on the link, and hidden on the pill
@@ -310,6 +312,9 @@ function PortalSidebar({
 	onToggleSection?: (section: PortalNavSection) => void;
 }) {
 	const { pathname } = useLocation();
+	const currentSection = portalNavSection(
+		pathname.replace(/^\/[a-z]{2}(?=\/)/, ""),
+	);
 	const { t, locale } = usePortalLocale();
 	const navAlerts = useNavAlerts();
 	const portalKindLabel =
@@ -366,18 +371,12 @@ function PortalSidebar({
 									(item) => portalNavSection(item.to) === section,
 								);
 								if (!links.length) return null;
-								const labels =
-									locale === "zh"
-										? {
-												workspace: "工作区",
-												management: "管理",
-												organization: "组织",
-											}
-										: {
-												workspace: "Workspace",
-												management: "Management",
-												organization: "Organization",
-											};
+								// One dictionary, shared with the header breadcrumb.
+								const labels = {
+									workspace: portalSectionLabel("workspace", locale),
+									management: portalSectionLabel("management", locale),
+									organization: portalSectionLabel("organization", locale),
+								};
 								// A folded group still says something inside it is waiting
 								// — summed over the rows THIS role can see (see
 								// `sectionNavAlert`). Open, the rows carry their own pills.
@@ -388,7 +387,19 @@ function PortalSidebar({
 											navAlerts,
 										);
 								return (
-									<div className="iz-outlet-nav-group" key={section}>
+									<div
+										className="iz-outlet-nav-group"
+										key={section}
+										/*
+										  The SECTION you are in, marked — not only the page. The
+										  three headings looked identical whether or not they held
+										  the page on screen, so the rail answered "which page" but
+										  never "which part of the portal".
+										*/
+										data-current={
+											section === currentSection ? "true" : undefined
+										}
+									>
 										<button
 											type="button"
 											className="iz-outlet-nav-heading"
@@ -494,6 +505,7 @@ function PortalHeader({
 	subLabel,
 	demoData,
 	pageLabel,
+	sectionLabel,
 	onOpenMenu,
 	menuOpen,
 }: {
@@ -504,6 +516,8 @@ function PortalHeader({
 	subLabel: string;
 	demoData: boolean;
 	pageLabel?: string;
+	/** The sidebar group the page sits in — "Workspace", "Management", … */
+	sectionLabel?: string;
 	onOpenMenu?: () => void;
 	menuOpen?: boolean;
 }) {
@@ -532,7 +546,22 @@ function PortalHeader({
 						{portalLabel}
 						<span aria-hidden> / </span>
 					</span>
-					{pageLabel || portalLabel}
+					{/*
+					  WHICH SECTION, not only which page. The header said "Agency
+					  portal / Today" — the page, never the group it sits in — so a
+					  reader who had folded the rail away had nothing on screen to
+					  say they were in Workspace rather than Management. Dropped on a
+					  phone with the portal label, so the leaf (the page) always fits.
+					*/}
+					{sectionLabel ? (
+						<span className="iz-outlet-header-kind">
+							{sectionLabel}
+							<span aria-hidden> / </span>
+						</span>
+					) : null}
+					<span className="iz-portal-crumb-leaf" aria-current="page">
+						{pageLabel || portalLabel}
+					</span>
 				</p>
 			</div>
 			<div className="iz-portal-header-tools flex shrink-0 items-center gap-2">
@@ -583,7 +612,7 @@ export function PortalShell({
 	const outletOwner = useStore((s) => s.outletOwner);
 	const owner = portal === "agency" ? agencyOwner : outletOwner;
 	const orgName = owner.orgName;
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const { data: me } = useProfile();
 	// Header chip is the signed-in person's photo (`user.profile_image`), not
 	// the organisation logo kept on outletOwner/agencyOwner.avatarPhoto.
@@ -614,8 +643,16 @@ export function PortalShell({
 		owner.ownerName.trim() ||
 		"";
 	const identity = portalIdentityParts(orgName, ownerName, subLabel);
-	const { sections, toggleSection } = usePortalNavSections(portal);
 	const { pathname } = useLocation();
+	/*
+	 * The group holding the page you are on opens itself, the way the admin
+	 * rail has always done — so the entry that is currently lit is never
+	 * folded out of sight behind a closed heading.
+	 */
+	const { sections, toggleSection } = usePortalNavSections(
+		portal,
+		portalNavSection(pathname.replace(/^\/[a-z]{2}(?=\/)/, "")),
+	);
 	useEffect(() => {
 		const attribute = portal === "agency" ? "agencyDesign" : "outletDesign";
 		document.body.dataset[attribute] = "true";
@@ -771,6 +808,10 @@ export function PortalShell({
 							localiseNav(sidebarItems, t),
 							pathname,
 							t,
+						)}
+						sectionLabel={portalSectionLabel(
+							portalNavSection(pathname.replace(/^\/[a-z]{2}(?=\/)/, "")),
+							locale,
 						)}
 						onOpenMenu={() => setMenuOpen(true)}
 						menuOpen={menuOpen}

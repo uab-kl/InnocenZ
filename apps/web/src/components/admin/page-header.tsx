@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import { useAdminSection } from "@/components/admin/admin-trail";
 
 /**
  * PageShell — standard admin page padding + vertical rhythm.
@@ -43,6 +44,20 @@ export function PageHeader({
 	kicker,
 	actions,
 }: PageHeaderProps) {
+	/*
+	 * WHERE THE READER IS, said on the page itself.
+	 *
+	 * The section a page belongs to was on screen exactly once — the 14px
+	 * breadcrumb in the top bar, which folds away to the leaf below 640px. So
+	 * on a phone nothing anywhere said "you are in Operation", and on a desktop
+	 * it said so in the quietest text on the page. Users reported not knowing
+	 * where they were; this is the gap they were describing.
+	 *
+	 * An explicit `kicker` still wins — a page with something more urgent to
+	 * say above its title (a live count, a warning) keeps saying it.
+	 */
+	const section = useAdminSection();
+	const eyebrow = kicker ?? section;
 	return (
 		<div className="iz-admin-page-heading flex flex-wrap items-end justify-between gap-5">
 			<div className="flex min-w-0 items-start gap-3.5">
@@ -52,13 +67,13 @@ export function PageHeader({
 					</span>
 				)}
 				<div className="min-w-0">
-					{kicker && (
+					{eyebrow && (
 						<div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[color:var(--royal-gold-line)] bg-[color:var(--royal-gold-soft)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--royal-gold)]">
 							<span
 								className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_8px_currentColor]"
 								aria-hidden
 							/>
-							{kicker}
+							{eyebrow}
 						</div>
 					)}
 					<h1 className="iz-admin-page-title font-semibold tracking-tight">

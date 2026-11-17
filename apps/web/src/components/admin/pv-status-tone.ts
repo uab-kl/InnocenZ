@@ -1,3 +1,4 @@
+import { STATUS_TONE_CLASS } from "@/lib/status-tone";
 import type {
 	PaymentVoucherReceiptStatus,
 	PaymentVoucherStatus,
@@ -11,12 +12,20 @@ import type {
  * and its receipt list drew `approved` green and `verified` sky, the reverse of
  * what an approved-but-unverified receipt means.
  */
-const SETTLED =
-	"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-const WAITING =
-	"border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400";
-const DISPUTED =
-	"border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400";
+/*
+ * The three tones come from `lib/status-tone.ts`, which is the one place a
+ * tone becomes a class — they were spelled out here, in `statusColors` and in
+ * `orgStatusBadgeColors`: three copies of the same values that nothing kept
+ * in step.
+ *
+ * ⚠️ The MAPPING below stays local and must not be folded into that file's
+ * `TONE_BY_STATUS`. This is the money domain, where `approved` means the
+ * receipt is still WAITING on verification; in the account domain the same
+ * word means working. Same colours, different question being answered.
+ */
+const SETTLED = STATUS_TONE_CLASS.safe;
+const WAITING = STATUS_TONE_CLASS.caution;
+const DISPUTED = STATUS_TONE_CLASS.warning;
 
 export const PV_STATUS_BADGE: Record<PaymentVoucherStatus, string> = {
 	pending_review: WAITING,

@@ -258,8 +258,12 @@ and `TEST_SCRIPT.md` **§11 What's new** — into
   pnpm check:type:update   # bank an improvement into the baseline
   ```
 
-  `tools/scripts/check-portal-typography.mjs` scans `agency-portal/`, `routes/agency/`
-  and `routes/outlet/` for four things: **A** a `font-family` that is not
+  `tools/scripts/check-portal-typography.mjs` scans **all three web portals** — `agency-portal/`,
+  `routes/agency/`, `routes/outlet/`, and since 17 Nov 2026 admin too (`routes/admin/` plus
+  `components/{admin,organization,rbac,pr,subscription,audit-log,layout}/`) — and **runs in CI**
+  (`ci.yml`, beside `chat:facts:check`). ⚠️ Before 17 Nov it scanned agency/outlet only and was
+  never wired into CI, so admin drifted to seven rendered sizes while the check reported clean.
+  It looks for four things: **A** a `font-family` that is not
   `var(--iz-font)`, **B** a `font-size` that is not a `--iz-fs-*` step, **C** a Tailwind
   class NAMING a font (`font-sora` / `font-manrope` / `font-display` / `font-mono`), and
   **D** an arbitrary size (`text-[13px]`, **and its `!text-[13px]` twin** — they are
@@ -307,5 +311,21 @@ and `TEST_SCRIPT.md` **§11 What's new** — into
   above: pages name a `--iz-fs-*` token and `var(--iz-font)`, never a raw value, and
   `pnpm check:type` enforces it. The brand wordmark (`.iz-wordmark`, Georgia) is the one
   extra exception, listed in the check's `EXCEPT[]`.
+
+- **ONE TYPE LADDER FOR EVERY ROLE ON THE WEBSITE (owner, 17 Nov 2026 — "for the website all
+  roles must follow the same font size"; "no too much suddenly big and small").** Admin,
+  agency and outlet — every lane — render **16 · 20 · 24**: body text 16, section titles 20,
+  page titles 24. Admin used to run 14 · 16 · 20 · 24 and measured SEVEN sizes on its
+  dashboard; its `--iz-fs-micro`/`tiny` are now 16 (`admin-design.css`) and one
+  `@layer utilities` rule there lifts every small hand size (`text-sm`, `text-xs`,
+  `text-[10–13.5px]`, responsive variants included) to 16, `text-lg` to 20 and `text-3xl`+
+  to 24, inside page content and admin's overlays. The payroll filter's `iz-dense-filter`
+  sizes (SL's 22 Oct compact controls) were lifted onto the ladder the same day on this
+  instruction. **Two accepted exceptions only:** the brand wordmark (a logo) and the number
+  inside a small count badge (a 16px digit bursts the pill). The FONT stays per portal —
+  admin Manrope, agency/outlet Arial — that is each one's approved design, not a size.
+  ⚠️ Verify by MEASURING: `getComputedStyle` over every visible text element of each lane's
+  pages, listing any size outside 16/20/24 — the check reads source and cannot see a
+  `22px !important` override or a label sized by seven competing rules.
 
 <!-- nx configuration end-->

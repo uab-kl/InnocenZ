@@ -1,13 +1,14 @@
 import {
 	AlertCircle,
 	Building2,
+	Eye,
 	Loader2,
 	MoreHorizontal,
 	RefreshCw,
 	Search,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -46,7 +47,6 @@ import type { Agency, AgencyPagination } from "@/services/agency";
 import {
 	ORG_STATUSES,
 	type OrgStatusFilter,
-	orgStatusBadgeColors,
 	orgStatusLabel,
 } from "./org-status";
 
@@ -205,7 +205,14 @@ export function AgenciesTable({
 									return (
 										<TableRow
 											key={agency.id}
-											className="cursor-pointer"
+											/*
+											  `cursor-pointer` was the ONLY sign this row opened
+											  anything — invisible until the pointer was already on
+											  it, and absent entirely on a touch screen. The class
+											  adds a hover tint and a lavender leading edge, so the
+											  row reads as clickable before it is clicked.
+											*/
+											className="iz-admin-row-open"
 											onClick={() => onSelect(agency)}
 										>
 											<TableCell>
@@ -238,60 +245,81 @@ export function AgenciesTable({
 												</div>
 											</TableCell>
 											<TableCell data-label={t.admin.colStatus}>
-												<Badge
-													variant="outline"
-													className={`text-sm ${orgStatusBadgeColors[agency.status]}`}
-												>
-													{orgStatusLabel(agency.status, t)}
-												</Badge>
+												<StatusPill
+													status={agency.status}
+													label={orgStatusLabel(agency.status, t)}
+													className="text-sm"
+												/>
 												<div className="iz-admin-record-secondary">
 													{formatDate(agency.createdAt)}
 												</div>
 											</TableCell>
 											<TableCell onClick={(event) => event.stopPropagation()}>
-												<DropdownMenu>
-													<DropdownMenuTrigger asChild>
-														<Button
-															variant="outline"
-															size="icon"
-															aria-label={`${t.admin.colActions} · ${agency.name}`}
-															disabled={busy}
-														>
-															<MoreHorizontal aria-hidden className="h-4 w-4" />
-														</Button>
-													</DropdownMenuTrigger>
-													<DropdownMenuContent align="end">
-														<DropdownMenuItem onSelect={() => onSelect(agency)}>
-															{t.adminOrg.viewAgencyDetails}
-														</DropdownMenuItem>
-														{agency.status === "pending_review" && (
-															<DropdownMenuItem
+												<div className="flex items-center justify-end gap-2">
+													{/*
+													  The ONLY way to learn this row opened a detail
+													  sheet was to click it, or to open the "…" menu and
+													  read the first item. A named View button says so
+													  on the row itself.
+													*/}
+													<Button
+														variant="outline"
+														size="sm"
+														className="iz-admin-row-view"
+														onClick={() => onSelect(agency)}
+													>
+														<Eye aria-hidden className="h-4 w-4" />
+														{t.common.view}
+													</Button>
+													<DropdownMenu>
+														<DropdownMenuTrigger asChild>
+															<Button
+																variant="outline"
+																size="icon"
+																aria-label={`${t.admin.colActions} · ${agency.name}`}
 																disabled={busy}
-																onSelect={() => onApprove(agency.id)}
 															>
-																{t.common.approve}
-															</DropdownMenuItem>
-														)}
-														{(agency.status === "active" ||
-															agency.status === "suspended") && (
+																<MoreHorizontal
+																	aria-hidden
+																	className="h-4 w-4"
+																/>
+															</Button>
+														</DropdownMenuTrigger>
+														<DropdownMenuContent align="end">
 															<DropdownMenuItem
-																className="text-destructive"
-																disabled={busy}
-																onSelect={() => onDeactivate(agency.id)}
+																onSelect={() => onSelect(agency)}
 															>
-																{t.adminOrg.setInactive}
+																{t.adminOrg.viewAgencyDetails}
 															</DropdownMenuItem>
-														)}
-														{agency.status === "suspended" && (
-															<DropdownMenuItem
-																disabled={busy}
-																onSelect={() => onApprove(agency.id)}
-															>
-																{t.adminUsers.reactivate}
-															</DropdownMenuItem>
-														)}
-													</DropdownMenuContent>
-												</DropdownMenu>
+															{agency.status === "pending_review" && (
+																<DropdownMenuItem
+																	disabled={busy}
+																	onSelect={() => onApprove(agency.id)}
+																>
+																	{t.common.approve}
+																</DropdownMenuItem>
+															)}
+															{(agency.status === "active" ||
+																agency.status === "suspended") && (
+																<DropdownMenuItem
+																	className="text-destructive"
+																	disabled={busy}
+																	onSelect={() => onDeactivate(agency.id)}
+																>
+																	{t.adminOrg.setInactive}
+																</DropdownMenuItem>
+															)}
+															{agency.status === "suspended" && (
+																<DropdownMenuItem
+																	disabled={busy}
+																	onSelect={() => onApprove(agency.id)}
+																>
+																	{t.adminUsers.reactivate}
+																</DropdownMenuItem>
+															)}
+														</DropdownMenuContent>
+													</DropdownMenu>
+												</div>
 											</TableCell>
 										</TableRow>
 									);

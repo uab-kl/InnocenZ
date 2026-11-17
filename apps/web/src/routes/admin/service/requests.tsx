@@ -630,9 +630,17 @@ function RequestsPage() {
 										{t.adminRequests.colRole}
 									</TableHead>
 									<TableHead>{t.admin.colType}</TableHead>
-									<TableHead className="w-[220px]">
-										{t.adminRequests.colRemarks}
-									</TableHead>
+									{/*
+									  REMARKS HAS NO COLUMN (owner, 16 Nov 2026: "the remarks
+									  can put at behind or remove, because mostly is empty this
+									  called no important"). It was 220px of "—" on almost every
+									  row, and the nine columns fighting over the width broke
+									  the others mid-word — "Qu ote d (R M)", "Integr ate with
+									  POS". The remark itself is NOT lost: it renders under Type
+									  when a request actually has one, costing nothing when
+									  empty, and it is still written and edited in the review
+									  sheet.
+									*/}
 									<TableHead>{t.adminRequests.colFromPlan}</TableHead>
 									<TableHead>{t.adminRequests.colToPlan}</TableHead>
 									<TableHead>{t.adminRequests.colQuoted}</TableHead>
@@ -647,7 +655,7 @@ function RequestsPage() {
 							<TableBody>
 								{showLoading ? (
 									<TableRow>
-										<TableCell colSpan={9} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
 												<span>{t.adminRequests.loadingRequests}</span>
@@ -656,7 +664,7 @@ function RequestsPage() {
 									</TableRow>
 								) : requestsQuery.isError ? (
 									<TableRow>
-										<TableCell colSpan={9} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
@@ -678,7 +686,7 @@ function RequestsPage() {
 									</TableRow>
 								) : records.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={9} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Handshake className="h-6 w-6" />
 												<span>{t.adminRequests.noRequestsFound}</span>
@@ -746,20 +754,12 @@ function RequestsPage() {
 													>
 														{requestTypeLabels[request.type](t)}
 													</Badge>
-												</TableCell>
-												<TableCell
-													data-label={t.adminRequests.colRemarks}
-													className="max-w-[220px]"
-												>
+													{/* The remark, only when there is one — no empty row, no "—". */}
 													{request.remarks ? (
-														<span className="line-clamp-2 text-base">
+														<p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
 															{request.remarks}
-														</span>
-													) : (
-														<span className="text-base text-muted-foreground">
-															—
-														</span>
-													)}
+														</p>
+													) : null}
 												</TableCell>
 												<TableCell
 													data-label={t.adminRequests.colFromPlan}

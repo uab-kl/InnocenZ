@@ -869,7 +869,7 @@ function PostJobPage() {
 		return (
 			<div className="iz-screen">
 				<header className="pt-1">
-					<IzPageTitle>
+					<IzPageTitle level={1}>
 						{blockedByPhase
 							? t.postJob.notAvailableYet
 							: t.postJob.accessRestricted}

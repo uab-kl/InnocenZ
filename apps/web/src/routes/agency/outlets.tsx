@@ -140,7 +140,7 @@ function AgencyManageOutlets() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
@@ -179,7 +179,7 @@ function AgencyManageOutlets() {
 		<div className="iz-screen iz-outlet-manage-page">
 			<header className="iz-pr-manage-header">
 				<div className="min-w-0">
-					<IzPageTitle>{t.managePr.manageOutletTitle}</IzPageTitle>
+					<IzPageTitle level={1}>{t.managePr.manageOutletTitle}</IzPageTitle>
 					<p className="iz-tiny iz-muted mt-0.5">{t.manageOutlet.subtitle}</p>
 				</div>
 				<div className="iz-pr-manage-header__actions">

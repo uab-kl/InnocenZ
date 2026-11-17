@@ -7,11 +7,13 @@ import { fetchOutlets } from "@/services/outlet";
 import { fetchAdminPendingJobs } from "@/services/special-service";
 
 /**
- * Live "needs attention" counts for the sidebar, keyed by nav item key.
- * Reuses the dashboard's query keys so both surfaces share one cache entry
- * (no duplicate network calls when the dashboard is also mounted).
+ * The admin's five work queues, fetched ONCE and read by two surfaces: the
+ * sidebar badges (`useSidebarBadges`) and the dashboard's To do panel
+ * (`useAdminTodoCounts`). Same query keys, one cache — a panel row and the
+ * badge beside its page cannot disagree, which is the rule the agency and
+ * outlet To do panels were built on.
  */
-export function useSidebarBadges(): Record<string, number> {
+function useAdminQueueQueries() {
 	const { logout } = useAuth();
 
 	const pendingAgencies = useQuery({
@@ -52,12 +54,70 @@ export function useSidebarBadges(): Record<string, number> {
 	});
 
 	return {
-		"sidebar-user-agency": pendingAgencies.data?.pagination.totalCount ?? 0,
-		"sidebar-user-outlet": pendingOutlets.data?.pagination.totalCount ?? 0,
-		"sidebar-service-requests": pendingRequests.data?.pending ?? 0,
-		"sidebar-service-plan-changes": pendingPlanChanges.data?.pending ?? 0,
+		pendingAgencies,
+		pendingOutlets,
+		pendingRequests,
+		pendingPlanChanges,
+		pendingJobs,
+	};
+}
+
+/** Live "needs attention" counts for the sidebar, keyed by nav item key. */
+export function useSidebarBadges(): Record<string, number> {
+	const q = useAdminQueueQueries();
+	return {
+		"sidebar-user-agency": q.pendingAgencies.data?.pagination.totalCount ?? 0,
+		"sidebar-user-outlet": q.pendingOutlets.data?.pagination.totalCount ?? 0,
+		"sidebar-service-requests": q.pendingRequests.data?.pending ?? 0,
+		"sidebar-service-plan-changes": q.pendingPlanChanges.data?.pending ?? 0,
 		"sidebar-service-other": AGENCY_SERVICES_ENABLED
-			? (pendingJobs.data?.pagination.totalCount ?? 0)
+			? (q.pendingJobs.data?.pagination.totalCount ?? 0)
 			: 0,
+	};
+}
+
+export type AdminTodoCounts = {
+	agencies: number;
+	outlets: number;
+	planRequests: number;
+	planChanges: number;
+	jobs: number;
+};
+
+/**
+ * The same five counts for the dashboard's To do panel — PLUS whether any of
+ * them is still loading.
+ *
+ * ⚠️ The badges can read 0 while a query is in flight; the panel cannot. A
+ * badge showing nothing for a second is harmless, but a panel that says "All
+ * clear" before its counts arrive tells an admin there is nothing to do when
+ * there may be, and they leave. So "all clear" waits for `loading` to be false.
+ * An ERRORED query also counts as not-known: an outage must not read as calm.
+ */
+export function useAdminTodoCounts(): {
+	counts: AdminTodoCounts;
+	loading: boolean;
+} {
+	const q = useAdminQueueQueries();
+	const known = (query: { isPending: boolean; isError: boolean }) =>
+		!query.isPending && !query.isError;
+	const queries = [
+		q.pendingAgencies,
+		q.pendingOutlets,
+		q.pendingRequests,
+		q.pendingPlanChanges,
+		...(AGENCY_SERVICES_ENABLED ? [q.pendingJobs] : []),
+	];
+	return {
+		counts: {
+			agencies: q.pendingAgencies.data?.pagination.totalCount ?? 0,
+			outlets: q.pendingOutlets.data?.pagination.totalCount ?? 0,
+			planRequests: q.pendingRequests.data?.pending ?? 0,
+			planChanges: q.pendingPlanChanges.data?.pending ?? 0,
+			jobs: AGENCY_SERVICES_ENABLED
+				? (q.pendingJobs.data?.pagination.totalCount ?? 0)
+				: 0,
+		},
+		loading: !queries.every(known),
 	};
 }

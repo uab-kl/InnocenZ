@@ -43,11 +43,33 @@ const ROOT = path.resolve(
   '../..',
 );
 
-/** The portal surfaces the ladder governs. */
+/**
+ * The portal surfaces the ladder governs — ALL THREE web portals.
+ *
+ * Admin was missing until 17 Nov 2026, and that is exactly how it drifted to
+ * SEVEN rendered sizes (11·12·13·14·16·20·24) with this script reporting clean:
+ * it had never looked. Owner, the same day: "for the website all roles must
+ * follow the same font size" and "if future any modification or implement any
+ * functions the font size will follow right?" — which is only true for code
+ * this list reaches. Admin's existing raw values were baselined on arrival (a
+ * ratchet, like the portals' 1,004 were), so only NEW ones fail.
+ *
+ * The admin entries are the routes plus the component folders only admin
+ * renders (organisation/RBAC/PR/subscription/audit-log tables, the admin
+ * header, sidebar and layout).
+ */
 const SCAN = [
   'apps/web/src/agency-portal',
   'apps/web/src/routes/agency',
   'apps/web/src/routes/outlet',
+  'apps/web/src/routes/admin',
+  'apps/web/src/components/admin',
+  'apps/web/src/components/organization',
+  'apps/web/src/components/rbac',
+  'apps/web/src/components/pr',
+  'apps/web/src/components/subscription',
+  'apps/web/src/components/audit-log',
+  'apps/web/src/components/layout',
 ];
 
 /**

@@ -20,6 +20,7 @@ import {
   buildVoucherWorkbook,
   voucherRef,
 } from './payment-voucher-excel.js';
+import { parseVoucherSort } from './voucher-sort';
 import {
   issueExportTicket,
   redeemExportTicket,
@@ -1140,6 +1141,9 @@ export class PaymentVoucherControllerClass {
         prId: req.query.prId as string | undefined,
         status: req.query.status as PaymentVoucherStatus | undefined,
         prName: req.query.prName as string | undefined,
+        // One box matching the voucher number OR the PR's name; `prName` stays
+        // for the callers that search the name alone.
+        search: req.query.search as string | undefined,
         fromDate: req.query.fromDate as string | undefined,
         toDate: req.query.toDate as string | undefined,
         agencyId: scope.isAdmin
@@ -1152,6 +1156,14 @@ export class PaymentVoucherControllerClass {
           filter,
           page,
           pageSize,
+          /*
+           * ⚠️ Whitelisted here, never cast. The list is paginated, so the
+           * order has to be chosen before `limit`/`offset` pick the rows — a
+           * console sorting its own page would reorder ten rows of many while
+           * its header claimed to have sorted the table. An unknown field
+           * comes back null and the default order stands.
+           */
+          sort: parseVoucherSort(req.query.sortBy, req.query.sortDir),
         });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({

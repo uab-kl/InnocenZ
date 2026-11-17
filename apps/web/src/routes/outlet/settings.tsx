@@ -488,7 +488,9 @@ function OutletSettingsPage() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.outletSettings.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>
+						{t.outletSettings.accessRestricted}
+					</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">{t.outletSettings.noAccess}</p>

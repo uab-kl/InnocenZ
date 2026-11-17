@@ -1,15 +1,13 @@
 import {
 	AlertCircle,
-	CheckCircle2,
 	ChevronRight,
 	Loader2,
 	Plus,
 	RefreshCw,
 	Shield,
-	XCircle,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
 	Select,
@@ -22,7 +20,7 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-import { cn, getErrorMessage, statusColors } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import type { PortalCode, RbacPagination, RbacRole } from "@/services/rbac";
 
 export type RoleStatusFilter = "all" | "active" | "inactive";
@@ -236,20 +234,11 @@ export function RolesGrid({
 												<span className="admin-role-name min-w-0 flex-1 font-semibold capitalize text-foreground">
 													{formatRoleName(role.roleName)}
 												</span>
-												<Badge
-													variant="outline"
-													className={cn(
-														statusColors[role.status],
-														"shrink-0 gap-1.5 px-2.5 py-1 text-sm capitalize",
-													)}
-												>
-													{role.status === "active" ? (
-														<CheckCircle2 className="h-3.5 w-3.5" />
-													) : (
-														<XCircle className="h-3.5 w-3.5" />
-													)}
-													{recordStatusLabel(role.status, t)}
-												</Badge>
+												<StatusPill
+													status={role.status}
+													label={recordStatusLabel(role.status, t)}
+													className="shrink-0 px-2.5 py-1 text-sm"
+												/>
 												<ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-lavender" />
 											</button>
 										</li>
