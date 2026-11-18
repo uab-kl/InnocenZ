@@ -196,7 +196,9 @@ never scroll sideways (wide tables scroll inside their own container).
   never the only signal).
 - **To do rows** — one row per kind of waiting work: what it is, how many, why it matters,
   one link straight to the right tab. Red rows first, then amber. Shows "Checking…" while
-  counts load and "All clear" only when every count is known and zero.
+  counts load and "All clear" only when every count is known and zero. "Checking…" waits for
+  every read behind a row or strip in the panel — the agency's five approval reads, the
+  outlet's banners — so it never says "All clear" and then grows a row.
 - **Count badges** — on the rail item and on its folded section; red if any is red. The
   number is announced with words for screen readers ("3 to review"), not a bare digit.
 - **Tables** — header row in `ink-muted`, money right-aligned in `iz-nums`, one status chip
@@ -264,9 +266,19 @@ colour). No rule types a raw duration or delay; the one loading loop is 4 × `-s
   Roster stats, Calendar stats) rises 8px a step apart, at most 4 steps.
 - **M2 you are here** — the desktop rail's current item flashes gold and its bar draws; a
   section the user opens settles in; on a phone the page name in the trail settles instead.
-- **M3 To do** — rows rise in urgency order a step apart; the top row's button rings once.
-  Every row runs the ring in a transparent tone and only the first sets a colour, so a row
-  that BECOMES first after a refetch does not ring.
+- **M3 To do** — rows rise in urgency order a step apart as each count lands; the top row's
+  button rings once, and only after every count behind the panel is known (owner, 18 Nov
+  2026 — "yes fix the to do panel"). TodoPanel marks the list `data-iz-settled` the first
+  render nothing is loading and never takes it off; M3 rings only inside a settled list.
+  Every row present then starts its ring together in a transparent tone and only the first
+  sets the gold — one visible ring when the counts settle (before, a row landing late ABOVE
+  one already shown rang gold a second time). A row that BECOMES first after a refetch does
+  not ring; a row that MOUNTS after the list settled (a queue going 0 → n while the page is
+  open) rings, gold only if first — news, like an M4 pop. Sticky, so a read that refetches
+  when the window regains focus never replays it. Outlet Today also holds the list on its
+  banners' reads (agency links, prices, the statement check), passed as TodoPanel `loading`.
+  If the first item is a strip rather than a link row, no ring plays — as at rest, where only
+  a link row carries the filled button.
 - **M4 counts** — pop only on CHANGE (owner, 18 Nov 2026: "Pop only on change"). A desktop-rail
   badge stays still while a page opens or reloads; it pops only when its number changes after
   every query behind the rail has given its first answer (`PortalNavAlerts` passes that

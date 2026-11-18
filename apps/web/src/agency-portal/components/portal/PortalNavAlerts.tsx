@@ -43,8 +43,25 @@ function AgencyNavAlerts({ children }: { children: ReactNode }) {
 	const { receipts, isLoading: receiptsLoading } = useAgencyReceipts();
 	const { claims: overtime, isLoading: overtimeLoading } = useAgencyOvertime();
 	const billing = useUnpaidBilling("agency");
+	/*
+	 * EVERY approval term, not just cutlost + MC/leave (owner, 18 Nov 2026 —
+	 * "yes fix the to do panel"). `approvals.isLoading` left out sign-ups,
+	 * venue links and team members, so the To do panel could say "All clear"
+	 * and then grow an Approvals row a moment later. `totalIsLoading` waits for
+	 * all five reads behind `approvals.total`, the number the row shows.
+	 *
+	 * The flag does three things: it picks the line under the To do list
+	 * ("Checking…" or All clear), it lets TodoPanel mark the list settled — the
+	 * only state in which its "start here" ring plays (portal-motion.css M3) —
+	 * and it is the rail badges' "settled" flag (`badgesSettled`, below), so a
+	 * count landing late is not popped as news.
+	 *
+	 * It does NOT hold the rows back: each row still mounts as its own count
+	 * lands. The ring is what waits, and TodoPanel's settled latch is sticky, so
+	 * a row landing above one already shown can no longer ring gold a second time.
+	 */
 	const todoLoading =
-		approvals.isLoading ||
+		approvals.totalIsLoading ||
 		pvsLoading ||
 		disputesLoading ||
 		receiptsLoading ||
@@ -109,11 +126,10 @@ function AgencyNavAlerts({ children }: { children: ReactNode }) {
 		[todoLoading, approvals.total, pvs, disputes, receipts, overtime.length],
 	);
 
-	// The badges wait for EVERY query behind them: the flag above, plus the
-	// approval terms it does not cover (sign-ups, venue links, team members).
-	// Until then a number arriving is the page loading, not news — see
-	// `NavAlertSettledContext`.
-	const badgesSettled = !(todoLoading || approvals.totalIsLoading);
+	// The badges wait for EVERY query behind them — the same flag as the To do
+	// panel, which now covers every approval term too. Until then a number
+	// arriving is the page loading, not news — see `NavAlertSettledContext`.
+	const badgesSettled = !todoLoading;
 
 	return (
 		<NavAlertContext.Provider value={alerts}>

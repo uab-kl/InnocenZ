@@ -53,8 +53,12 @@ export interface AgencyApprovalQueue {
 	/**
 	 * True until EVERY query behind `total` has given its first answer.
 	 * `isLoading` covers only the cutlost and MC/leave reads; sign-ups, venue
-	 * links and team members can land after it. The rail badges wait on this,
-	 * so the last of those arriving is not mistaken for a new approval.
+	 * links and team members can land after it. Three readers wait on this: the
+	 * rail badges, so the last of those arriving is not mistaken for a new
+	 * approval; the Today To do panel (via `PortalNavAlerts`), so it never says
+	 * "All clear" and then grows an Approvals row; and the Today hub's Approvals
+	 * tab, so the same page never says "Nothing awaiting approval" in one place
+	 * while the other is still checking.
 	 */
 	totalIsLoading: boolean;
 	/** Only the MC/leave query — the Approvals page shows its own loading line. */

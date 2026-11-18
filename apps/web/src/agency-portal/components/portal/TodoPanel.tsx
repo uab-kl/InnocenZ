@@ -17,7 +17,7 @@ import {
 	Scale,
 	UserPlus,
 } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import { type ComponentType, type ReactNode, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /**
@@ -39,10 +39,41 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
  *   checking; the all-clear shows only once nothing is loading and no row drew.
  *   Rows are plain children, so the existing banners (subscription, prices,
  *   daily statement) sit in the same list and hide themselves as before.
+ *
+ * `loading` is for the reads behind those banners. The provider is mounted on
+ * every page of the portal, so it holds only the counts it computes; a page
+ * whose banners read more passes their flags here (outlet Today does) rather
+ * than making every page fire them.
+ *
+ * THE "START HERE" RING PLAYS ONCE, AFTER THE COUNTS ARE KNOWN (owner, 18 Nov
+ * 2026 — "yes fix the to do panel"). The rows still render while it is
+ * checking, each as its count lands; what waits is the ring. `data-iz-settled`
+ * goes on the list the first render nothing is loading and never comes off,
+ * and portal-motion.css M3 rings only inside a settled list. So every row
+ * present at that moment starts its ring together and only the first is gold —
+ * one ring — where before a row landing ABOVE one that had already rung became
+ * the first child and rang gold a second time. Sticky, so a read that errors
+ * and refetches when the window regains focus (loading again, nothing new) can
+ * never replay it: DESIGN.md §8, "never a return to the window".
  */
-export function TodoPanel({ children }: { children: ReactNode }) {
+export function TodoPanel({
+	children,
+	loading: pageLoading = false,
+}: {
+	children: ReactNode;
+	loading?: boolean;
+}) {
 	const { t } = usePortalLocale();
-	const { loading } = usePortalTodoCounts();
+	const counts = usePortalTodoCounts();
+	const loading = counts.loading || pageLoading;
+	/*
+	 * Adjusted DURING render, the pattern `useNavAlertPop` uses (NavAlertBadge.tsx):
+	 * React re-runs this render with the new state before committing, so the
+	 * first paint without "Checking…" is already a settled list — an effect
+	 * would paint one frame of an unsettled list first.
+	 */
+	const [settled, setSettled] = useState(!loading);
+	if (!loading && !settled) setSettled(true);
 	return (
 		<section className="iz-todo" aria-labelledby="iz-todo-heading">
 			<div className="iz-todo__head">
@@ -52,7 +83,12 @@ export function TodoPanel({ children }: { children: ReactNode }) {
 				</h2>
 				<p className="iz-todo__sub">{t.todo.subhead}</p>
 			</div>
-			<div className="iz-todo__list">{children}</div>
+			<div
+				className="iz-todo__list"
+				data-iz-settled={settled ? "true" : undefined}
+			>
+				{children}
+			</div>
 			{loading ? (
 				<p className="iz-todo__checking" aria-live="polite">
 					{t.todo.checking}

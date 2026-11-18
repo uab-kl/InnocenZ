@@ -299,21 +299,32 @@ body:is([data-outlet-design], [data-agency-design]),
 		> :nth-child(n + 8) {
 		animation-delay: calc(var(--iz-motion-step) * 8);
 	}
-	/* "Start here": the one filled button (todo-panel.css:223) rings once, 360ms in,
-	   as the first row lands. 6px fits inside the row's 11px block padding
+	/* "Start here": the one filled button (todo-panel.css:223) rings once, 360ms
+	   after the counts are KNOWN. 6px fits inside the row's 11px block padding
 	   (prototype-theme.css:21727), so the row's overflow:hidden never clips it.
+	   ONLY INSIDE A SETTLED LIST (owner, 18 Nov 2026 — "yes fix the to do panel"):
+	   TodoPanel puts `[data-iz-settled]` on the list the first render nothing is
+	   loading, and never takes it off. While "Checking…" no row rings; rows still
+	   render and rise as their counts land. Keyed to the list mount alone, a row
+	   landing ABOVE one that had already rung became the first child and rang gold
+	   a second time. Now every row present at settle starts its ring together.
 	   EVERY row's button runs the ring, invisible (transparent tone); only the
-	   first row sets a colour. So a row that BECOMES first later — a refetch took
-	   the top row away — changes a colour on a ring that already finished, and
-	   does not ring with nobody having done anything. */
-	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) .iz-todo__list
+	   first row sets a colour — so ONE ring shows, and a row that BECOMES first
+	   later (a refetch took the top row away) changes a colour on a ring that
+	   already finished. A row that MOUNTS after settle rings, gold only if first:
+	   a queue going 0 → n while the page is open is news, as M4 pops a changed
+	   count. Sticky, so a read that refetches on window focus never replays it. */
+	.iz-portal:is(
+			[data-portal="outlet"],
+			[data-portal="agency"]
+		) .iz-todo__list[data-iz-settled]
 		> a.iz-alert
 		.iz-alert__cta {
 		animation: iz-m-ring var(--iz-motion-slow) var(--iz-ease-soft)
 			var(--iz-motion-enter) 1;
 	}
 	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
-		.iz-todo__list
+		.iz-todo__list[data-iz-settled]
 		> a.iz-alert:first-child
 		.iz-alert__cta {
 		--iz-ring-tone: color-mix(in srgb, var(--iz-gold) 55%, transparent);
@@ -654,8 +665,9 @@ body:is([data-outlet-design], [data-agency-design]),
 }
 
 @media screen and (prefers-reduced-motion: no-preference) {
-	/* The ONLY loop: a loading line, unmounted the moment the counts are known
-	   (TodoPanel.tsx:56-60). 4 × md = 1600ms. Border only: the words keep full
+	/* The ONLY loop: a loading line, unmounted the moment the counts — and any
+	   banner reads the page passes TodoPanel as `loading` — are known (TodoPanel's
+	   footer). 4 × md = 1600ms. Border only: the words keep full
 	   contrast at every frame (DESIGN.md §9). */
 	.iz-portal:is([data-portal="outlet"], [data-portal="agency"])
 	.iz-todo__checking {
