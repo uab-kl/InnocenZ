@@ -1,9 +1,11 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import type { AgencySubRole } from "@agency-portal/lib/agency-rbac";
 import {
 	type AgencyPenaltyRules,
 	penaltyRulesFromBackend,
 	penaltyRulesSaveInput,
 } from "@agency-portal/lib/pr-penalties";
+import { useStore } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -12,6 +14,20 @@ import {
 	fetchAgencyPenaltyRules,
 	saveAgencyPenaltyRules,
 } from "@/services/agency-penalty-rules";
+
+/**
+ * The lanes `GET /agency/:id/penalty-rules` admits:
+ * `requireAgencySubRoleScoped('id', 'owner', 'finance')`, with the guarantor
+ * passing wherever the owner does (`holdsAgencyLane`). A LANE gate on the
+ * server, not a module grant, so it is kept in step by hand — the same as
+ * `useAgencyIsOwner`. A lane missing here only hides the rules; a lane wrongly
+ * added here is the 403 this list exists to stop.
+ */
+export const PENALTY_RULES_READ_LANES: readonly AgencySubRole[] = [
+	"agency_owner",
+	"agency_guarantor",
+	"agency_finance",
+];
 
 /**
  * The signed-in agency's attendance & penalty policy, from the backend.
@@ -29,12 +45,19 @@ export function useAgencyPenaltyRules() {
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
 	const agencyId = identity?.agencyId ?? null;
+	const subRole = useStore((s) => s.agencySubRole);
+	const mayRead =
+		subRole !== null && PENALTY_RULES_READ_LANES.includes(subRole);
 
 	const query = useQuery({
 		queryKey: ["agency-penalty-rules", agencyId ?? "none"],
 		queryFn: (): Promise<AgencyPenaltyRulesApiResponse> =>
 			fetchAgencyPenaltyRules(agencyId as string, logout),
-		enabled: backed,
+		// Only for a lane the server will answer. A Director hard-loading Manage PR
+		// mounted this page for a moment before the route guard sent them home,
+		// and that moment was enough to fire the read and log a 403 every time.
+		// A null sub-role (membership still loading) waits rather than guesses.
+		enabled: backed && mayRead,
 		staleTime: 60_000,
 	});
 
