@@ -229,9 +229,10 @@ toast keyframes in `prototype-theme.css`, the To do row lift in `todo-panel.css`
 Approvals row transitions in `agency-approvals-design.css`.
 
 **The rule:** motion follows a user action (a click, a pick, a hover) or a mount (a page, a
-row, a badge appearing) — never a refetch that changes nothing, never a return to the
-window, and nothing plays on its own. The one deliberate exception is M4: a rail count that
-CHANGES is a new badge, and its pop is the news. Each motion
+row) — never a refetch that changes nothing, never a return to the window, and nothing
+plays on its own. The one deliberate exception is M4: a rail count that CHANGES after the
+counts have loaded pops, and its pop is the news; a badge that is merely there when the page
+opens stays still (owner, 18 Nov 2026). Each motion
 answers one of §1's questions; none decorates. Only colour, opacity, translate, scale and
 box-shadow animate — never size or padding — and nothing leaves with motion (unmount is
 instant, so no state waits on an animation). Tabs never move; their gold answers instead.
@@ -251,8 +252,19 @@ colour). No rule types a raw duration or delay; the one loading loop is 4 × `-s
 - **M3 To do** — rows rise in urgency order a step apart; the top row's button rings once.
   Every row runs the ring in a transparent tone and only the first sets a colour, so a row
   that BECOMES first after a refetch does not ring.
-- **M4 counts** — a desktop-rail badge pops when it appears or its number changes; only a
-  red one also rings.
+- **M4 counts** — pop only on CHANGE (owner, 18 Nov 2026: "Pop only on change"). A desktop-rail
+  badge stays still while a page opens or reloads; it pops only when its number changes after
+  every query behind the rail has given its first answer (`PortalNavAlerts` passes that
+  "settled" flag from the queries' own loading flags, never a timer) — a new approval, 0 → 1
+  included. Only a red one also rings. A refetch with the same number, the load's own last
+  count, and a badge shown because a rail group was folded shut all stay still. The badge
+  marks itself `data-iz-pop` for 1200 ms (longer than the 360 ms pop + 700 ms ring — a test
+  enforces it); M4 animates only a marked badge, and the mark comes off so opening a folded
+  section never replays it.
+- **Boot splash** (all three portals, `portal-gate-loading.tsx`) — the logo pulse and the bar
+  loop run only when the reader allows motion, and the bar moves by `transform`, never `left`.
+  Under reduced motion nothing moves: the moving segment is not drawn, leaving the still,
+  empty track and the "getting ready" line — a frozen segment would read as stuck progress.
 - **M5 tabs** — the tab the user just clicked haloes and what it swapped in fades. Keyed on
   `[data-iz-picked]`, which `agency-portal/lib/motion-pick.ts` puts on the strip for 700 ms
   after a CLICK (mouse, tap, or Enter/Space), so nothing plays on page load, on keyboard

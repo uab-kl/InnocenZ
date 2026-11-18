@@ -5,9 +5,10 @@
  * Every motion here answers one of DESIGN.md §1's questions — where am I, what
  * is waiting for me, what did I just pick, what can I click. None decorates.
  * Motion follows a USER ACTION (a click, a pick, a hover) or a MOUNT (a page, a
- * row, a badge appearing) — never a refetch that changes nothing, never a return
- * to the window, and nothing plays on its own. ONE deliberate exception: a rail
- * count that CHANGES is a new badge and pops (M4) — that is the news.
+ * row) — never a refetch that changes nothing, never a return to the window, and
+ * nothing plays on its own. ONE deliberate exception: a rail count that CHANGES
+ * after the counts have loaded pops (M4) — that is the news. A badge appearing
+ * with the page's first load of counts stays still.
  * "What did I pick" (M2 section settle, M5) keys on `[data-iz-picked]`, which
  * lib/motion-pick.ts sets for 700ms after a CLICK. `:focus` was tried and
  * measured: it re-matches when the window regains focus, so every return to
@@ -334,14 +335,20 @@ body:is([data-outlet-design], [data-agency-design]),
 }
 /* iz-m-ring is declared in M3. */
 
-/* DESKTOP RAIL ONLY, for the reason given at M2. */
+/* DESKTOP RAIL ONLY, for the reason given at M2.
+   POP ONLY ON CHANGE (owner, 18 Nov 2026): a badge stays still while a page
+   opens or reloads, and pops only when its number changes after the counts have
+   loaded — a new approval arriving, 0 → 1 included. A hard load used to pop
+   every rail badge as its count arrived. NavAlertBadge decides it
+   (useNavAlertPop) and stamps `[data-iz-pop]` for NAV_ALERT_POP_MS (1200ms,
+   longer than the 1060ms below); a refetch with the same number never sets it. */
 @media screen and (prefers-reduced-motion: no-preference) {
 	/* `scale`, not `transform`: it composes with the collapsed rail's positioned dot. */
 	.iz-portal:is(
 			[data-portal="outlet"],
 			[data-portal="agency"]
 		) > .iz-portal-sidebar
-		.iz-nav-alert {
+		.iz-nav-alert[data-iz-pop] {
 		animation: iz-m-pop var(--iz-motion-enter) var(--iz-ease-settle) backwards;
 	}
 	/* Red = disputed (the owner's colour code): ONLY it also rings, once, after
@@ -350,7 +357,7 @@ body:is([data-outlet-design], [data-agency-design]),
 			[data-portal="outlet"],
 			[data-portal="agency"]
 		) > .iz-portal-sidebar
-		.iz-nav-alert[data-tone="red"] {
+		.iz-nav-alert[data-iz-pop][data-tone="red"] {
 		--iz-ring-tone: color-mix(in srgb, var(--iz-red) 60%, transparent);
 		--iz-ring-size: 6px;
 		animation:

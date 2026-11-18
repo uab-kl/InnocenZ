@@ -70,9 +70,17 @@ function PortalGateLoadingBody({
 			)}
 
 			<div className="relative z-10 flex w-full max-w-[18rem] flex-col items-center">
+				{/*
+				  Both loops run ONLY when the reader allows motion (`motion-safe:`).
+				  Under reduced motion the logo rests, and the bar's moving segment is
+				  not drawn at all (`motion-reduce:hidden`): the still, empty track
+				  and the "getting ready" line say it is loading. A segment frozen
+				  mid-track would read as progress stuck at 40%, and a full one as
+				  "done" — an empty track claims no amount either way.
+				*/}
 				<div
 					className={cn(
-						"mb-1 animate-[iz-boot-pulse_2.2s_ease-in-out_infinite]",
+						"mb-1 motion-safe:animate-[iz-boot-pulse_2.2s_ease-in-out_infinite]",
 						isPortal && "drop-shadow-[0_0_28px_rgba(183,156,232,0.25)]",
 					)}
 				>
@@ -111,7 +119,7 @@ function PortalGateLoadingBody({
 					>
 						<span
 							className={cn(
-								"absolute inset-y-0 w-2/5 rounded-full animate-[iz-boot-bar_1.6s_ease-in-out_infinite]",
+								"absolute inset-y-0 left-0 w-2/5 rounded-full motion-safe:animate-[iz-boot-bar_1.6s_ease-in-out_infinite] motion-reduce:hidden",
 								isPortal ? "bg-[#b79ce8]" : "bg-primary",
 							)}
 						/>
@@ -124,9 +132,13 @@ function PortalGateLoadingBody({
 					0%, 100% { transform: scale(1); opacity: 1; }
 					50% { transform: scale(1.03); opacity: 0.92; }
 				}
+				/* A transform, not left, so the loop never lays the page out again.
+				   Same path as the old left: -40% → 100% of the track: translateX
+				   percentages are of the SEGMENT (2/5 of the track), so -100% of it
+				   is -40% of the track and 250% of it is 100%. */
 				@keyframes iz-boot-bar {
-					0% { left: -40%; }
-					100% { left: 100%; }
+					0% { transform: translateX(-100%); }
+					100% { transform: translateX(250%); }
 				}
 			`}</style>
 		</output>

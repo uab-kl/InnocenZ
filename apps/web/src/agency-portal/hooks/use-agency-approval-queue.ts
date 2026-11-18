@@ -50,6 +50,13 @@ export interface AgencyApprovalQueue {
 	/** Everything the Approvals page's tabs add up to. */
 	total: number;
 	isLoading: boolean;
+	/**
+	 * True until EVERY query behind `total` has given its first answer.
+	 * `isLoading` covers only the cutlost and MC/leave reads; sign-ups, venue
+	 * links and team members can land after it. The rail badges wait on this,
+	 * so the last of those arriving is not mistaken for a new approval.
+	 */
+	totalIsLoading: boolean;
 	/** Only the MC/leave query — the Approvals page shows its own loading line. */
 	leaveIsLoading: boolean;
 	/** Sign-up approve / reject / invite, for the review surface. */
@@ -200,6 +207,13 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 			outletLinks.links.length +
 			pendingMembers,
 		isLoading: liveCutlost.isLoading || leaveQuery.isLoading,
+		totalIsLoading: Boolean(
+			liveCutlost.isLoading ||
+				leaveQuery.isLoading ||
+				backend.isLoading ||
+				outletLinks.isLoading ||
+				memberRows.isLoading,
+		),
 		leaveIsLoading: leaveQuery.isLoading,
 		leaveHistoryIsLoading: leaveHistoryQuery.isLoading,
 		backend,

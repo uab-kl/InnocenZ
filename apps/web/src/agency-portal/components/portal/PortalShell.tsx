@@ -291,7 +291,9 @@ function PortalSidebarLink({
 		>
 			<item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
 			<span>{item.label}</span>
-			{alert && <NavAlertBadge count={alert.count} tone={alert.tone} />}
+			{/* Mounted at 0 too (it draws nothing there), so it remembers it was
+			    0 and a first arrival pops — see `useNavAlertPop`. */}
+			<NavAlertBadge count={alert?.count ?? 0} tone={alert?.tone ?? "amber"} />
 		</Link>
 	);
 }
@@ -410,10 +412,14 @@ function PortalSidebar({
 										>
 											<span>{labels[section]}</span>
 											<span className="iz-outlet-nav-heading__end">
-												{closedAlert && (
+												{/* Mounted for as long as the group is CLOSED, at
+												    0 too: folding a group shows its total without a
+												    pop (nothing changed), and a count that changes
+												    while it stays folded pops. */}
+												{!sections[section] && (
 													<NavAlertBadge
-														count={closedAlert.count}
-														tone={closedAlert.tone}
+														count={closedAlert?.count ?? 0}
+														tone={closedAlert?.tone ?? "amber"}
 													/>
 												)}
 												<ChevronDown aria-hidden className="h-4 w-4" />

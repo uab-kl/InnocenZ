@@ -1,5 +1,6 @@
 import {
 	NavAlertContext,
+	NavAlertSettledContext,
 	PortalTodoCountsContext,
 } from "@agency-portal/components/portal/NavAlertBadge";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
@@ -108,11 +109,19 @@ function AgencyNavAlerts({ children }: { children: ReactNode }) {
 		[todoLoading, approvals.total, pvs, disputes, receipts, overtime.length],
 	);
 
+	// The badges wait for EVERY query behind them: the flag above, plus the
+	// approval terms it does not cover (sign-ups, venue links, team members).
+	// Until then a number arriving is the page loading, not news — see
+	// `NavAlertSettledContext`.
+	const badgesSettled = !(todoLoading || approvals.totalIsLoading);
+
 	return (
 		<NavAlertContext.Provider value={alerts}>
-			<PortalTodoCountsContext.Provider value={todo}>
-				{children}
-			</PortalTodoCountsContext.Provider>
+			<NavAlertSettledContext.Provider value={badgesSettled}>
+				<PortalTodoCountsContext.Provider value={todo}>
+					{children}
+				</PortalTodoCountsContext.Provider>
+			</NavAlertSettledContext.Provider>
 		</NavAlertContext.Provider>
 	);
 }
@@ -170,11 +179,15 @@ function OutletNavAlerts({ children }: { children: ReactNode }) {
 		[todoLoading, today.shifts, pendingMembers],
 	);
 
+	// The same three reads feed every outlet badge, so their flag is the
+	// badges' too.
 	return (
 		<NavAlertContext.Provider value={alerts}>
-			<PortalTodoCountsContext.Provider value={todo}>
-				{children}
-			</PortalTodoCountsContext.Provider>
+			<NavAlertSettledContext.Provider value={!todoLoading}>
+				<PortalTodoCountsContext.Provider value={todo}>
+					{children}
+				</PortalTodoCountsContext.Provider>
+			</NavAlertSettledContext.Provider>
 		</NavAlertContext.Provider>
 	);
 }
