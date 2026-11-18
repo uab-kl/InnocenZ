@@ -89,7 +89,9 @@ export function CutlostDetailPanel({
 								if (!busy) onApprove();
 							}}
 						>
-							{busy && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
+							{busy && (
+								<Loader2 className="mr-1 inline h-3 w-3 motion-safe:animate-spin" />
+							)}
 							{t.common.approve}
 						</button>
 						<button

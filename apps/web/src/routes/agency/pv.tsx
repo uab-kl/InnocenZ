@@ -2030,20 +2030,17 @@ function AgencyPV() {
 										: t.payroll.bulkSelectAll}
 								</button>
 								{/*
-								 * Champagne = ACT, the owner's colour rule. Same gradient and
-								 * ink as `.iz-btn-primary`, at chip size.
-								 *
-								 * ⚠️ `bg-[image:…]`, not `bg-[…]`. `--iz-grad-accent` holds a
-								 * `linear-gradient()`, and the plain form compiles to
-								 * `background-color`, where a gradient is an invalid value and
-								 * is dropped without a word — leaving this button on the chip's
-								 * default glass with `#241a08` ink on top of it, i.e. near-black
-								 * text on a near-black pill. The `image:` hint puts it in
-								 * `background-image`, which is the slot a gradient belongs in.
+								 * The ACT colour, the owner's colour rule, at chip size: the
+								 * approved design's `.iz-btn-primary` / `.iz-btn-gold`
+								 * (approved-portal-design.css:236-245), flat violet with white
+								 * ink. It forced the prototype's champagne gradient, which the
+								 * approved palette retired from every other act button.
+								 * `!` because `.iz-chip`'s own glass, line and muted ink are
+								 * un-layered CSS, which beats a plain (layered) utility.
 								 */}
 								<button
 									type="button"
-									className="iz-chip ml-auto !border-[rgba(201,155,78,.45)] !bg-[image:var(--iz-grad-accent)] font-bold !text-[#241a08] disabled:opacity-40"
+									className="iz-chip ml-auto !border-[#9274ad] !bg-[#68517f] font-bold !text-white enabled:hover:!bg-[#795f93] disabled:!cursor-default disabled:opacity-40"
 									disabled={selectedIds.length === 0 || bulkBusy}
 									onClick={() => {
 										if (bulkMode === "pay" && !bulkConfirmArmed) {

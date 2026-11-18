@@ -304,8 +304,8 @@
 	min-width: 0;
 	background: var(--iz-card, #241f30);
 	transition:
-		border-color 0.18s ease,
-		transform 0.18s ease;
+		border-color var(--iz-motion-fast, 160ms) var(--iz-ease-soft, ease),
+		transform var(--iz-motion-fast, 160ms) var(--iz-ease-settle, ease);
 }
 /*
  * THE PICTURE IS THE BUTTON (owner, 17 Nov 2026 — "user dont know this can
@@ -323,13 +323,22 @@
 .outlet-post-job-design
 .iz-event-card:has(.iz-event-card__pick:not(:disabled):hover) {
 	border-color: var(--iz-violet);
-	transform: translateY(-2px);
 }
 .outlet-post-job-design
 	.iz-event-card__pick:not(:disabled)
 	.iz-event-card__name::after {
 	content: " →" / "";
 	color: var(--iz-violet);
+}
+/* The lift is for a real pointer only, as M7 (portal-motion.css): a tap must
+   never leave a card raised. The violet border and the name's " →" still
+   answer every pointer. The reduced-motion block below has the same weight and
+   comes later, so it still wins. */
+@media (hover: hover) and (pointer: fine) {
+	.outlet-post-job-design
+		.iz-event-card:has(.iz-event-card__pick:not(:disabled):hover) {
+		transform: translateY(-2px);
+	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.outlet-post-job-design .iz-event-card {

@@ -26,6 +26,7 @@ import type {
 } from "@agency-portal/lib/agency-demo";
 import { resolveOutletShiftDateIso } from "@agency-portal/lib/agency-outlet-shifts";
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import {
 	formatOutletShiftMetricAmount,
 	formatShiftEventTypeSummary,
@@ -400,7 +401,7 @@ export function OutletShiftDetailPanel({
 		);
 		document
 			.getElementById(cutlostSectionId)
-			?.scrollIntoView({ behavior: "smooth", block: "start" });
+			?.scrollIntoView({ behavior: portalScrollBehavior(), block: "start" });
 	};
 
 	const summary = (
@@ -412,7 +413,10 @@ export function OutletShiftDetailPanel({
 				onClick={() => {
 					document
 						.getElementById(OUTLET_PR_TONIGHT_SECTION_ID)
-						?.scrollIntoView({ behavior: "smooth", block: "start" });
+						?.scrollIntoView({
+							behavior: portalScrollBehavior(),
+							block: "start",
+						});
 				}}
 			/>
 			<OutletTargetActualCard

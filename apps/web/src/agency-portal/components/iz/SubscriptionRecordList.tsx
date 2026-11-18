@@ -547,7 +547,7 @@ function PeriodCard({
 									{isPaid && (
 										<button
 											type="button"
-											className="iz-tiny iz-muted shrink-0 underline decoration-[var(--iz-line2)] underline-offset-2 hover:decoration-[var(--iz-gold)] focus-visible:decoration-[var(--iz-gold)]"
+											className="iz-sub-invoice-link iz-tiny iz-muted shrink-0 underline decoration-[var(--iz-line2)] underline-offset-2 hover:decoration-[var(--iz-gold)] focus-visible:decoration-[var(--iz-gold)]"
 											onClick={() =>
 												setReceiptFor(
 													receiptFor === invoice.id ? null : invoice.id,

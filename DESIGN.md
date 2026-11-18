@@ -251,23 +251,42 @@ plays on its own. The one deliberate exception is M4: a rail count that CHANGES 
 counts have loaded pops, and its pop is the news; a badge that is merely there when the page
 opens stays still (owner, 18 Nov 2026). Each motion
 answers one of §1's questions; none decorates. Only colour, opacity, translate, scale and
-box-shadow animate — never size or padding — and nothing leaves with motion (unmount is
-instant, so no state waits on an animation). Tabs never move; their gold answers instead.
+box-shadow animate, plus one rotate: a disclosure chevron turning as its section opens
+(150-200 ms, the band Linear and Cal use for icon transforms). Size, padding, font weight,
+filters and gradients never animate. Tabs never move; their gold answers instead. Three
+"nothing" rules keep it from reading as a generated site (owner, 18 Nov 2026 — "less look
+like AI website"):
+- **Nothing overshoots.** Every curve decelerates and no keyframe passes its resting value;
+  of 56 curves extracted from the six reference sites, none overshoots.
+- **Nothing staggers.** No entrance waits for its place in a list: tiles and rows that mount
+  together arrive together. A row-by-row cascade kept each later item invisible while it
+  waited, which reads as still loading.
+- **Nothing leaves with motion.** Unmount is instant, so no state waits on an animation —
+  including the portal's Radix dialogs and popovers, which open with their fade and zoom only
+  when motion is allowed and close at once.
+
+Colour fades are not movement: a hover tint, an underline turning lavender, or a status
+colour that changed because the status did fades at `-fast`, under reduced motion too.
 
 **Tokens** — Linear's extracted 100 / 160 / 400 / 700 ms plus two named in-betweens:
 `--iz-motion-press` 100 · `-fast` 160 · `-base` 240 (fades) · `-enter` 360 (travel) ·
-`-slow` 400 · `-ring` 700 (one-shot rings only) · `-step` 45 ms (stagger) · `-rise` 10px.
-Eases `--iz-ease-out` (arriving), `--iz-ease-settle` (settling), `--iz-ease-soft` (fades,
-colour). No rule types a raw duration or delay; the one loading loop is 4 × `-slow`.
+`-slow` 400 · `-ring` 700 (one-shot rings only) · `-step` 45 ms (the rail bar's lead-in;
+never a stagger) · `-rise` 10px. Eases `--iz-ease-out` (arriving), `--iz-ease-settle`
+(settling), `--iz-ease-soft` (fades, colour). No rule types a raw duration or delay; the one
+loading loop is 4 × `-slow`. Neither in-between is invented: 240 is Stripe's own opacity
+fade and 360 is Wise's and Cal's 0.35 s. On a work page travel is 8-10px — the reference
+products move 5-6px; only their homepages travel 24px or more.
 
 **What moves (M1-M9):**
 - **M1 page arrives** — the page root fades (opacity only: it holds the fixed Post Job
-  dock), its header rises 10px, and its first figures row (Today KPIs, Payroll metrics,
-  Roster stats, Calendar stats) rises 8px a step apart, at most 4 steps.
+  dock) and its header rises 10px. Its figures (Today KPIs, Payroll metrics, Roster stats,
+  Calendar stats) arrive with it, in the same fade — one arrival per navigation.
 - **M2 you are here** — the desktop rail's current item flashes gold and its bar draws; a
   section the user opens settles in; on a phone the page name in the trail settles instead.
-- **M3 To do** — rows rise in urgency order a step apart as each count lands; the top row's
-  button rings once, and only after every count behind the panel is known (owner, 18 Nov
+- **M3 To do** — each row rises as it mounts, and rows that mount together rise together (no
+  stagger; urgency is the order on the page, not a cascade). The top row's button rings
+  once, 360 ms after the counts are known — when its row has finished rising — and only
+  after every count behind the panel is known (owner, 18 Nov
   2026 — "yes fix the to do panel"). TodoPanel marks the list `data-iz-settled` the first
   render nothing is loading and never takes it off; M3 rings only inside a settled list.
   Every row present then starts its ring together in a transparent tone and only the first
@@ -279,7 +298,9 @@ colour). No rule types a raw duration or delay; the one loading loop is 4 × `-s
   banners' reads (agency links, prices, the statement check), passed as TodoPanel `loading`.
   If the first item is a strip rather than a link row, no ring plays — as at rest, where only
   a link row carries the filled button.
-- **M4 counts** — pop only on CHANGE (owner, 18 Nov 2026: "Pop only on change"). A desktop-rail
+- **M4 counts** — a badge grows in from 0.9 and fades (360 ms, no overshoot — the old
+  0.88 → 1.03 → 1 "pop" was the extractor's template keyframe, not Linear's). It does this
+  only on CHANGE (owner, 18 Nov 2026: "Pop only on change"). A desktop-rail
   badge stays still while a page opens or reloads; it pops only when its number changes after
   every query behind the rail has given its first answer (`PortalNavAlerts` passes that
   "settled" flag from the queries' own loading flags, never a timer) — a new approval, 0 → 1
@@ -292,27 +313,60 @@ colour). No rule types a raw duration or delay; the one loading loop is 4 × `-s
   loop run only when the reader allows motion, and the bar moves by `transform`, never `left`.
   Under reduced motion nothing moves: the moving segment is not drawn, leaving the still,
   empty track and the "getting ready" line — a frozen segment would read as stuck progress.
-- **M5 tabs** — the tab the user just clicked haloes and what it swapped in fades. Keyed on
+- **M5 tabs** — the tab the user just clicked brightens and settles (an inset wash on its
+  gold, no outer halo: Linear's "selected = surface lift"), and what it swapped in fades. Keyed on
   `[data-iz-picked]`, which `agency-portal/lib/motion-pick.ts` puts on the strip for 700 ms
   after a CLICK (mouse, tap, or Enter/Space), so nothing plays on page load, on keyboard
   travel, or when the user comes back to the window. ⚠️ Never key it on `:focus` — that was
   measured: `:focus` re-matches when the window regains focus and replayed the fade over
   the voucher list at the same moment react-query refetched, which reads as "it reloaded".
   The M2 section settle uses the same mark.
-- **M6 Approvals** — queue rows settle a step apart, a picked row's edge slides in, the
-  detail head rises on each new pick.
+- **M6 Approvals** — a queue settles in one beat, every row together; a picked row's edge
+  slides in; the detail head rises on each new pick.
 - **M7 clickable** — To do rows, linked KPI tiles and outlet cards lift 2px for a real
-  pointer; the To do arrow slides toward where it goes.
-- **M8 overlays** — the phone menu slides in its full width; scrims fade.
-- **M9 loading** — the To do "Checking…" border breathes. The only loop.
+  pointer. The To do arrow and the linked KPI tiles' arrow slide 4px toward where they go,
+  on hover with a real pointer and on keyboard focus. A PR's photo in a table answers with a
+  lavender hairline — it never grows or glows, because a figure that hops in a table reads
+  as noise. The Post Job event card and the outlet comcard button lift only for a real
+  pointer, so a tap never leaves a card raised. Underlined figures and links (roster amounts,
+  the shift detail's Workspace links, a paid invoice number) fade their underline with their
+  text at `-fast`; keyboard focus answers at once, like the ring. Manage PR cards lift
+  without a shadow — surfaces step up, they do not cast shadows (§3). A row that opens
+  nothing (the Roster check-in rows with no position, or not yet arrived) has no pointer
+  and no hover; a disabled act chip has no pointer either.
+- **M8 overlays** — the phone menu slides in its full width; scrims fade. A centred dialog
+  fades and grows 0.97 → 1 in place in 240 ms, never travelling (it used to slide 16-42px);
+  the phone bottom sheet still rises from its edge. A popover never animates on close.
+- **M9 loading** — the To do "Checking…" border breathes. Loops are for loading only: this
+  border, plus a spinner while a request is in flight (a cut-loss approve, the member list
+  loading, an avatar upload), which spins only when motion is allowed and otherwise stands
+  still beside its words. No status, badge or waiting state ever loops — the Subscription
+  "requested with admin" dot is still, because its amber panel and words already say it is
+  waiting.
+- **Charts** — draw at once. The outlet Reports bars do not grow from zero and their tooltip
+  does not glide (recharts' animation is off), so a week change never reads as a reload.
+- **Scrolls the portal does for you** — a deep-linked receipt, a Workspace #section, the
+  shift detail's jumps to Live sales, Labour cost and Top PRs glide only when motion is
+  allowed and land at once under reduced motion (`agency-portal/lib/motion-scroll.ts`), as
+  Back to top already did.
 - **Confirmation bar** — drops 10px into place in 160 ms (`iz-m-drop`), replacing the legacy
   0.4 s pop, so exactly one arrival plays; nothing on leaving.
 
-**Guards:** every motion sits inside `@media screen and (prefers-reduced-motion:
-no-preference)`, so reduced motion and print never see it; under reduced motion the legacy
-page, sheet and toast animations are switched off too; `@media print` stops every animation
-and transition in both portals. The two legacy loops that are not loading (the profile edit
-dot, the report range pulse) stop after three beats.
+**Guards:** every new animation sits inside `@media screen and (prefers-reduced-motion:
+no-preference)`. Under reduced motion, G in `portal-motion.css` also:
+- narrows every transition in both portals to colour and opacity, so a legacy chevron turn,
+  a lift or a switch knob simply lands;
+- keeps the shared actions' hover lift and press still for agency and outlet (admin keeps
+  `portal-interaction.css`'s own behaviour);
+- switches off the Radix popover arrival and the legacy page, sheet and toast animations.
+
+`@media print` stops every animation and transition in both portals. The two legacy loops
+that are not loading (the profile edit dot, the report range pulse) stop after three beats;
+neither renders today, and the cap stays for when they return.
+`agency-portal/lib/portal-motion-guards.test.ts` enforces the rules above — no overshoot, no
+stagger (in every agency/outlet stylesheet and in the markup), one loop, no halo, spinners
+behind `motion-safe:`, no exit animations, the dialog that never travels, the rows that open
+nothing, no glowing gradient act button — and every check first fails on a planted breach.
 
 **Measuring:** entrances use `backwards` fill, and a hidden Browser pane produces no frames,
 so an element mid-entrance there reads opacity 0 for as long as the pane stays hidden. Force
@@ -337,6 +391,14 @@ References in [`docs/design/reference/`](docs/design/reference/README.md):
   done things quieter below.
 - **Not borrowed:** their fonts, sizes, letter-spacing, colours, Stripe's gradient mesh,
   pill buttons, Linear's near-black canvas.
+- **From six motion extracts** (Linear, Stripe, Mercury, Wise, Superhuman, Cal — each the
+  public homepage, so none shows a logged-in product): durations by purpose (press 60-100
+  ms, hover colour 100-200, icon transforms 150-200, fades 200-400); decelerating curves only
+  (ours are Linear's three); colour as the hover answer; small travel.
+- **Not borrowed (motion):** homepage loops, marquees, shimmer and gradient sweeps; blinking
+  carets and scroll-triggered reveals; blur-ins, springs and overshoot; staggered cascades;
+  cards that grow or glow under the pointer; exit animations (Linear, Mercury and Cal
+  animate things leaving; the portals do not).
 
 ## 11. Checking a design change
 

@@ -24,6 +24,7 @@ import {
 	getPayrollWeekSundayIso,
 	getPreviousWeekSundayIso,
 } from "@agency-portal/lib/demo-clock";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import { averageDrinkPrice } from "@agency-portal/lib/outlet-demo";
 import {
 	defaultCustomReportDateIsos,
@@ -682,7 +683,10 @@ export function OutletSalesDashboard() {
 
 	const scrollToTopPrs = () => {
 		requestAnimationFrame(() => {
-			topPrsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+			topPrsRef.current?.scrollIntoView({
+				behavior: portalScrollBehavior(),
+				block: "start",
+			});
 		});
 	};
 
@@ -1011,12 +1015,14 @@ export function OutletSalesDashboard() {
 									<ChartTooltip
 										cursor={{ fill: "rgba(217, 185, 122, 0.08)" }}
 										content={<EarningsTooltip />}
+										isAnimationActive={false}
 									/>
 									<Bar
 										dataKey="earned"
 										fill="var(--iz-gold)"
 										radius={[6, 6, 0, 0]}
 										maxBarSize={40}
+										isAnimationActive={false}
 									>
 										{/* The figure over each bar opens nothing, so it is ink, not
 										    the lavender kept for links; the bar keeps its colour.

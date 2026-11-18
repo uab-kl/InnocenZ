@@ -201,7 +201,7 @@ function RuleRow({
 				>
 					<span
 						className={cn(
-							"absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all",
+							"absolute top-0.5 h-5 w-5 rounded-full bg-white",
 							enabled ? "right-0.5" : "left-0.5",
 						)}
 					/>

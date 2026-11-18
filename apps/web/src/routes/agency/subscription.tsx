@@ -718,7 +718,6 @@ function AgencySubscription() {
 												 */
 												<div className="flex items-center gap-2 rounded-lg border border-[rgba(244,183,64,.28)] bg-[var(--iz-amber-bg,rgba(244,183,64,.12))] px-2.5 py-2">
 													<span className="relative flex h-2 w-2 shrink-0">
-														<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--iz-amber,#f4b740)] opacity-60" />
 														<span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--iz-amber,#f4b740)]" />
 													</span>
 													<div className="min-w-0">
