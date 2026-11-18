@@ -97,6 +97,25 @@ html body:is([data-agency-design], [data-outlet-design])
 	:where(:not(.iz-nav-alert):not(.iz-nav-alert *)) {
 	color: inherit;
 }
+/*
+ * ⚠️ A COUNT CHIP THAT PAINTS ITS OWN FILL cannot take the dark ink above
+ * (owner, 18 Nov 2026 — screenshot of the Approvals "PR" tab, "fix").
+ *
+ * The rule above hands every inner element the selected tab's dark ink, but
+ * the Approvals group count keeps its own dark pill (`--iz-panel2`), so the
+ * selected group's number rendered #1a1726 on #292433 — measured 1.17:1, an
+ * invisible "0". The pill now IS the ink and the digit takes the gold's light
+ * stop: 14.2:1, and it still reads as a dark chip on the gold tab, the way it
+ * did before. List any future count chip with its own fill here.
+ */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approvals-groups
+	> button:is(.on, [aria-selected="true"])
+	.iz-approvals-group__count {
+	background: var(--iz-tab-selected-ink);
+	color: #f7e6b0;
+}
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */
 html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
