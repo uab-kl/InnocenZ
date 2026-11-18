@@ -4157,26 +4157,29 @@
 .iz-pv-summary-hero {
 	padding: 16px 16px 14px;
 	border-bottom: 1px solid var(--iz-line);
-	background: linear-gradient(
-		135deg,
-		rgba(232, 194, 122, 0.12),
-		rgba(232, 194, 122, 0.02)
-	);
+	/* Flat panel-2 step, not a gold gradient (DESIGN.md §2 bans gradients in
+	   the consoles; §3: surfaces step up). Same size, same padding. */
+	background: var(--iz-panel2);
 }
 .iz-pv-summary-hero-lbl {
 	font-size: var(--iz-fs-label);
-	font-weight: 800;
+	font-weight: 600;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-title);
 }
+/* The Net payable hero opens nothing, so it is ink, not the link lavender
+   (DESIGN.md §3), at 600 on the page-title step (§4: no 800, sizes from the
+   ladder) with tabular figures, the same as the footer Net payable below it. */
 .iz-pv-summary-hero-amt {
 	margin-top: 4px;
 	font-family: var(--iz-font);
-	font-size: 28px;
-	font-weight: 800;
+	font-size: var(--iz-fs-head);
+	font-weight: 600;
 	line-height: 1.1;
-	color: var(--iz-gold);
+	color: var(--iz-txt);
+	font-variant-numeric: tabular-nums;
+	font-feature-settings: "tnum";
 }
 .iz-pv-summary-details {
 	border: none;
@@ -4207,6 +4210,8 @@
 .iz-pv-summary-hero-amt--compact {
 	margin-top: 0;
 	font-size: 22px;
+	/* Sits inside the <summary> that opens the details, so it keeps lavender. */
+	color: var(--iz-gold);
 }
 .iz-pv-summary-details-chevron {
 	color: var(--iz-muted);
@@ -4272,6 +4277,16 @@
 	background: rgba(0, 0, 0, 0.15);
 	overflow: hidden;
 	margin-bottom: 12px;
+}
+/* The breakdown table's Amount column (PvSummaryView, in Payroll & PV and in
+   History's paid voucher): right-aligned, tabular figures, the header with its
+   column — the same money-column rule as `.iz-approved-voucher-table .iz-money`.
+   `text-right` alone never applied here: `.iz-data-table th, .iz-data-table td
+   { text-align: left }` is un-layered and beats Tailwind's layered utility.
+   (0,2,0) outranks that (0,1,1); scoped to this card so no other table moves. */
+.iz-pv-summary-table-card .iz-money {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
 }
 .iz-pv-summary-table-h {
 	padding: 12px 16px 10px;
@@ -11443,22 +11458,37 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	gap: 8px;
 }
+/* Below 768px the portal grows with the page and the WINDOW scrolls, so the
+   absolute stack was pinned to the top of the DOCUMENT: a confirmation fired
+   after scrolling down was drawn above the visible area and never seen. Fixed
+   keeps it in the viewport at the same 62px top and 18px gutters. From 768px the
+   portal is 100dvh with overflow hidden (approved-portal-design.css), so
+   absolute already stays in view there. Same cause as the rail toggle's fix in
+   agency-app-overrides.css. */
+@media (max-width: 767px) {
+	.iz-toast-stack {
+		position: fixed;
+	}
+}
+/* The confirmation bar is FLAT, on the tokens: one surface step above the
+   cards it floats over (panel-2 over panel, DESIGN.md §3), the strong hairline,
+   ONE floating shadow (the old stack's own drop layer), the 13px panel corner,
+   and ink on the 16px step at text weight. The near-black rgba fill, the
+   backdrop blur and the inset + lavender rings are gone: §2 bans glass in the
+   consoles. The 0.4s iz-pop below is legacy; portal-motion.css M8 replaces it
+   in both portals, and its G guard switches it off under reduced motion. */
 .iz-toast {
 	pointer-events: auto;
-	background: rgba(15, 9, 26, 0.97);
+	background: var(--iz-panel2);
 	border: 1px solid var(--iz-line2);
-	border-radius: 15px;
+	border-radius: 13px;
 	padding: 13px 15px;
 	display: flex;
 	gap: 10px;
 	align-items: center;
-	font-size: 14px;
-	font-weight: 600;
-	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.05),
-		0 20px 50px -10px rgba(0, 0, 0, 0.8),
-		0 0 0 1px rgba(183, 156, 232, 0.08);
-	backdrop-filter: blur(12px);
+	font-size: var(--iz-fs-body);
+	font-weight: 400;
+	box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8);
 	animation: iz-pop 0.4s cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 @keyframes iz-pop {
@@ -11471,17 +11501,41 @@ button.iz-pr-offer-row:hover {
 		transform: none;
 	}
 }
+/* The icon tile is flat, in the status code (CLAUDE.md): info lavender, which
+   is also what an omitted tone shows (Toasts.tsx gives it the Info icon);
+   success the settled green; warn the DISPUTED red, never amber, because the
+   code sends 'warn' for failures (couldNotRecordDecision, approveAllFailed,
+   couldNotVoid, …) and amber would report a failure as "waiting".
+   Toasts.tsx puts the tone on [data-tone]. */
 .iz-toast-ic {
 	width: 32px;
 	height: 32px;
 	border-radius: 10px;
-	background: var(--iz-grad);
+	background: var(--iz-violet-ink);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	flex-shrink: 0;
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
-	color: #fff;
+	color: var(--iz-violet);
+}
+.iz-toast[data-tone="success"] .iz-toast-ic {
+	background: var(--iz-green-bg);
+	color: var(--iz-green);
+}
+.iz-toast[data-tone="warn"] .iz-toast-ic {
+	background: var(--iz-red-bg);
+	color: var(--iz-red);
+}
+/* Dismiss: a 46px hit area (DESIGN.md §6). The negative margins pull it into
+   the bar's own padding, so the bar keeps the height its 32px tile gives it. */
+.iz-toast-x {
+	display: inline-grid;
+	place-items: center;
+	flex-shrink: 0;
+	min-width: 46px;
+	min-height: 46px;
+	margin: -7px -10px -7px 0;
+	border-radius: 8px;
 }
 
 /* Field */
@@ -12472,8 +12526,11 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 	font-variant-numeric: tabular-nums;
 }
+/* Est. payout / labour cost: a figure that opens nothing, so it is ink like its
+   neighbours — champagne gold here read as a third gold beside the selected tab
+   and the link lavender. The clickable amounts (RosterAmountButton) keep theirs. */
 .iz-roster-stat b.money {
-	color: var(--iz-accent-l);
+	color: var(--iz-txt);
 }
 .iz-roster-stat b.warn {
 	color: var(--iz-amber);
@@ -17059,21 +17116,56 @@ button.iz-pr-offer-row:hover {
 	text-align: inherit;
 	cursor: pointer;
 	border-radius: 6px;
+	/* Underlined at rest (DESIGN.md §11.3a): border 0, no fill and the row's own
+	   ink made it read as plain text. The line is a hairline grey, never lavender
+	   at rest; only the <button> carries it, so a cell printed without a sheet to
+	   open stays plain. Its focus ring is the shared one in portal-interaction.css. */
+	text-decoration-line: underline;
+	text-decoration-color: var(--iz-line2);
+	text-underline-offset: 3px;
 	transition:
 		color 0.15s ease,
-		background 0.15s ease;
+		background 0.15s ease,
+		text-decoration-color 0.15s ease;
 }
 
 .iz-roster-amount-btn:hover,
 .iz-roster-amount-btn:focus-visible {
 	color: var(--iz-gold-l);
 	background: rgba(201, 155, 78, 0.08);
-	outline: none;
+	text-decoration-color: var(--iz-gold);
 }
 
 .iz-roster-amount-btn--gold {
 	color: var(--iz-gold-l);
 	font-weight: 600;
+}
+
+/* An inline link inside a sentence (the outlet shift detail's Workspace price
+   links): muted ink with a hairline-grey underline at rest, never lavender at
+   rest; on hover or focus the text steps up to ink and the line turns lavender,
+   the same answer as .iz-roster-amount-btn above. Scoped under .iz-portal so it
+   outranks the global `main a:not(.iz-btn-solid), .prose a, p a` rule in
+   styles.css (0,1,2), which otherwise paints these links --gold-light with a raw
+   champagne underline.
+   ⚠️ `.iz-sheet` too: the Outlet > Calendar shift detail opens in an IzSheet
+   that is portalled to <body>, OUTSIDE .iz-portal, where a `.iz-portal`-only
+   rule never matched and the links stayed lavender with no underline. The
+   :is() keeps the same weight, (0,2,1). */
+:is(.iz-portal, .iz-sheet) a.iz-inline-link {
+	color: var(--iz-muted);
+	text-decoration-line: underline;
+	text-decoration-color: var(--iz-line2);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+	transition:
+		color 0.15s ease,
+		text-decoration-color 0.15s ease;
+}
+:is(.iz-portal, .iz-sheet) a.iz-inline-link:hover,
+:is(.iz-portal, .iz-sheet) a.iz-inline-link:focus-visible {
+	color: var(--iz-txt);
+	text-decoration-color: var(--iz-gold);
 }
 
 .iz-roster-row--swap {
@@ -21768,7 +21860,8 @@ a.iz-alert:hover {
 	color: var(--iz-alert-tone);
 }
 .iz-alert__title {
-	font-weight: 800;
+	/* 600, the title weight (DESIGN.md §4: no 800). */
+	font-weight: 600;
 	line-height: 1.3;
 	color: var(--iz-alert-tone);
 	white-space: nowrap;
@@ -21833,6 +21926,30 @@ a.iz-alert:hover .iz-alert__cta,
 .iz-alert__cta:hover {
 	border-color: var(--iz-alert-tone);
 	color: var(--iz-alert-tone);
+}
+/* A NOTICE, NOT A DOOR — the voucher detail's "why you cannot act yet" lines
+   (routes/agency/pv.tsx). Same frame and tone as the strips above, but rendered
+   as a <div> with no `__cta` and no arrow, and every hover, lift and ring rule
+   (here, todo-panel.css, portal-motion.css M3/M7) targets `a.iz-alert`, so it
+   never answers the pointer like the To do rows do. Its sentence WRAPS: the
+   strips' one-line title would push a long reason off a phone. The icon sits
+   on the first line, and a detail line takes a row of its own under the title. */
+.iz-alert--notice {
+	align-items: flex-start;
+}
+.iz-alert--notice .iz-alert__head {
+	flex: 1 1 auto;
+	min-width: 0;
+	align-items: flex-start;
+}
+.iz-alert--notice .iz-alert__icon {
+	margin-top: 2px;
+}
+.iz-alert--notice .iz-alert__title {
+	white-space: normal;
+}
+.iz-alert--notice .iz-alert__meta {
+	flex-basis: 100%;
 }
 
 /* The outlet portal reads at one step up throughout (see the readability layer

@@ -20,6 +20,7 @@ import { LIVE_SEED_PR_PVS } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 import { useMemo } from "react";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -28,6 +29,26 @@ import { fill } from "@/lib/portal-i18n/fill";
 export const Route = createFileRoute("/agency/")({
 	component: AgencyHub,
 });
+
+/**
+ * The label of a tile that OPENS a page, ending in the same arrow the To do
+ * rows end in (TodoPanel's `.iz-alert__cta`). Before it, the linked tiles and
+ * the figure-only ones were the same card, so nothing at rest said which of
+ * them could be clicked. Only the `<Link>` branches use it: a figure-only
+ * `<div>` keeps its plain label. `aria-hidden`, so the link's accessible name
+ * is still the label and the figure.
+ */
+function KpiLinkLabel({ label }: { label: string }) {
+	return (
+		<div className="l">
+			{label}
+			<ArrowRight
+				className="ml-1 inline-block h-3 w-3 align-middle"
+				aria-hidden
+			/>
+		</div>
+	);
+}
 
 /**
  * How many seats the venues are asking this agency to fill today.
@@ -55,7 +76,7 @@ function PrNeededKpi() {
 			to="/agency/roster"
 			className="iz-portal-kpi iz-portal-kpi-payout no-underline"
 		>
-			<div className="l">{t.agencyHome.prNeeded}</div>
+			<KpiLinkLabel label={t.agencyHome.prNeeded} />
 			<div className="n">{plan.openSlotCount}</div>
 			<p className="iz-tiny mt-1 leading-snug text-[var(--iz-muted2)]">
 				{plan.pairs.length > 0
@@ -90,16 +111,18 @@ function KpiTile({
 	value: number | string;
 	to?: "/agency/prs" | "/agency/outlets";
 }) {
-	const body = (
-		<>
-			<div className="l">{label}</div>
-			<div className="n">{value}</div>
-		</>
-	);
-	if (!to) return <div className="iz-portal-kpi">{body}</div>;
+	const figure = <div className="n">{value}</div>;
+	if (!to)
+		return (
+			<div className="iz-portal-kpi">
+				<div className="l">{label}</div>
+				{figure}
+			</div>
+		);
 	return (
 		<Link to={to} className="iz-portal-kpi no-underline">
-			{body}
+			<KpiLinkLabel label={label} />
+			{figure}
 		</Link>
 	);
 }
@@ -289,7 +312,7 @@ function AgencyHub() {
 					search={{ status: "TO_PAY" }}
 					className="iz-portal-kpi iz-portal-kpi-payout no-underline"
 				>
-					<div className="l">{t.agencyHome.pendingPayout}</div>
+					<KpiLinkLabel label={t.agencyHome.pendingPayout} />
 					{/* An em dash, never RM 0.00, when the voucher or roster fetch
 					    failed — see the note beside `payoutUnknown`. */}
 					<div className="n">

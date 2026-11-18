@@ -607,6 +607,13 @@ body:is([data-outlet-design], [data-agency-design]),
 		translate: -100% 0;
 	}
 }
+/* The confirmation bar arrives from ABOVE: its stack sits at the top. */
+@keyframes iz-m-drop {
+	from {
+		opacity: 0;
+		translate: 0 calc(var(--iz-motion-rise, 10px) * -1);
+	}
+}
 /* iz-m-fade is declared in M1. */
 
 @media screen and (prefers-reduced-motion: no-preference) {
@@ -625,6 +632,16 @@ body:is([data-outlet-design], [data-agency-design]),
 	   Body scope: IzSheet portals into document.body. (0,2,1) beats (0,1,0). */
 	body:is([data-outlet-design], [data-agency-design]) .iz-sheet-bg {
 		animation-name: iz-m-fade;
+	}
+	/* The confirmation bar (components/Toasts.tsx, PortalShell's `overlay`)
+	   drops 10px into place in 160ms. This REPLACES the legacy 0.4s iz-pop on
+	   `.iz-toast` (prototype-theme.css), so exactly one arrival plays; under
+	   reduced motion this never applies and G switches the legacy one off.
+	   `translate`, not `transform`: the bar has no resting transform to fight.
+	   Nothing on leaving: the store unmounts it at 2800ms, at once.
+	   (0,3,0) beats the legacy (0,1,0). */
+	.iz-portal:is([data-portal="outlet"], [data-portal="agency"]) .iz-toast {
+		animation: iz-m-drop var(--iz-motion-fast) var(--iz-ease-out) backwards;
 	}
 }
 

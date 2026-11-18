@@ -148,6 +148,25 @@
 	white-space: normal;
 	word-break: break-word;
 }
+/* The voucher detail's bar (status, PV number, Close) stays in view while a
+   long voucher scrolls, on Payroll & PV. CSS only: `.iz-portal-viewport` is the
+   scroller, and nothing between it and the bar sets overflow, transform, filter
+   or contain (measured 18 Nov 2026), so `top: 0` pins the bar right under the
+   portal top bar, which sits OUTSIDE the scroller. Desktop only: at phone width
+   the bar wraps, and a two-line sticky strip would take a large share of the
+   screen. z-index 10 sits under every overlay: back-to-top 35, rail toggle 40,
+   Radix 50, drawer 60, menus and popovers 70, sheets 80+, toasts 90. If sticky
+   ever fails, the bar simply scrolls away as it did before. */
+@media (min-width: 768px) {
+	.iz-agency-payroll .iz-pv-detail-bar {
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		padding-block: 8px;
+		background: var(--iz-panel);
+		border-bottom: 1px solid var(--iz-line);
+	}
+}
 .iz-agency-finance .iz-pv-doc-shell,
 .iz-agency-finance .iz-pv-doc {
 	min-width: 0;
@@ -294,6 +313,22 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	padding: 20px 16px;
 	border-top: 1px solid var(--iz-line);
 	vertical-align: middle;
+}
+/* Money columns (Wages … Net payable): right-aligned, tabular figures, the
+   header aligned with its column — DESIGN.md §6. A class, not nth-child, so a
+   reordered column never breaks. Net payable is the strong figure; a
+   Deductions cell turns red only when it is non-zero (the JSX decides that from
+   the same number it prints). */
+.iz-approved-voucher-table .iz-money {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.iz-approved-voucher-table .iz-money--net {
+	font-weight: 600;
+	color: var(--iz-txt);
+}
+.iz-approved-voucher-table .iz-money--deduction {
+	color: var(--iz-red);
 }
 .iz-approved-voucher-table td:first-child {
 	min-width: 260px;

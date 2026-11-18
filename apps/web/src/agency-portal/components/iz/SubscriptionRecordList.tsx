@@ -539,11 +539,15 @@ function PeriodCard({
 									}`}
 								>
 									{/* Paid: the row's number opens its receipt. Unpaid rows carry
-								    no box of their own — the period's box above covers them. */}
+								    no box of their own — the period's box above covers them.
+								    Underlined at rest in a hairline grey; hover and keyboard
+								    focus answer by turning the LINE lavender (the roster amount
+								    button's answer). The text stays muted: `.iz-muted` is
+								    un-layered, so a hover text colour would never win. */}
 									{isPaid && (
 										<button
 											type="button"
-											className="iz-tiny iz-muted2 shrink-0 underline-offset-2 hover:underline"
+											className="iz-tiny iz-muted shrink-0 underline decoration-[var(--iz-line2)] underline-offset-2 hover:decoration-[var(--iz-gold)] focus-visible:decoration-[var(--iz-gold)]"
 											onClick={() =>
 												setReceiptFor(
 													receiptFor === invoice.id ? null : invoice.id,

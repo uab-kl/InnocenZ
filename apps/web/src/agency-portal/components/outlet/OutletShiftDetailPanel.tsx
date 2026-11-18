@@ -522,7 +522,7 @@ export function OutletShiftDetailPanel({
 							<Link
 								to="/outlet/workspace"
 								hash={OUTLET_DRINKS_PRICE_SECTION_ID}
-								className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
+								className="iz-inline-link"
 							>
 								{t.today.addDrinkPricesInWorkspace}
 							</Link>
@@ -545,7 +545,7 @@ export function OutletShiftDetailPanel({
 													? OUTLET_DRINKS_PRICE_SECTION_ID
 													: OUTLET_SERVICE_ENTITLEMENT_SECTION_ID
 											}
-											className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
+											className="iz-inline-link"
 										>
 											{group.category === "drink"
 												? t.workspace.drinksPrice

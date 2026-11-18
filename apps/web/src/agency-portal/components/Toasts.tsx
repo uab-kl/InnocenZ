@@ -16,7 +16,7 @@ export function Toasts() {
 							? AlertTriangle
 							: Info;
 				return (
-					<output key={t.id} className="iz-toast">
+					<output key={t.id} className="iz-toast" data-tone={t.tone}>
 						<div className="iz-toast-ic">
 							<Icon className="h-4 w-4" />
 						</div>
@@ -24,7 +24,7 @@ export function Toasts() {
 						<button
 							type="button"
 							onClick={() => dismiss(t.id)}
-							className="iz-muted text-xs"
+							className="iz-toast-x iz-muted text-xs"
 							aria-label="Dismiss"
 						>
 							✕

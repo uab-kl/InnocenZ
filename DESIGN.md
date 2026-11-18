@@ -201,6 +201,21 @@ never scroll sideways (wide tables scroll inside their own container).
   number is announced with words for screen readers ("3 to review"), not a bare digit.
 - **Tables** — header row in `ink-muted`, money right-aligned in `iz-nums`, one status chip
   per row, the row's action at the end. Drop any column that repeats another (§2).
+- **Clickable amounts and inline links** (18 Nov) — underlined at rest in hairline grey
+  (`--iz-line2`) with the text in the row's own ink, never lavender at rest; hover and focus
+  turn the underline lavender and the text ink, with the shared focus ring. No chevron.
+  `.iz-roster-amount-btn`; `.iz-inline-link` for a link inside a sentence, scoped to
+  `:is(.iz-portal, .iz-sheet)` because sheets are portalled to `<body>`.
+- **Money that opens nothing** — ink. Lavender only on a figure that is a link. No amber or
+  green on Outstanding / Pending payout; red only for disputed and deductions.
+- **KPI tiles** — a small arrow after the label only on a tile that is a link; a plain tile
+  has none, so the arrow itself says "this opens".
+- **Blocking reasons** — an amber notice box (`div.iz-alert--notice`), never a link or a
+  button, no arrow, title at 600. The same warning has the same shape on every page.
+- **Voucher detail bar** — sticky at 768px and wider only; on a phone it scrolls away.
+- **Confirmation bar** — one flat bar, fill one step above the cards, warn = red, gone after
+  2800 ms. Below 768px it is fixed to the window, so a result that lands after scrolling is
+  still seen. Admin's toasts are themed to match.
 - **Sheets and dialogs** — the title says what is being decided; the act button repeats the
   verb ("Approve 3 PRs"), the other button is "Cancel".
 - **Forms** — label above the field, helper text below in `ink-muted`, the error in
@@ -278,6 +293,8 @@ colour). No rule types a raw duration or delay; the one loading loop is 4 × `-s
   pointer; the To do arrow slides toward where it goes.
 - **M8 overlays** — the phone menu slides in its full width; scrims fade.
 - **M9 loading** — the To do "Checking…" border breathes. The only loop.
+- **Confirmation bar** — drops 10px into place in 160 ms (`iz-m-drop`), replacing the legacy
+  0.4 s pop, so exactly one arrival plays; nothing on leaving.
 
 **Guards:** every motion sits inside `@media screen and (prefers-reduced-motion:
 no-preference)`, so reduced motion and print never see it; under reduced motion the legacy

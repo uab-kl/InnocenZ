@@ -128,6 +128,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+	AlertTriangle,
 	CheckCircle2,
 	ChevronRight,
 	Clock,
@@ -1542,7 +1543,7 @@ function AgencyPV() {
 				data-payment-week={payrollWeekTab === "last_last_week"}
 			>
 				<div className="iz-stat-tile">
-					<div className="n text-[var(--iz-gold-l)]">
+					<div className="n iz-nums text-[var(--iz-txt)]">
 						{activeWeekStats.prCount}
 					</div>
 					<IzKpiLabel>PR</IzKpiLabel>
@@ -1553,7 +1554,7 @@ function AgencyPV() {
 				</div>
 				{payrollWeekTab === "last_last_week" && (
 					<div className="iz-stat-tile">
-						<div className="n text-[var(--iz-gold-l)]">
+						<div className="n iz-nums text-[var(--iz-txt)]">
 							{formatRM(activeWeekStats.pendingPayout)}
 						</div>
 						<IzKpiLabel>{t.payroll.pendingPayout}</IzKpiLabel>
@@ -1930,15 +1931,20 @@ function AgencyPV() {
 							</div>
 							{/*
 							  WHERE THE MONEY IS, in figures that add up to the total.
-							  "To pay" is the one that goes to the bank and keeps the gold;
-							  the other two explain the rest instead of leaving the reader
-							  to wonder why a RM 150.00 voucher sat under "RM 0.00".
+							  All three render at one size and one weight (16px, 600 —
+							  `.iz-portal .iz-portal-main .iz-heading` is un-layered and
+							  outranks `font-bold`), so COLOUR carries the difference:
+							  "To pay now", the one that goes to the bank, is in ink;
+							  "Awaiting signature" is muted — not payable yet; "Held —
+							  disputed" is red. None of them opens anything, so none is
+							  lavender. The other two explain the rest instead of leaving
+							  the reader to wonder why a RM 150.00 voucher sat under "RM 0.00".
 							  A bucket with nothing in it is not drawn — an empty row is
 							  width spent saying nothing.
 							*/}
 							<div className="iz-payout-split shrink-0">
 								<div className="iz-payout-split__item iz-payout-split__item--pay">
-									<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
+									<div className="iz-ledger iz-nums iz-heading text-base font-semibold text-[var(--iz-txt)]">
 										{formatRM(filteredPendingPayout.toPay.total)}
 									</div>
 									<p className="iz-tiny iz-muted2 mt-0.5">
@@ -1947,7 +1953,7 @@ function AgencyPV() {
 								</div>
 								{filteredPendingPayout.awaiting.count > 0 && (
 									<div className="iz-payout-split__item">
-										<div className="iz-ledger iz-heading text-base font-bold">
+										<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-muted)]">
 											{formatRM(filteredPendingPayout.awaiting.total)}
 										</div>
 										<p className="iz-tiny iz-muted2 mt-0.5">
@@ -2115,11 +2121,13 @@ function AgencyPV() {
 								<thead>
 									<tr>
 										<th>{t.approvedDesign.prVoucher}</th>
-										<th>{t.approvedDesign.wages}</th>
-										<th>{t.approvedDesign.drinksTips}</th>
-										<th>{t.approvedDesign.otherEarnings}</th>
-										<th>{t.approvedDesign.deductions}</th>
-										<th>{t.payroll.netPayable}</th>
+										<th className="iz-money">{t.approvedDesign.wages}</th>
+										<th className="iz-money">{t.approvedDesign.drinksTips}</th>
+										<th className="iz-money">
+											{t.approvedDesign.otherEarnings}
+										</th>
+										<th className="iz-money">{t.approvedDesign.deductions}</th>
+										<th className="iz-money">{t.payroll.netPayable}</th>
 										<th>{t.approvedDesign.statusAction}</th>
 									</tr>
 								</thead>
@@ -2128,6 +2136,10 @@ function AgencyPV() {
 										const selectable = isBulkEligible(pv);
 										const ticked = selectedIds.includes(pv.id);
 										const amounts = summarizePv(pv);
+										// The figure the Deductions cell prints, named once so its
+										// red follows the same number (`!== 0`, as pvBreakdownRows:
+										// deductions are stored NEGATIVE, so `> 0` would never fire).
+										const deductionsRm = amounts.deductions - pv.deduct;
 										return (
 											<tr key={pv.id}>
 												<td>
@@ -2163,11 +2175,25 @@ function AgencyPV() {
 														/>
 													</div>
 												</td>
-												<td>{formatRM(amounts.wages)}</td>
-												<td>{formatRM(amounts.drinks + amounts.tips)}</td>
-												<td>{formatRM(amounts.overtime + amounts.other)}</td>
-												<td>{formatRM(amounts.deductions - pv.deduct)}</td>
-												<td>{formatRM(getPvNetTotal(pv))}</td>
+												<td className="iz-money">{formatRM(amounts.wages)}</td>
+												<td className="iz-money">
+													{formatRM(amounts.drinks + amounts.tips)}
+												</td>
+												<td className="iz-money">
+													{formatRM(amounts.overtime + amounts.other)}
+												</td>
+												<td
+													className={
+														deductionsRm !== 0
+															? "iz-money iz-money--deduction"
+															: "iz-money"
+													}
+												>
+													{formatRM(deductionsRm)}
+												</td>
+												<td className="iz-money iz-money--net">
+													{formatRM(getPvNetTotal(pv))}
+												</td>
 												<td>
 													<IzPill variant={statusPill(pv.status)}>
 														{agencyPvStatusLabel(pv.status, t)}
@@ -2450,7 +2476,9 @@ function PvBreakdownCard({
 			))}
 			<div className="iz-v-sum tot">
 				<span>{t.payroll.subtotal}</span>
-				<b className="text-[var(--iz-gold)]">{formatRM(breakdown.total)}</b>
+				<b className="iz-nums font-semibold text-[var(--iz-txt)]">
+					{formatRM(breakdown.total)}
+				</b>
 			</div>
 		</IzCard>
 	);
@@ -2777,11 +2805,18 @@ function PvDetail({
 					{t.common.close}
 				</button>
 			</div>
-			{/* `v`, the DETAIL copy — only the detail read carries the IC check. */}
+			{/* `v`, the DETAIL copy — only the detail read carries the IC check.
+			    An amber NOTICE, not a door: a plain <div> with no `__cta` and no
+			    arrow, so no `a.iz-alert` hover or lift rule can reach it. */}
 			{v.prIcMismatch && (
-				<p className="iz-tiny mb-2 text-[var(--iz-amber)]">
-					{t.izPv.prIcDiffersFromProfile}
-				</p>
+				<div className="iz-alert iz-alert--amber iz-alert--notice">
+					<span className="iz-alert__head">
+						<AlertTriangle className="iz-alert__icon" aria-hidden />
+						<span className="iz-alert__title">
+							{t.izPv.prIcDiffersFromProfile}
+						</span>
+					</span>
+				</div>
 			)}
 
 			<PvWorkflowRail status={pv.status} />
@@ -3126,19 +3161,24 @@ function PvDetail({
 					 * action behind it. The server refuses the send without it (409),
 					 * so the pad is offered here rather than letting the button fail.
 					 */}
+					{/* Why you cannot sign yet, as the amber notice — a plain <div>,
+					    never a link: no `__cta`, no arrow, nothing that lifts. */}
 					{!financeSigned && weekStillOpen && (
-						<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
-							<p className="iz-sm font-bold">
-								{t.agencyPv.signingOpensWhenWeekCloses}
-							</p>
+						<div className="iz-alert iz-alert--amber iz-alert--notice mt-2">
+							<span className="iz-alert__head">
+								<AlertTriangle className="iz-alert__icon" aria-hidden />
+								<span className="iz-alert__title">
+									{t.agencyPv.signingOpensWhenWeekCloses}
+								</span>
+							</span>
 							{/* Split around the bold tab NAME, not mid-sentence by accident:
 							    the cycle rides in as a {cycle} slot so each language can put
 							    it where its own grammar wants, and the two halves meet either
 							    side of the one word that must stay emphasised. */}
-							<p className="iz-tiny iz-muted2 mt-0.5">
+							<span className="iz-alert__meta">
 								{fill(t.agencyPv.weekStillOpenBody, { cycle: thisWeekCycle })}{" "}
 								<b>{t.payroll.lastWeek}</b> {t.agencyPv.weekStillOpenTail}
-							</p>
+							</span>
 						</div>
 					)}
 
@@ -3192,22 +3232,29 @@ function PvDetail({
 						    "not allowed" and has nothing to point at yet. */}
 					{/* `sendGate.reason` still arrives in English from the hook; only the
 						    pointer after it is under the locale here. */}
+					{/* Still under the button, now as the amber notice: a plain <div>,
+					    no `__cta`, no arrow — it explains, it does not go anywhere. */}
 					{!sendGate.allowed &&
 						(sendGate.pendingReceipts.length > 0 ||
 							sendGate.pendingOvertime.length > 0) && (
-							<p className="iz-tiny iz-muted2 mt-1 text-center">
-								{sendGate.reason} —{" "}
-								{[
-									sendGate.pendingReceipts.length > 0
-										? t.agencyPv.approveInPayrollReceipts
-										: null,
-									sendGate.pendingOvertime.length > 0
-										? t.agencyPv.decideInPayrollOvertime
-										: null,
-								]
-									.filter(Boolean)
-									.join(" ")}
-							</p>
+							<div className="iz-alert iz-alert--amber iz-alert--notice mt-2">
+								<span className="iz-alert__head">
+									<AlertTriangle className="iz-alert__icon" aria-hidden />
+									<span className="iz-alert__title">
+										{sendGate.reason} —{" "}
+										{[
+											sendGate.pendingReceipts.length > 0
+												? t.agencyPv.approveInPayrollReceipts
+												: null,
+											sendGate.pendingOvertime.length > 0
+												? t.agencyPv.decideInPayrollOvertime
+												: null,
+										]
+											.filter(Boolean)
+											.join(" ")}
+									</span>
+								</span>
+							</div>
 						)}
 				</>
 			)}

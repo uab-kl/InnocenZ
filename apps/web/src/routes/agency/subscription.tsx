@@ -590,7 +590,8 @@ function AgencySubscription() {
 									{t.subscription.pricedForYourAgency}
 								</p>
 							</div>
-							<p className="shrink-0 text-lg font-bold text-[var(--iz-gold-l)]">
+							{/* The negotiated price opens nothing: ink, not lavender. */}
+							<p className="shrink-0 iz-nums text-lg font-bold text-[var(--iz-txt)]">
 								{sub.customAmountRm
 									? formatRM(sub.customAmountRm)
 									: t.subscription.awaitingPrice}
@@ -790,7 +791,7 @@ function AgencySubscription() {
 						<div className="grid grid-cols-3 gap-2 text-center">
 							<div>
 								<p className="iz-tiny iz-muted2">{t.agencyMisc.outstanding}</p>
-								<p className="mt-1 iz-heading text-base font-bold text-[var(--iz-gold-l)]">
+								<p className="mt-1 iz-heading iz-nums text-base font-semibold text-[var(--iz-txt)]">
 									{formatRM(collections.totals.outstandingRm)}
 								</p>
 							</div>
@@ -799,7 +800,7 @@ function AgencySubscription() {
 								<p
 									className={`mt-1 iz-heading text-base font-bold ${
 										collections.totals.overdueRm > 0
-											? "text-[var(--iz-red-l,#ff8080)]"
+											? "text-[var(--iz-red)]"
 											: ""
 									}`}
 								>
