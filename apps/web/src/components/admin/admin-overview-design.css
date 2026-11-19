@@ -66,7 +66,7 @@
 
 .admin-dashboard-kpis > a {
 	min-width: 0;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 20px;
 }
 
@@ -107,7 +107,7 @@
 
 .admin-dashboard-design section,
 .admin-pending-design section {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 
 .admin-rbac-tabs {
@@ -134,7 +134,7 @@
 
 .admin-role-group {
 	min-width: 0;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 
 .admin-role-group-header {
@@ -149,7 +149,7 @@
 	min-width: 30px;
 	min-height: 30px;
 	padding: 4px 8px;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: var(--lavender-soft);
 	color: var(--lavender);
 	font-size: var(--iz-fs-body);

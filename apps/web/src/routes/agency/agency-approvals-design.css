@@ -41,13 +41,13 @@
 	padding: 5px;
 	margin: 0 0 20px;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel2);
 }
 .iz-portal .iz-approvals-page .iz-approvals-group {
 	min-height: 46px;
 	border: 0;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 	padding: 10px 14px;
 	background: transparent;
 	box-shadow: none;
@@ -62,11 +62,11 @@
 	font: inherit;
 	min-width: 24px;
 	height: auto;
-	border-radius: 5px;
+	border-radius: var(--iz-radius-s, 6px);
 }
 .iz-portal .iz-approvals-workbench {
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	overflow: clip;
 }
@@ -89,7 +89,7 @@
 	padding: 3px;
 	margin: 0;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 }
 .iz-portal
@@ -100,7 +100,7 @@
 	min-height: 46px;
 	padding: 10px 12px;
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	font: inherit;
 	color: var(--iz-muted);
 	box-shadow: none;
@@ -149,15 +149,15 @@
 	padding: 16px;
 	margin: 0 0 6px;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: transparent;
 	box-shadow: none;
 	text-align: left;
 	color: var(--iz-txt);
 	cursor: pointer;
 	transition:
-		border-color 0.15s ease,
-		background-color 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-portal .iz-approvals-page .iz-approvals-list-item:not(.on):hover {
 	border-color: var(--iz-line2);
@@ -185,7 +185,7 @@
 	display: inline-flex;
 	margin-top: 8px;
 	padding: 4px 8px;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: #3e3523;
 	color: #e4c572;
 	font-size: var(--iz-fs-label);
@@ -233,7 +233,7 @@
 	gap: 16px 18px;
 	margin: 0;
 	padding: 16px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel2);
 }
 .iz-approved-data-grid > div {
@@ -256,7 +256,7 @@
 	width: fit-content;
 	max-width: 100%;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-portal .iz-approvals-page .iz-approvals-doc-tab {
 	display: flex;
@@ -267,7 +267,7 @@
 	padding: 10px 12px;
 	min-height: 46px;
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: transparent;
 	color: var(--iz-muted);
 	box-shadow: none;
@@ -286,7 +286,7 @@
 .iz-portal .iz-approvals-page .iz-approvals-doc-cell {
 	min-width: 0;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel2);
 	box-shadow: none;
 }
@@ -407,13 +407,13 @@
 .iz-portal .iz-approvals-sidebar .iz-approvals-member-row {
 	padding: 16px;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: transparent;
 	box-shadow: none;
 	cursor: pointer;
 	transition:
-		border-color 0.15s ease,
-		background-color 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-portal .iz-approvals-sidebar .iz-approvals-member-row:not(.on):hover {
 	border-color: var(--iz-line2);

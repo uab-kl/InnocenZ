@@ -98,23 +98,27 @@ html body:is([data-agency-design], [data-outlet-design])
 	color: inherit;
 }
 /*
- * ⚠️ A COUNT CHIP THAT PAINTS ITS OWN FILL cannot take the dark ink above
- * (owner, 18 Nov 2026 — screenshot of the Approvals "PR" tab, "fix").
+ * ONE COUNT PILL IN EVERY STATE: a 14% tint of the label's own colour, the
+ * digit in that colour (owner, 19 Nov 2026 — screenshot of the Approvals "PR"
+ * tab, "design ? fix it ?").
  *
- * The rule above hands every inner element the selected tab's dark ink, but
- * the Approvals group count keeps its own dark pill (`--iz-panel2`), so the
- * selected group's number rendered #1a1726 on #292433 — measured 1.17:1, an
- * invisible "0". The pill now IS the ink and the digit takes the gold's light
- * stop: 14.2:1, and it still reads as a dark chip on the gold tab, the way it
- * did before. List any future count chip with its own fill here.
+ * 18 Nov fixed an invisible selected "0" (#1a1726 on #292433, 1.17:1) by
+ * painting the pill solid ink — readable, but a black box on the gold tab
+ * while the unselected "Outlet" / "Team members" pills were near-invisible: one
+ * count drawn two ways. A tint of currentColor follows the tab's ink in both
+ * states, so the pill keeps its shape and only the colour changes with the
+ * selection. Measured: digit on its pill 8.3:1 where the count sits on the
+ * gold (5.5:1 at the gradient's darkest stop), 5.8:1 unselected; the pill
+ * itself 1.3:1 against the tab in both, so it reads as a quiet shape. List
+ * any future count chip with its own fill here.
  */
 html body:is([data-agency-design], [data-outlet-design])
 	.iz-portal:is(#iz-tab-wins, [data-portal])
 	.iz-approvals-groups
-	> button:is(.on, [aria-selected="true"])
+	> button
 	.iz-approvals-group__count {
-	background: var(--iz-tab-selected-ink);
-	color: #f7e6b0;
+	background: color-mix(in srgb, currentColor 14%, transparent);
+	color: inherit;
 }
 
 /* ── Admin ───────────────────────────────────────────────────────────────── */

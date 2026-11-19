@@ -137,6 +137,9 @@ One dark theme, shared by admin, agency and outlet (the token values are the sam
   `styles/portal-tabs.css`, two tokens (`--iz-tab-selected-bg` = `--gradient-royal`,
   `--iz-tab-selected-ink`). Gold here means "you are here"; "waiting" is the small amber
   COUNT badge, a different shape. A new tab strip is added to that file's list.
+  A count INSIDE a tab (Approvals' PR · Outlet · Team members) is one quiet pill tinted
+  from the tab's own text colour — the same shape selected or not, never a fill of its own
+  (owner, 19 Nov 2026: a solid black chip on the gold tab read as a second control).
 - **`act` (deep violet) fills the one button that does the thing.** Historically called
   "gold" in class names (`.iz-btn-gold`, `--iz-gold`) — the value is violet; do not
   "restore" a gold colour.
@@ -154,6 +157,14 @@ One dark theme, shared by admin, agency and outlet (the token values are the sam
   `lib/status-tone.ts` (admin). A new status gets a tone there — never a hand-picked colour.
 - The `wordmark` gold (`#e0be73`) belongs to the logo; the selected-tab gold above is the
   only other gold on screen.
+
+**One scale for all three portals (owner, 19 Nov 2026: "do all").** dembrandt and designlang found 8-14
+corner radii, 5 font weights and transitions at 120 / 150 / 180 / 200 ms per portal. The portal stylesheets now
+name their steps (`styles/portal-interaction.css`, on body so pop-ups see them too): corners `--iz-radius-s` 6 ·
+`m` 10 · `l` 14 · `xl` 20 (plus pills and circles; 1-3 px hairlines stay); weights 400 / 600 / 700 only
+(`font-medium` reads 600, `font-extrabold` 700); motion `--iz-motion-press` 100 · `fast` 160 · `base` 240 ·
+`enter` 360 · `slow` 400, and a bare Tailwind `transition-*` lasts 160. A new rule names a step; it never
+writes a raw px or ms. Tailwind's own `rounded-*` classes still follow its theme and are the drift left.
 
 ## 4. Type
 
@@ -399,6 +410,18 @@ References in [`docs/design/reference/`](docs/design/reference/README.md):
   carets and scroll-triggered reveals; blur-ins, springs and overshoot; staggered cascades;
   cards that grow or glow under the pointer; exit animations (Linear, Mercury and Cal
   animate things leaving; the portals do not).
+- **From Mercury, Airtable and Intercom** (read 19 Nov 2026 from awesome-design-md, not
+  copied; all three describe their public sites): Mercury is the nearest to the portals — a
+  dark ink-violet canvas, lavender-white headings, cards one shade lifted, one action colour.
+  What the three agree on, and the portals keep: **one solid action per group**, everything
+  else a soft tint; **elevation is tonal** — a card is told from the canvas by its fill, never
+  by a strong drop shadow; **status colours live in the content** (rows, chips), not in the
+  chrome. To check on rendered pages (TEST_SCRIPT §9 item 18): any group with two solid act
+  buttons, any card lifted by a heavy shadow.
+- **Not borrowed (Mercury, Airtable, Intercom):** their light weights (360-500) — the
+  approved portals set their own; pill-shaped actions; warm cream or white canvases. Their
+  "no all-caps tracked eyebrows" rule disagrees with the portals' uppercase table headers and
+  section labels — **owner's call**, never changed silently.
 
 ## 11. Checking a design change
 

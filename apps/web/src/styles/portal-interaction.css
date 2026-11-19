@@ -39,6 +39,40 @@
  * already had, so a red button stays red and a gold one gold.
  */
 
+/* ── ONE SCALE FOR ALL THREE PORTALS (owner, 19 Nov 2026: "do all") ─────────
+ * The dembrandt / designlang reports found 8-14 corner radii, 5 font weights
+ * and transitions at 120 / 150 / 180 / 200 ms per portal. The portal
+ * stylesheets now name these steps (radius s/m/l/xl; motion press/fast/base/
+ * enter/slow) — declared on BODY so pop-ups rendered outside `.iz-portal`
+ * read them too. Tailwind's own classes follow through its theme variables:
+ * `font-medium` reads 600 and `font-extrabold`/`font-black` 700 (three
+ * weights: 400 / 600 / 700), and a bare `transition-*` lasts 160 ms, the
+ * fast step, not Tailwind's 150. DESIGN.md §3/§8 hold the reasons. */
+:is(body[data-admin-design], body[data-agency-design], body[data-outlet-design]) {
+	--iz-radius-s: 6px;
+	--iz-radius-m: 10px;
+	--iz-radius-l: 14px;
+	--iz-radius-xl: 20px;
+	--iz-motion-press: 100ms;
+	--iz-motion-fast: 160ms;
+	--iz-motion-base: 240ms;
+	--iz-motion-enter: 360ms;
+	--iz-motion-slow: 400ms;
+	--font-weight-medium: 600;
+	--font-weight-extrabold: 700;
+	--font-weight-black: 700;
+	--default-transition-duration: var(--iz-motion-fast);
+}
+/* The public site's `styles.css` gives every button and link a 180 ms
+   transition (`button, .island-shell, a`). Inside the portals that is the
+   fast step instead. Same (0,0,1) weight and loaded later, so it wins over
+   that global rule and still loses to any component's own class rule;
+   the homepage itself is untouched. */
+:where(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
+	:is(button, a) {
+	transition-duration: var(--iz-motion-fast, 160ms);
+}
+
 /* ── ACTIONS ─────────────────────────────────────────────────────────────── */
 
 :is(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
@@ -58,7 +92,7 @@
 	/* Only what may move: never width, height, padding or margin. */
 	transition-property:
 		color, background-color, border-color, box-shadow, opacity, transform;
-	transition-duration: 120ms; /* the way out */
+	transition-duration: var(--iz-motion-fast, 160ms); /* the way out */
 	transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -83,7 +117,7 @@
 			.iz-topbar-action
 		):not(:disabled):not([aria-disabled="true"]):hover {
 		transform: translateY(-1px);
-		transition-duration: 150ms; /* the way in */
+		transition-duration: var(--iz-motion-fast, 160ms); /* the way in */
 	}
 }
 
@@ -102,7 +136,7 @@
 		.iz-topbar-action
 	):not(:disabled):not([aria-disabled="true"]):active {
 	transform: translateY(1px) scale(0.985);
-	transition-duration: 90ms;
+	transition-duration: var(--iz-motion-press, 100ms);
 }
 
 /* ── LINKED CARDS ───────────────────────────────────────────────────────── */
@@ -110,7 +144,7 @@
 :is(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
 	:is(.iz-pr-manage-card, .iz-hub-quick-card) {
 	transition-property: border-color, box-shadow, transform;
-	transition-duration: 120ms;
+	transition-duration: var(--iz-motion-fast, 160ms);
 	transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -125,7 +159,7 @@
 		border-color: var(--iz-line2, var(--border));
 		/* Soft, and only while hovered: blur 24px, ink at 10% at most. */
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-		transition-duration: 180ms;
+		transition-duration: var(--iz-motion-fast, 160ms);
 	}
 }
 

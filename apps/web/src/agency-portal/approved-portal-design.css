@@ -3,7 +3,7 @@
 .iz-portal .iz-approved-staffing-panel {
 	padding: 24px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .iz-approved-staffing-panel h2 {
@@ -62,6 +62,57 @@
 }
 .iz-portal .iz-portal-main .iz-heading {
 	font-weight: 600;
+}
+/* ONE focus ring per field (owner, 19 Nov 2026: screenshot of Manage PR's
+   "Name" search, "fix all this"). `__inputwrap` draws the box and its focus;
+   the bare input inside also took the portal's (0,2,2) ring 3px outside
+   itself, so two rings showed, out of line. The roster filter bar fixed this
+   only inside `.iz-shift-filters`; this is the same rule everywhere the box
+   is used — the box rings, the field does not. The stylesheets name four
+   more boxes that react to a focused field inside them (owner: "any of this
+   on the website all help me to fix it") — the phone field (dial + number),
+   the Post Job PR search, the PR measurement fields and the older roster
+   filter input — each also let the field draw the portal ring: same rule. */
+body:is([data-outlet-design], [data-agency-design])
+	:is(
+		.iz-roster-filterbar__inputwrap,
+		.iz-roster-filter-input-wrap,
+		.iz-phone-field,
+		.iz-post-job-pr-search,
+		.iz-pr-measure-field__wrap
+	)
+	:is(input, select, textarea):focus-visible {
+	outline: none;
+}
+body:is([data-outlet-design], [data-agency-design])
+	:is(
+		.iz-roster-filterbar__inputwrap,
+		.iz-roster-filter-input-wrap,
+		.iz-phone-field,
+		.iz-post-job-pr-search,
+		.iz-pr-measure-field__wrap
+	):has(:is(input, select, textarea):focus-visible) {
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 2px;
+	/* Three of these boxes also glow on focus — one ring, not ring + halo. */
+	box-shadow: none;
+}
+/* The shared page title (Nav.tsx) is a PAGE title: 24, not the raw 22 it
+   carried (signed-in sweep, 19 Nov 2026 — outlet Profile measured 22px). */
+.iz-portal .iz-nav-title {
+	font-size: var(--iz-fs-head);
+}
+/* A finger needs 44px (ui-ux-pro-max priority 2): the top bar's language,
+   Icon guide, bell and profile controls measured 34-36px on a touch phone.
+   Touch screens only — the desktop bar is unchanged. (0,2,2) out-ranks any
+   flex-child `min-width: 0` reset. */
+@media (pointer: coarse) {
+	body:is([data-agency-design], [data-outlet-design])
+		.iz-portal-header-tools
+		:is(button, a) {
+		min-width: 44px;
+		min-height: 44px;
+	}
 }
 body:is([data-agency-design], [data-outlet-design])
 	:is(.iz-sheet, [role="dialog"]) {
@@ -157,7 +208,7 @@ body:is([data-outlet-design], [data-agency-design])
 		textarea
 	) {
 	min-height: 46px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 body:is([data-outlet-design], [data-agency-design])
 	:is(input[type="date"], input[type="time"], input[type="datetime-local"]) {
@@ -227,7 +278,7 @@ body:is([data-outlet-design], [data-agency-design])
 	min-height: 46px;
 	height: auto;
 	padding: 10px 15px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	font-size: var(--iz-fs-body);
 	line-height: 1.45;
 	white-space: normal;
@@ -259,7 +310,7 @@ body:is([data-outlet-design], [data-agency-design]) :is(.iz-pill, .iz-chip) {
 	min-height: 30px;
 	line-height: 1.45;
 	white-space: normal;
-	border-radius: 5px;
+	border-radius: var(--iz-radius-s, 6px);
 	box-shadow: none;
 	font-weight: 400;
 }
@@ -267,7 +318,7 @@ body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-payroll-tab, .iz-filter-chip) {
 	min-height: 46px;
 	padding: 10px 14px;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 	border: 1px solid transparent;
 	background: transparent;
 	color: var(--iz-muted);
@@ -334,7 +385,7 @@ body:is([data-outlet-design], [data-agency-design])
 	min-width: 0;
 	background: var(--iz-panel);
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	box-shadow: none;
 }
 body:is([data-outlet-design], [data-agency-design]) .iz-card::before,
@@ -366,7 +417,7 @@ body:is([data-outlet-design], [data-agency-design]) .iz-card::after {
 	:is(.iz-approvals-sidebar, .iz-approvals-detail) {
 	background: var(--iz-panel);
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-portal:is([data-portal="outlet"], [data-portal="agency"])
 	.iz-outlet-page-header {
@@ -420,7 +471,7 @@ body:is([data-outlet-design], [data-agency-design])
 body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-job-posting-micro-label, .iz-field label) {
 	font-size: var(--iz-fs-label);
-	font-weight: 500;
+	font-weight: 600;
 	text-transform: none;
 	letter-spacing: 0;
 	margin-bottom: 6px;
@@ -467,7 +518,7 @@ body:is([data-outlet-design], [data-agency-design])
 	color: var(--iz-txt);
 	background: var(--iz-panel);
 	border-color: var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 body:is([data-outlet-design], [data-agency-design])
 	[data-radix-popper-content-wrapper] {
@@ -554,7 +605,7 @@ body:is([data-outlet-design], [data-agency-design])
 	display: block;
 	padding: 12px;
 	border: 1px solid #ffffff10;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: #ffffff06;
 	margin: 0;
 	text-transform: none;
@@ -625,7 +676,7 @@ body:is([data-outlet-design], [data-agency-design])
 .iz-portal:is([data-portal="outlet"], [data-portal="agency"])
 	.iz-portal-nav-link {
 	border: 0;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	color: #d0c6de;
 	min-height: 48px;
 	margin-block: 4px;
@@ -734,7 +785,7 @@ body:is([data-outlet-design], [data-agency-design])
 	min-width: 44px;
 	min-height: 44px;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	padding: 10px;
 	color: var(--iz-txt);
 	background: transparent;
@@ -769,7 +820,7 @@ body:is([data-outlet-design], [data-agency-design])
 	padding: 20px;
 	background: var(--iz-panel);
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	box-shadow: none;
 }
 .iz-portal[data-portal="outlet"] .iz-outlet-ops-cal-cell {
@@ -817,7 +868,7 @@ body:is([data-outlet-design], [data-agency-design])
 	min-width: 44px;
 	min-height: 44px;
 	font-size: var(--iz-fs-body);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-portal[data-portal="outlet"] .iz-outlet-ops-cal-event {
 	background: var(--iz-panel2);
@@ -890,7 +941,7 @@ body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-portal-kpi, .iz-portal-panel, .iz-portal-ai-btn) {
 	min-width: 0;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	box-shadow: none;
 }
@@ -967,7 +1018,7 @@ body:is([data-outlet-design], [data-agency-design])
 	min-height: 48px;
 	padding: 12px 4px;
 	font-size: var(--iz-fs-body);
-	font-weight: 500;
+	font-weight: 600;
 	border-radius: 0;
 	border-bottom: 2px solid transparent;
 	box-shadow: none;
@@ -1012,7 +1063,7 @@ body:is([data-outlet-design], [data-agency-design])
 		.iz-pr-manage-stats__count,
 		.iz-outlet-manage-heading
 	) {
-	font-weight: 500;
+	font-weight: 600;
 	text-transform: none;
 	letter-spacing: 0;
 }
@@ -1066,7 +1117,7 @@ body:is([data-outlet-design], [data-agency-design])
 	padding: 12px 16px;
 	border: 1px solid var(--iz-line);
 	background: var(--iz-panel);
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	text-align: left;
 }
 .iz-outlet-filter-toggle > span {
@@ -1147,7 +1198,7 @@ body:is([data-outlet-design], [data-agency-design])
 		.iz-portal-collapse-toggle {
 		width: 30px;
 		height: 56px;
-		border-radius: 10px;
+		border-radius: var(--iz-radius-m, 10px);
 	}
 }
 @media (max-width: 1023px) {
@@ -1377,7 +1428,7 @@ body:is([data-outlet-design], [data-agency-design])
 .iz-portal .iz-approved-calendar-stats > section {
 	padding: 24px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	min-width: 0;
 }
@@ -1400,7 +1451,7 @@ body:is([data-outlet-design], [data-agency-design])
 .iz-portal .iz-approved-org-profile {
 	padding: 24px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .iz-portal .iz-approved-org-profile h2 {
@@ -1485,7 +1536,7 @@ body:is([data-outlet-design], [data-agency-design])
 	padding: 18px;
 	min-height: 60px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .iz-portal .iz-agency-home-hub .iz-agency-home-tab.on {
@@ -1565,7 +1616,7 @@ body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-outlet-shift-log-summary__metric, .iz-approved-history-count) {
 	padding: 24px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	min-width: 0;
 }
@@ -1735,15 +1786,15 @@ body:is([data-outlet-design], [data-agency-design])
 	min-height: 44px;
 	padding: 8px 14px;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 	color: var(--iz-txt);
 	font-weight: 600;
 	list-style: none;
 	cursor: pointer;
 	transition:
-		border-color 0.15s ease,
-		background-color 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-approved-more-filters summary::-webkit-details-marker {
 	display: none;
@@ -1755,7 +1806,7 @@ body:is([data-outlet-design], [data-agency-design])
 	border-right: 2px solid currentColor;
 	border-bottom: 2px solid currentColor;
 	transform: translateY(-2px) rotate(45deg);
-	transition: transform 0.15s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-approved-more-filters[open] summary::after {
 	transform: translateY(2px) rotate(225deg);
@@ -1789,7 +1840,7 @@ body[data-outlet-design] .iz-sheet .iz-cardttl.truncate {
 }
 body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip {
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 20px;
 	background: var(--iz-panel);
 	box-shadow: none;
@@ -1812,7 +1863,7 @@ body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip__value {
 	gap: 14px;
 	background: var(--iz-panel2);
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-portal .iz-txn-filters > :nth-child(4) {
 	grid-column: 2;
@@ -1838,7 +1889,7 @@ body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip__value {
 	min-height: 46px;
 	padding: 10px;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 	color: var(--iz-txt);
 }
@@ -1887,7 +1938,7 @@ body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip__value {
 }
 .iz-portal .iz-outlet-hist-card {
 	padding: 24px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .iz-portal .iz-outlet-hist-card__head {
@@ -1994,7 +2045,7 @@ body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip__value {
 .iz-portal .iz-approved-today-shifts {
 	padding: 24px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .iz-portal .iz-approved-today-shifts > h2,
@@ -2025,7 +2076,7 @@ body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip__value {
 	min-width: 0;
 	padding: 20px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	box-shadow: none;
 }
@@ -2081,7 +2132,7 @@ body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip__value {
 	padding: 24px;
 	min-width: 0;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	text-align: left;
 }
@@ -2164,7 +2215,7 @@ body[data-outlet-design] .iz-sheet .iz-outlet-stat-chip__value {
 	padding: 20px 24px;
 }
 .iz-portal .iz-collapsible-section__body {
-	border-radius: 0 0 13px 13px;
+	border-radius: 0 0 var(--iz-radius-l, 14px) var(--iz-radius-l, 14px);
 	border-top: 1px solid var(--iz-line);
 }
 body:is([data-outlet-design], [data-agency-design]) .iz-sheet .uppercase {
@@ -2259,7 +2310,7 @@ body[data-outlet-design]
 	height: 46px;
 	min-height: 46px;
 	padding: 0 12px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-portal .iz-workspace-number-control > input {
 	height: 100%;

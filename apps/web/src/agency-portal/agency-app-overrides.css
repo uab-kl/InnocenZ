@@ -96,8 +96,8 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 		background: var(--iz-panel, #211c30);
 		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 		transition:
-			color 0.15s ease,
-			background 0.15s ease;
+			color var(--iz-motion-fast, 160ms) ease,
+			background var(--iz-motion-fast, 160ms) ease;
 	}
 }
 .iz-portal-collapse-toggle:hover {
@@ -236,6 +236,11 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
  * 6.8:1 on the older #f08a8a / #ff6b6b reds. The pill stays red: only the
  * digit changed.
  */
+/* The top bar's bell count is the same soft red pill (19 Nov 2026): white on
+   #e5a1a6 measured 2.1:1 in the signed-in sweep; the rail's dark ink is 9.0:1. */
+.iz-bell-count {
+	color: #12100c;
+}
 .iz-nav-alert[data-tone="red"] {
 	color: #12100c;
 	background: var(--iz-red, #ff6b6b);

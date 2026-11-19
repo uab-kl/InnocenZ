@@ -1000,7 +1000,7 @@ export function OutletSalesDashboard() {
 										dataKey="chartTick"
 										tickLine={false}
 										axisLine={false}
-										tick={{ fill: "var(--iz-muted2)", fontSize: 14 }}
+										tick={{ fill: "var(--iz-muted2)", fontSize: 16 }}
 										interval={0}
 									/>
 									{/* Zero stays on the axis at both ends, so a loss night

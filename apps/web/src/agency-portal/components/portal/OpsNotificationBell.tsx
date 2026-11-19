@@ -113,7 +113,7 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 			>
 				<Bell className="h-3.5 w-3.5" />
 				{unread > 0 && (
-					<span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--iz-red)] px-0.5 text-[9px] font-bold text-white">
+					<span className="iz-bell-count absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--iz-red)] px-0.5 text-[9px] font-bold">
 						{unread}
 					</span>
 				)}

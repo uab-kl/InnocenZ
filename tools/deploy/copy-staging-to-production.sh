@@ -6,10 +6,12 @@
 # our own testing). Each server keeps its own .env.backend naming its own
 # database, so innocenz.net ran on a copy of the test data taken around
 # 9-10 Sep and nothing added on staging since (team memberships, logos) ever
-# reached it. The production backend also never runs migrations on start, so
-# that copy can lag the code's schema as well. This replaces production's data
-# with staging's; production keeps its OWN database afterwards, so later
-# testing on staging does not reach live users.
+# reached it. STRUCTURE does follow the code: on every start in production the
+# backend applies migrations, re-seeds role grants and ensures the admin
+# (main.ts, NODE_ENV=production) — a failed migration only logs a warning.
+# It is the DATA that never travels. This replaces production's data with
+# staging's; production keeps its OWN database afterwards, so later testing on
+# staging does not reach live users.
 #
 # Run ON the production server, from the production deploy folder (the one
 # holding .env.backend). Needs docker; pg_dump/psql run in $PG_IMAGE.
