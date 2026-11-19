@@ -8,6 +8,9 @@ These two files are **reference, not rules**. The rules for InnocenZ are in
 | `stripe.DESIGN.md` | [VoltAgent/awesome-design-md](https://github.com/voltagent/awesome-design-md) `design-md/stripe/` | A money product: tabular figures for every amount, one filled action per area, quiet status chips |
 | `linear.DESIGN.md` | same repo, `design-md/linear.app/` | A queue-and-to-do product on a dark canvas: lift by surface step rather than shadow, one accent used sparingly, dense lists that stay readable |
 
+Also READ (19 Nov 2026), not copied — `mercury`, `airtable`, `intercom` from the same repo's
+`design-md/`; what they add is recorded in `/DESIGN.md` §10.
+
 Both files are MIT licensed — see `LICENSE-awesome-design-md.txt`. Downloaded 17 Nov 2026
 from commit `fcc7028` (28 Oct 2026). They describe each brand's *public website*; neither
 shows the logged-in dashboard, which is the part InnocenZ actually resembles.

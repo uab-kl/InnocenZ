@@ -402,6 +402,18 @@ References in [`docs/design/reference/`](docs/design/reference/README.md):
   carets and scroll-triggered reveals; blur-ins, springs and overshoot; staggered cascades;
   cards that grow or glow under the pointer; exit animations (Linear, Mercury and Cal
   animate things leaving; the portals do not).
+- **From Mercury, Airtable and Intercom** (read 19 Nov 2026 from awesome-design-md, not
+  copied; all three describe their public sites): Mercury is the nearest to the portals — a
+  dark ink-violet canvas, lavender-white headings, cards one shade lifted, one action colour.
+  What the three agree on, and the portals keep: **one solid action per group**, everything
+  else a soft tint; **elevation is tonal** — a card is told from the canvas by its fill, never
+  by a strong drop shadow; **status colours live in the content** (rows, chips), not in the
+  chrome. To check on rendered pages (TEST_SCRIPT §9 item 18): any group with two solid act
+  buttons, any card lifted by a heavy shadow.
+- **Not borrowed (Mercury, Airtable, Intercom):** their light weights (360-500) — the
+  approved portals set their own; pill-shaped actions; warm cream or white canvases. Their
+  "no all-caps tracked eyebrows" rule disagrees with the portals' uppercase table headers and
+  section labels — **owner's call**, never changed silently.
 
 ## 11. Checking a design change
 

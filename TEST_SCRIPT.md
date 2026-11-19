@@ -525,8 +525,10 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    (contrast 4.5:1 on rendered colours, 44px touch targets, keyboard order, base 16px — admin was never swept;
    the 17 Nov sweep was agency + outlet); (b) run design-extract / dembrandt on SAVED snapshots of signed-in pages
    (serve the snapshot locally) to get a colour / size / spacing drift report per portal — never `apply`;
-   (c) read 2-3 more awesome-design-md references that match the logged-in work (e.g. intercom for the inbox /
-   approvals queue, airtable for dense tables, mercury for money) and record patterns-only in DESIGN.md §10;
+   (c) ~~read more awesome-design-md references~~ DONE 19 Nov: mercury, airtable, intercom read (public sites
+   only, like Stripe/Linear) — DESIGN.md §10 gains one solid action per group, tonal elevation, status colour in
+   content not chrome; to CHECK in (a): groups with two solid act buttons, cards lifted by a heavy shadow;
+   **owner's call** — their "no all-caps tracked labels" against the portals' uppercase headers;
    (d) a screen reader on the Post Job stepper and a keyboard on the agency outlet filter's Date field.
 17. **Production follows staging — waits on the server operator (§10 2026-11-19):** (a) on the production server run
    `tools/deploy/copy-staging-to-production.sh <staging .env.backend copy>` (preview, changes nothing) and read it:
