@@ -19260,6 +19260,18 @@ button.iz-agency-row:hover {
 	vertical-align: top;
 	text-align: left;
 }
+/* A cell that ASKS for right or centre gets it (19 Nov 2026, TEST_SCRIPT §9
+   14 (c)). The rule above is un-layered, so it beat Tailwind's layered
+   `text-right` on every money column of this table — Post Job / special
+   service cost and the receipt scan slip's RM — which rendered LEFT despite
+   the markup. (0,2,1) outranks its (0,1,1); money digits line up. */
+.iz-data-table :is(th, td).text-right {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.iz-data-table :is(th, td).text-center {
+	text-align: center;
+}
 .iz-data-table th {
 	font-family: var(--iz-font);
 	font-size: 14px;
