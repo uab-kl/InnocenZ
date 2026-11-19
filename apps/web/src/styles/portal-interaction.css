@@ -76,6 +76,26 @@
 	--iz-line-violet: #877095; /* admin's sidebar collapse toggle */
 	--iz-surface-raised: #2c2539;
 }
+/* Tailwind's own corner classes onto the same scale, inside the portals only
+   (TEST_SCRIPT §9 item 20 (f)). The theme inlines `rounded-*` from one
+   `--radius`, so no single value lands them all on 6 / 10 / 14 / 20; these
+   rules do. `:where(body…)` keeps them at one-class strength — they beat
+   Tailwind's layered utility, never a component's own corner rule.
+   `rounded-md` (10) is already a step; `rounded-full` and arbitrary values
+   are left alone. */
+:where(body[data-admin-design], body[data-agency-design], body[data-outlet-design]) .rounded {
+	border-radius: var(--iz-radius-s); /* 4 → 6 */
+}
+:where(body[data-admin-design], body[data-agency-design], body[data-outlet-design]) .rounded-sm {
+	border-radius: var(--iz-radius-m); /* 8 → 10 */
+}
+:where(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
+	:is(.rounded-lg, .rounded-xl, .rounded-2xl) {
+	border-radius: var(--iz-radius-l); /* 12 / 16 → 14 */
+}
+:where(body[data-admin-design], body[data-agency-design], body[data-outlet-design]) .rounded-3xl {
+	border-radius: var(--iz-radius-xl); /* 24 → 20 */
+}
 /* The public site's `styles.css` gives every button and link a 180 ms
    transition (`button, .island-shell, a`). Inside the portals that is the
    fast step instead. Same (0,0,1) weight and loaded later, so it wins over
