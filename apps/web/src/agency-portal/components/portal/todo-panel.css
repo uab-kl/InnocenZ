@@ -13,7 +13,7 @@
 	margin: 12px 0 20px;
 	padding: 16px;
 	border: 1px solid var(--iz-line);
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 
@@ -28,7 +28,7 @@
 	gap: 8px;
 	margin: 0;
 	font-size: var(--iz-fs-title);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.25;
 	color: var(--iz-title, var(--iz-txt));
 }
@@ -69,9 +69,9 @@
 .iz-todo__list > a.iz-alert {
 	min-height: 48px;
 	transition:
-		transform 0.15s ease,
-		background 0.15s ease,
-		border-color 0.15s ease;
+		transform var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-todo__list > a.iz-alert:focus-visible {
 	outline: 2px solid var(--iz-gold);
@@ -85,7 +85,7 @@
 	gap: 10px;
 	margin: 0;
 	padding: 12px 16px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	font-size: var(--iz-fs-label);
 	line-height: 1.4;
 }
@@ -97,7 +97,7 @@
 	border: 1px solid rgba(141, 201, 169, 0.4);
 	background: rgba(141, 201, 169, 0.08);
 	color: var(--iz-txt);
-	animation: iz-todo-settle 0.2s ease 0.6s both;
+	animation: iz-todo-settle var(--iz-motion-fast, 160ms) ease 0.6s both;
 }
 .iz-todo__clear strong {
 	color: var(--iz-green);
@@ -218,7 +218,7 @@
 .iz-todo__list > a.iz-alert:first-child .iz-alert__cta {
 	background: color-mix(in srgb, var(--iz-gold) 22%, transparent);
 	border-color: var(--iz-gold);
-	font-weight: 800;
+	font-weight: 700;
 }
 .iz-todo__list > a.iz-alert:first-child:hover .iz-alert__cta {
 	background: color-mix(in srgb, var(--iz-gold) 32%, transparent);

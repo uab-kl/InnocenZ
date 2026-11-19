@@ -158,6 +158,14 @@ One dark theme, shared by admin, agency and outlet (the token values are the sam
 - The `wordmark` gold (`#e0be73`) belongs to the logo; the selected-tab gold above is the
   only other gold on screen.
 
+**One scale for all three portals (owner, 19 Nov 2026: "do all").** dembrandt and designlang found 8-14
+corner radii, 5 font weights and transitions at 120 / 150 / 180 / 200 ms per portal. The portal stylesheets now
+name their steps (`styles/portal-interaction.css`, on body so pop-ups see them too): corners `--iz-radius-s` 6 ·
+`m` 10 · `l` 14 · `xl` 20 (plus pills and circles; 1-3 px hairlines stay); weights 400 / 600 / 700 only
+(`font-medium` reads 600, `font-extrabold` 700); motion `--iz-motion-press` 100 · `fast` 160 · `base` 240 ·
+`enter` 360 · `slow` 400, and a bare Tailwind `transition-*` lasts 160. A new rule names a step; it never
+writes a raw px or ms. Tailwind's own `rounded-*` classes still follow its theme and are the drift left.
+
 ## 4. Type
 
 - **Three sizes, every role, every portal (owner, 17 Nov 2026):** 16 body · 20 section title

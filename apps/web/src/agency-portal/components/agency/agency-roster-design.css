@@ -17,14 +17,14 @@
 	background: transparent;
 }
 .agency-roster-design .iz-roster-toggle {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	padding: 4px;
 	background: var(--iz-panel2);
 }
 .agency-roster-design .iz-roster-toggle button {
 	min-height: 46px;
 	padding: 10px 20px;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 	font-size: var(--iz-fs-body);
 	touch-action: manipulation;
 }
@@ -36,7 +36,7 @@
 	margin-left: auto;
 	min-height: 46px;
 	padding: 10px 16px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 /* The legacy popover has a 390px minimum. Bound the box and its calendar
    columns together, so the Saturday column never extends past the surface. */
@@ -116,10 +116,10 @@
 	min-height: 140px;
 	white-space: normal;
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	font-size: var(--iz-fs-body);
-	font-weight: 500;
+	font-weight: 600;
 }
 .agency-roster-design .iz-roster-stat + .iz-roster-stat::before {
 	display: none;
@@ -145,7 +145,7 @@
 	min-width: 0;
 	padding: 20px;
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .agency-roster-filter-disclosure,
@@ -160,7 +160,7 @@
 	margin: 0 0 20px;
 	background: var(--iz-panel2);
 	border: 1px solid var(--iz-line);
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .agency-roster-design .iz-roster-filterbar__head {
 	gap: 12px;
@@ -259,7 +259,7 @@
 	padding: 14px;
 	min-height: 100px;
 	margin-bottom: 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	white-space: normal;
 }
 .agency-roster-design .iz-roster-week-cell .outlet,
@@ -305,7 +305,7 @@
 	margin-block: 20px;
 	padding: 16px;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .agency-roster-planning-helper summary {
 	cursor: pointer;
@@ -335,7 +335,7 @@
 .agency-today-design .iz-agency-home-tab {
 	padding: 16px 10px;
 	border: 1px solid transparent;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .agency-today-design .iz-agency-home-tab.on {
 	border-color: var(--iz-line2);
@@ -427,7 +427,7 @@ body[data-agency-design] .iz-demand-sheet-titles {
 	.agency-roster-filter-disclosure {
 		margin-bottom: 20px;
 		border: 1px solid var(--iz-line);
-		border-radius: 12px;
+		border-radius: var(--iz-radius-l, 14px);
 		background: var(--iz-panel2);
 	}
 	.agency-roster-filter-toggle {
@@ -438,7 +438,7 @@ body[data-agency-design] .iz-demand-sheet-titles {
 		min-height: 52px;
 		padding: 14px 16px;
 		border: 0;
-		border-radius: 12px;
+		border-radius: var(--iz-radius-l, 14px);
 		background: transparent;
 		color: var(--iz-txt);
 		font-size: var(--iz-fs-body);
@@ -569,7 +569,7 @@ body[data-agency-design] .iz-demand-sheet-titles {
 	min-height: 58px;
 	padding: 12px 18px;
 	font-size: var(--iz-fs-body);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-portal .iz-roster-filterbar__row--planning {
 	display: grid;
@@ -583,7 +583,7 @@ body[data-agency-design] .iz-demand-sheet-titles {
 	.iz-roster-filterbar__row--planning
 	:is(.iz-roster-filterbar__inputwrap, select, .iz-time-picker-btn) {
 	min-height: 46px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-portal
 	.iz-roster-filterbar__row--planning
@@ -646,7 +646,7 @@ body[data-agency-design] .iz-demand-sheet-titles {
 	height: 46px;
 	box-sizing: border-box;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 	box-shadow: none;
 }
@@ -673,7 +673,7 @@ body[data-agency-design] .iz-demand-sheet-titles {
 	background: transparent;
 	box-shadow: none;
 	outline: none;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	font-size: 14px; /* iz-dense-filter: approved compact filter control */
 	font-weight: 400;
 }

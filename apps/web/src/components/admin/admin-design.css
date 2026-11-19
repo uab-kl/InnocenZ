@@ -105,7 +105,7 @@ body[data-admin-design]
 body[data-admin-design] [data-slot="card"] {
 	background: var(--card);
 	border-color: var(--border);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	box-shadow: none;
 }
 body[data-admin-design]
@@ -148,7 +148,7 @@ body[data-admin-design]
 		[data-slot="select-trigger"]
 	) {
 	min-height: 46px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	font-size: var(--iz-fs-body);
 }
 body[data-admin-design]
@@ -189,7 +189,7 @@ body[data-admin-design] [data-slot="button"] {
 	min-height: 44px;
 	height: auto;
 	max-width: 100%;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	padding: 10px 14px;
 	font-size: var(--iz-fs-body);
 	line-height: 1.4;
@@ -225,7 +225,7 @@ body[data-admin-design] [data-slot="table-head"] {
 	background: var(--muted);
 	color: var(--muted-foreground);
 	padding: 14px 16px;
-	font-weight: 500;
+	font-weight: 600;
 }
 body[data-admin-design] [data-slot="table-cell"] {
 	padding: 16px;
@@ -271,7 +271,7 @@ body[data-admin-design]
 	overscroll-behavior: contain;
 	background: var(--card);
 	border-color: var(--border);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 body[data-admin-design]
 	:is([data-slot="dialog-header"], [data-slot="alert-dialog-header"]) {
@@ -331,7 +331,7 @@ body[data-admin-design] .iz-admin-source-tabs {
 	margin: 0;
 	padding: 4px;
 	border: 1px solid var(--border);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--background);
 }
 body[data-admin-design] .iz-admin-source-tabs > .iz-admin-source-tab {
@@ -344,16 +344,16 @@ body[data-admin-design] .iz-admin-source-tabs > .iz-admin-source-tab {
 	min-width: 88px;
 	padding: 8px 16px;
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--card);
 	color: var(--foreground);
 	font-weight: 600;
 	white-space: nowrap;
 	cursor: pointer;
 	transition:
-		background-color 0.15s ease,
-		border-color 0.15s ease,
-		color 0.15s ease;
+		background-color var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease;
 }
 body[data-admin-design] .iz-admin-source-tabs > .iz-admin-source-tab:hover {
 	border-color: var(--lavender);
@@ -411,7 +411,7 @@ body[data-admin-design]
 	height: 44px;
 	width: 44px;
 	border: 1px solid var(--border);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-admin-header-controls .iz-admin-avatar-button {
 	padding: 0;
@@ -441,7 +441,7 @@ body[data-admin-design] [data-slot="sidebar-content"] nav {
 	margin-top: 20px;
 	padding: 14px 12px;
 	border: 1px solid var(--border);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: #1c1824;
 	font-size: var(--iz-fs-body);
 	line-height: 1.5;
@@ -476,7 +476,7 @@ body[data-admin-design] .admin-sidebar-nav-item {
 	min-height: 46px;
 	padding: 10px 12px;
 	gap: 12px;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	font-size: var(--iz-fs-body);
 	line-height: 1.5;
 	color: var(--foreground);
@@ -532,7 +532,7 @@ body[data-admin-design] .admin-sidebar-collapse-toggle {
 	height: 56px;
 	right: -14px;
 	border: 1px solid #877095;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: #40334e;
 	color: var(--foreground);
 }
@@ -581,7 +581,7 @@ body[data-admin-design]
 	width: 100%;
 	padding: 14px;
 	border: 1px solid var(--border);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--card);
 	font-weight: 600;
 }
@@ -712,8 +712,8 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	cursor: pointer;
 	box-shadow: inset 3px 0 0 transparent;
 	transition:
-		background-color 120ms ease,
-		box-shadow 120ms ease;
+		background-color var(--iz-motion-fast, 160ms) ease,
+		box-shadow var(--iz-motion-fast, 160ms) ease;
 }
 .iz-admin-row-open:hover,
 .iz-admin-row-open:focus-within {
@@ -724,7 +724,7 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	text-underline-offset: 3px;
 	text-decoration: underline;
 	text-decoration-color: transparent;
-	transition: text-decoration-color 120ms ease;
+	transition: text-decoration-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-admin-row-open:hover .iz-admin-record-name,
 .iz-admin-row-open:focus-within .iz-admin-record-name {
@@ -794,8 +794,8 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	color: inherit;
 	text-align: inherit;
 	cursor: pointer;
-	border-radius: 6px;
-	transition: color 120ms ease;
+	border-radius: var(--iz-radius-s, 6px);
+	transition: color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-admin-sort-head--end {
 	justify-content: flex-end;
@@ -818,7 +818,7 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	/* Visible but quiet on an unsorted column: it says "this one sorts"
 	   without competing with the column that IS sorted. */
 	opacity: 0.4;
-	transition: opacity 120ms ease;
+	transition: opacity var(--iz-motion-fast, 160ms) ease;
 }
 .iz-admin-sort-head:hover .iz-admin-sort-head__icon,
 .iz-admin-sort-head--on .iz-admin-sort-head__icon {
@@ -976,7 +976,7 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	gap: 12px;
 	padding: 18px;
 	border: 1px solid var(--border);
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--card);
 }
 .admin-todo__head {
@@ -989,7 +989,7 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	gap: 8px;
 	margin: 0;
 	font-size: var(--iz-fs-title);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.25;
 }
 .admin-todo__title-icon {
@@ -1017,15 +1017,15 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	min-height: 52px;
 	padding: 10px 14px 10px 16px;
 	border: 1px solid color-mix(in srgb, var(--signal-warn) 30%, var(--border));
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: color-mix(in srgb, var(--signal-warn) 7%, transparent);
 	color: inherit;
 	text-decoration: none;
 	overflow: hidden;
 	transition:
-		transform 0.15s ease,
-		border-color 0.15s ease,
-		background 0.15s ease;
+		transform var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 /* The ranking edge: strong on the first row, quieter below it. */
 .admin-todo__row::before {
@@ -1075,7 +1075,7 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--signal-warn) 14%, transparent);
 	color: var(--signal-warn);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.6;
 }
 .admin-todo__meta {
@@ -1103,7 +1103,7 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	gap: 10px;
 	margin: 0;
 	padding: 12px 16px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 /* Green = settled (owner's colour code). Shown only once counts are known. */
 .admin-todo__clear {
@@ -1173,7 +1173,7 @@ body[data-admin-design] [data-slot="button"].iz-queue-action {
 	gap: 10px 12px;
 	padding: 10px 14px 10px 16px;
 	border: 1px solid color-mix(in srgb, var(--signal-warn) 30%, var(--border));
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: color-mix(in srgb, var(--signal-warn) 7%, transparent);
 	color: var(--signal-warn);
 	overflow: hidden;
