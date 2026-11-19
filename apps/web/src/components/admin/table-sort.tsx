@@ -52,10 +52,7 @@ export function SortableHead<Field extends string>({
 				? ArrowDown
 				: ChevronsUpDown;
 	return (
-		<TableHead
-			aria-sort={ariaSortFor(sort, field)}
-			className={className}
-		>
+		<TableHead aria-sort={ariaSortFor(sort, field)} className={className}>
 			<button
 				type="button"
 				onClick={() => onSort(field)}

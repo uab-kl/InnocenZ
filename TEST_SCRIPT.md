@@ -533,6 +533,9 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    (h) latent, not rendered today: `.iz-btn-gold` without `.iz-btn` keeps the prototype glow, the approved gold
    hover still adds brightness(1.05); admin keeps its travelling dialog pop and reduced-motion lift (out of
    scope); (i) measured in Chromium + WebKit only — not Firefox, touch devices or a real iPhone.
+15. **Not ours, left uncommitted (18 Nov):** `apps/web/src/components/admin/table-sort.tsx` carries a format-only
+   working-tree change (one `<TableHead>` joined onto one line — no behaviour change), source unknown (an editor's
+   format-on-save?). Owner: commit it or discard it; until then this note keeps the TEST_SCRIPT hook truthful.
 14. **Reference patterns — open after 18 Nov (§10 2026-11-18 (v)):** (a) LIVE walk when the servers run: fire a
    confirmation on a phone after scrolling; the voucher hero + summary Amount column (Payroll & PV, History);
    the outlet Calendar shift detail's Workspace links inside its sheet; Payroll 'To pay' vs 'Awaiting
