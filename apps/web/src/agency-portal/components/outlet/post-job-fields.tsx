@@ -1024,14 +1024,18 @@ export function QuantityStepper({
 	step?: number;
 	suffix?: string;
 }) {
+	const { t } = usePortalLocale();
 	const dec = () => onChange(Math.max(min, value - step));
 	const inc = () =>
 		onChange(max !== undefined ? Math.min(max, value + step) : value + step);
+	/* Icon-only buttons need a name a screen reader can say (ui-ux-pro-max
+	   priority 1, 19 Nov 2026) — the words already exist in both languages. */
 	return (
 		<div className="flex items-center gap-2">
 			<button
 				type="button"
 				onClick={dec}
+				aria-label={t.workspace.decrease}
 				className="iz-chip flex h-7 w-7 items-center justify-center !p-0"
 			>
 				<Minus className="h-3.5 w-3.5" />
@@ -1047,6 +1051,7 @@ export function QuantityStepper({
 			<button
 				type="button"
 				onClick={inc}
+				aria-label={t.workspace.increase}
 				className="iz-chip flex h-7 w-7 items-center justify-center !p-0"
 			>
 				<Plus className="h-3.5 w-3.5" />

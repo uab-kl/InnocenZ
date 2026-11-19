@@ -4785,8 +4785,7 @@
 .iz-job-composer-bar .iz-job-composer-slot:not(.iz-time-picker):focus {
 	border-color: rgba(232, 194, 122, 0.4);
 	background: rgba(232, 194, 122, 0.06);
-}
-.iz-job-composer-bar .iz-job-composer-slot .iz-time-picker-btn {
+}.iz-job-composer-bar .iz-job-composer-slot .iz-time-picker-btn {
 	height: 38px;
 	min-height: 38px;
 	padding: 0 34px 0 13px;
@@ -18681,6 +18680,15 @@ button.iz-pr-offer-row:hover {
 	/* The roster trigger tints its background gold on hover; the history one
 	   does not, and this control is now a history one. */
 	background: rgba(255, 255, 255, 0.03);
+}
+/* Keyboard focus keeps the portal's ring (19 Nov 2026): the roster date
+   trigger's selector above out-ranks it at (0,3,0) (the history one, at
+   (0,2,0), already lost to it), and a 12% glow alone is too faint to find.
+   Open and hover stay as they are — only a keyboard focus draws this. */
+.iz-hist-select-trigger:focus-visible,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger:focus-visible {
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 2px;
 }
 .iz-hist-select-menu {
 	position: absolute;
