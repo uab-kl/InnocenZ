@@ -11,6 +11,7 @@
  * that tab can change what it holds.
  */
 import { clearActiveOrg } from "@/lib/active-org";
+import { resetAllNavSections } from "@/lib/nav-sections-storage";
 
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
@@ -120,6 +121,8 @@ export function clearAuthTokens(): void {
 	 * someone else's agency name in the header.
 	 */
 	clearActiveOrg();
+	// …and so do the side-menu sections someone opened (owner, 19 Nov 2026).
+	resetAllNavSections();
 }
 
 export function saveAuthTokens(
@@ -130,6 +133,11 @@ export function saveAuthTokens(
 	saveAccessToken(accessToken);
 	saveRefreshToken(refreshToken);
 	saveTokenExpiry(expiredAt);
+	// A sign-in starts the side menus from their default — only the current
+	// page's group open (owner, 19 Nov 2026: "in default when the user log in
+	// … just opened the today page"). The token REFRESH does not come through
+	// here, so a working session is never folded up mid-visit.
+	resetAllNavSections();
 }
 
 /**
