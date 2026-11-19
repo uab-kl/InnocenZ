@@ -77,7 +77,7 @@ export function OutletSealReview({
 								{fill(t.outletPanels.tipsAmount, { amount: formatRM(r.tips) })}
 							</span>
 						</div>
-						<div className="mt-1 text-xs font-semibold text-[var(--iz-gold)]">
+						<div className="mt-1 iz-nums text-xs font-semibold text-[var(--iz-txt)]">
 							{fill(t.outletPanels.pvEstimate, {
 								amount: formatRM(r.payout.total),
 							})}
@@ -88,7 +88,7 @@ export function OutletSealReview({
 			{rows.length > 0 && (
 				<div className="iz-v-sum tot mt-3">
 					<span className="iz-heading font-bold">{t.today.totalPayroll}</span>
-					<span className="iz-ledger text-[var(--iz-gold)]">
+					<span className="iz-ledger iz-nums font-semibold text-[var(--iz-txt)]">
 						{formatRM(total)}
 					</span>
 				</div>

@@ -11,6 +11,9 @@ import {
 	TodoPanel,
 } from "@agency-portal/components/portal/TodoPanel";
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
+import { useOutletCollections } from "@agency-portal/hooks/use-outlet-collections";
+import { useOutletPriceSetup } from "@agency-portal/hooks/use-outlet-price-setup";
+import { useOutletSalesReport } from "@agency-portal/hooks/use-outlet-sales-report";
 import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
 import { nowAgencyDateTime } from "@agency-portal/lib/portal-clock";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
@@ -53,6 +56,32 @@ function OutletHome() {
 	// Same hook Post Job gates on, so Today and Post Job cannot disagree about
 	// whether this venue has an agency.
 	const agencyLinks = useOutletAgencyLinks();
+	/*
+	 * THE TO DO PANEL WAITS FOR ITS BANNERS TOO (owner, 18 Nov 2026 — "yes fix
+	 * the to do panel"). The provider's flag covers tonight's shifts, billing and
+	 * join requests — the counts it computes — but three strips in this panel read
+	 * more, and could land after it had already said "All clear".
+	 *
+	 * Asked HERE, not in the provider: the provider is mounted on every outlet
+	 * page, so its reads would fire everywhere. These are the banners' OWN hooks,
+	 * so their query keys are the banners' and this asks the server nothing more
+	 * (OutletTodayPage.test.tsx counts the requests). Each flag is TanStack's
+	 * `isLoading` — false for a query that is switched off — under the SAME
+	 * condition the strip renders on, so a strip that can never show never holds:
+	 * - "No agency yet" shows only on a real session (`backend.backed`);
+	 * - the price reminder is `backed && isLoading` inside its hook;
+	 * - the statement check returns nothing without `viewBilling`
+	 *   (OutletReconciliationBanner → BilledVsRecordsBanner).
+	 */
+	const priceSetup = useOutletPriceSetup();
+	const collections = useOutletCollections();
+	const sales = useOutletSalesReport();
+	const bannersLoading =
+		(backend.backed && agencyLinks.isLoading) ||
+		priceSetup.isLoading ||
+		(collections.backed &&
+			can("viewBilling") &&
+			(collections.isLoading || sales.isLoading));
 	const { t } = usePortalLocale();
 
 	return (
@@ -122,7 +151,7 @@ function OutletHome() {
 			    is the one that ends the account), then linking an agency, prices,
 			    the daily statement, and the venue's own queues. Each strip still
 			    hides itself when it has nothing to say. */}
-			<TodoPanel>
+			<TodoPanel loading={bannersLoading}>
 				<UnpaidBillingBanner portal="outlet" />
 				{/* A venue with no APPROVED agency cannot post a shift, and Today is the
 			    screen it lands on. Without this it sees an empty board with no

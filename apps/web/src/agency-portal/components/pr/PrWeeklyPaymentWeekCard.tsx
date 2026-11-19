@@ -231,7 +231,7 @@ export function PrWeeklyPaymentWeekCard({
 										day: summary.issueDayLabel,
 									})}
 									{" · "}
-									<b className="text-[var(--iz-gold)]">
+									<b className="iz-nums font-semibold text-[var(--iz-txt)]">
 										{fill(t.prPortal.runningTotal, {
 											total: formatRM(weekTotalRm(summary)),
 										})}
@@ -241,7 +241,7 @@ export function PrWeeklyPaymentWeekCard({
 								<>
 									{t.prPortal.pvIssuedEverySunday}
 									{" · "}
-									<b className="text-[var(--iz-gold)]">
+									<b className="iz-nums font-semibold text-[var(--iz-txt)]">
 										{fill(t.prPortal.weekTotal, {
 											total: formatRM(weekTotalRm(summary)),
 										})}

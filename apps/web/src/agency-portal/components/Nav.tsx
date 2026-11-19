@@ -427,7 +427,9 @@ export function AppHeader({
 			<AppTopbar {...topbar} />
 
 			{(subtitle || title || right) && (
-				<div className="pb-2">
+				// `iz-app-header`: the page-title hook portal-motion.css M1 rises on
+				// arrival, as it does every `.iz-screen > header`.
+				<div className="iz-app-header pb-2">
 					{subtitle && (
 						<p className="iz-tiny iz-muted2 uppercase tracking-widest">
 							{subtitle}

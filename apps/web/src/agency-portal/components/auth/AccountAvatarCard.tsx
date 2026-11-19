@@ -197,7 +197,7 @@ export function AccountAvatarCard() {
 					</div>
 					{uploading && (
 						<span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
-							<Loader2 className="h-4 w-4 animate-spin text-white" />
+							<Loader2 className="h-4 w-4 motion-safe:animate-spin text-white" />
 						</span>
 					)}
 				</div>

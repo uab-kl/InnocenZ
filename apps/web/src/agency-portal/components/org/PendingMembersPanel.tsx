@@ -248,7 +248,7 @@ export function PendingMembersPanel({
 	if (isLoading) {
 		return (
 			<div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-				<Loader2 className="h-4 w-4 animate-spin" />
+				<Loader2 className="h-4 w-4 motion-safe:animate-spin" />
 				{t.common.loading}
 			</div>
 		);

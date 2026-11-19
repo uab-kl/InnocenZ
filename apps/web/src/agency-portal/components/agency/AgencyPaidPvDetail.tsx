@@ -32,7 +32,7 @@ import {
 } from "@agency-portal/lib/pv-pdf";
 import { buildAgencyPayee } from "@agency-portal/lib/pv-template";
 import { useStore } from "@agency-portal/lib/store";
-import { FileText, Receipt, Sheet } from "lucide-react";
+import { AlertTriangle, FileText, Receipt, Sheet } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function AgencyPaidPvDetail({
@@ -96,10 +96,18 @@ export function AgencyPaidPvDetail({
 					<span className="iz-pv-detail-id">{pvVoucherRef(pv) || "—"}</span>
 				</div>
 			</div>
+			{/* The same amber NOTICE the Payroll & PV detail shows for this
+			    check: a plain <div> with no `__cta` and no arrow, so no
+			    `a.iz-alert` hover or lift rule can reach it. */}
 			{pv.prIcMismatch && (
-				<p className="iz-tiny mb-2 text-[var(--iz-amber)]">
-					{t.izPv.prIcDiffersFromProfile}
-				</p>
+				<div className="iz-alert iz-alert--amber iz-alert--notice">
+					<span className="iz-alert__head">
+						<AlertTriangle className="iz-alert__icon" aria-hidden />
+						<span className="iz-alert__title">
+							{t.izPv.prIcDiffersFromProfile}
+						</span>
+					</span>
+				</div>
 			)}
 			{/* The summary only prints the agency row once someone signed, so a
 			    voucher paid before that signature was required (PV-000002,
@@ -144,7 +152,9 @@ export function AgencyPaidPvDetail({
 					))}
 				<div className="iz-v-sum tot">
 					<span>{t.payroll.netPaid}</span>
-					<b className="text-[var(--iz-gold)]">{formatRM(getPvNetTotal(pv))}</b>
+					<b className="iz-nums font-semibold text-[var(--iz-txt)]">
+						{formatRM(getPvNetTotal(pv))}
+					</b>
 				</div>
 			</IzCard>
 

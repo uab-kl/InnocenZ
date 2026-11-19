@@ -255,7 +255,7 @@ export function PrWeeklyPaymentGrid({
 									{t.prPortal.pvIssuedEverySunday}
 								</span>
 							</td>
-							<td className="iz-pr-week-pay__net iz-heading font-extrabold text-[var(--iz-gold)]">
+							<td className="iz-pr-week-pay__net iz-heading iz-nums font-semibold text-[var(--iz-txt)]">
 								{formatRM(weekTotalRm(summary))}
 							</td>
 						</tr>

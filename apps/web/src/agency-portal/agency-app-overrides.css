@@ -229,8 +229,15 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	border-color: color-mix(in oklab, var(--iz-amber, #e8c27a) 70%, #000);
 }
 
+/*
+ * DARK INK, like amber (18 Nov 2026). White on the approved design's soft red
+ * (`--iz-red` #e5a1a6) measured 2.1:1 — a red count such as Payroll's "12" was
+ * the hardest number in the rail to read. #12100c on it is 9.0:1, and 7.8:1 /
+ * 6.8:1 on the older #f08a8a / #ff6b6b reds. The pill stays red: only the
+ * digit changed.
+ */
 .iz-nav-alert[data-tone="red"] {
-	color: #fff;
+	color: #12100c;
 	background: var(--iz-red, #ff6b6b);
 	border-color: color-mix(in oklab, var(--iz-red, #ff6b6b) 70%, #000);
 }

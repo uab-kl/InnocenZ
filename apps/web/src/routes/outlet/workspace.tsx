@@ -17,6 +17,7 @@ import {
 	type OutletTierRateSettings,
 	snapTierWage,
 } from "@agency-portal/lib/agency-demo";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import {
 	OUTLET_DRINKS_PRICE_SECTION_ID,
 	OUTLET_PRICES_SECTION_ID,
@@ -190,9 +191,10 @@ function OutletWorkspacePage() {
 			// Scroll after the newly expanded body has laid out, or the section
 			// lands off-screen at its collapsed height.
 			requestAnimationFrame(() => {
-				document
-					.getElementById(targetId)
-					?.scrollIntoView({ behavior: "smooth", block: "start" });
+				document.getElementById(targetId)?.scrollIntoView({
+					behavior: portalScrollBehavior(),
+					block: "start",
+				});
 			});
 		};
 		openLinkedSection();

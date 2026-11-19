@@ -26,6 +26,7 @@ import type {
 } from "@agency-portal/lib/agency-demo";
 import { resolveOutletShiftDateIso } from "@agency-portal/lib/agency-outlet-shifts";
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import {
 	formatOutletShiftMetricAmount,
 	formatShiftEventTypeSummary,
@@ -400,7 +401,7 @@ export function OutletShiftDetailPanel({
 		);
 		document
 			.getElementById(cutlostSectionId)
-			?.scrollIntoView({ behavior: "smooth", block: "start" });
+			?.scrollIntoView({ behavior: portalScrollBehavior(), block: "start" });
 	};
 
 	const summary = (
@@ -412,7 +413,10 @@ export function OutletShiftDetailPanel({
 				onClick={() => {
 					document
 						.getElementById(OUTLET_PR_TONIGHT_SECTION_ID)
-						?.scrollIntoView({ behavior: "smooth", block: "start" });
+						?.scrollIntoView({
+							behavior: portalScrollBehavior(),
+							block: "start",
+						});
 				}}
 			/>
 			<OutletTargetActualCard
@@ -522,7 +526,7 @@ export function OutletShiftDetailPanel({
 							<Link
 								to="/outlet/workspace"
 								hash={OUTLET_DRINKS_PRICE_SECTION_ID}
-								className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
+								className="iz-inline-link"
 							>
 								{t.today.addDrinkPricesInWorkspace}
 							</Link>
@@ -545,7 +549,7 @@ export function OutletShiftDetailPanel({
 													? OUTLET_DRINKS_PRICE_SECTION_ID
 													: OUTLET_SERVICE_ENTITLEMENT_SECTION_ID
 											}
-											className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
+											className="iz-inline-link"
 										>
 											{group.category === "drink"
 												? t.workspace.drinksPrice

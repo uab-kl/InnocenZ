@@ -1033,7 +1033,7 @@ function OutletSubscriptionPage() {
 								<p className="iz-tiny iz-muted2">
 									{t.outletSubscription.owedNow}
 								</p>
-								<p className="mt-1 iz-heading text-base font-bold text-[var(--iz-gold-l)]">
+								<p className="mt-1 iz-heading iz-nums text-base font-semibold text-[var(--iz-txt)]">
 									{formatRM(collections.totals.owedRm)}
 								</p>
 							</div>
@@ -1044,7 +1044,7 @@ function OutletSubscriptionPage() {
 								<p
 									className={`mt-1 iz-heading text-base font-bold ${
 										collections.totals.overdueRm > 0
-											? "text-[var(--iz-red-l,#ff8080)]"
+											? "text-[var(--iz-red)]"
 											: ""
 									}`}
 								>

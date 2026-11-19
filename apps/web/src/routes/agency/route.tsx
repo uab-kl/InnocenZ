@@ -39,6 +39,8 @@ import "@agency-portal/approved-portal-design.css";
 import "@/styles/portal-interaction.css";
 // One selected-tab look (gold, dark ink) for all three portals.
 import "@/styles/portal-tabs.css";
+// Motion that guides — agency + outlet only. See agency-portal/portal-motion.css.
+import "@agency-portal/portal-motion.css";
 
 export const Route = createFileRoute("/agency")({
 	// Agency-only tree: admin/outlet sessions are sent to their own portal.

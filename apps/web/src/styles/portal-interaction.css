@@ -135,6 +135,8 @@
  * A ring of the same strength in every portal, at once. Each portal's own
  * accent drives it — `--ring` in admin, `--iz-gold` in agency/outlet — so it
  * reads as theirs rather than as the browser's default.
+ * `.iz-roster-amount-btn` takes the ring ONLY, not the lift above: it is an
+ * underlined figure inside a table cell, and a figure that hops reads as noise.
  */
 :is(body[data-admin-design], body[data-agency-design], body[data-outlet-design])
 	:is(
@@ -150,7 +152,8 @@
 		.iz-portal-ai-btn,
 		.iz-topbar-action,
 		.iz-pr-manage-card,
-		.iz-hub-quick-card
+		.iz-hub-quick-card,
+		.iz-roster-amount-btn
 	):focus-visible {
 	outline: 2px solid var(--ring, var(--iz-gold, currentColor));
 	outline-offset: 2px;

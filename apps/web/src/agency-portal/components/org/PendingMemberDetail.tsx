@@ -281,7 +281,11 @@ export function PendingMemberDetail({
 
 	return (
 		<div className="flex flex-col gap-6 p-6">
-			<div className="flex flex-col items-center gap-3 text-center">
+			<div
+				key={member.id}
+				data-iz-motion="detail-head"
+				className="flex flex-col items-center gap-3 text-center"
+			>
 				{photo ? (
 					<img
 						src={photo}

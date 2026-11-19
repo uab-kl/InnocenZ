@@ -59,7 +59,7 @@ export function CutlostDetailPanel({
 
 	return (
 		<>
-			<div className="iz-approvals-detail-head">
+			<div key={req.id} className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
 					<span className="iz-approvals-cutlost-icon">
 						<Icon className="h-5 w-5" />
@@ -89,7 +89,9 @@ export function CutlostDetailPanel({
 								if (!busy) onApprove();
 							}}
 						>
-							{busy && <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />}
+							{busy && (
+								<Loader2 className="mr-1 inline h-3 w-3 motion-safe:animate-spin" />
+							)}
 							{t.common.approve}
 						</button>
 						<button
