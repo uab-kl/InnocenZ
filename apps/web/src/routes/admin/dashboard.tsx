@@ -723,7 +723,10 @@ function DashboardComponent() {
 			(o: Outlet): RegRow => ({
 				id: `outlet-${o.id}`,
 				name: o.name,
-				code: o.ssmNo ? `SSM ${o.ssmNo}` : t.admin.navOutlet,
+				// The venue's InnocenZ id, like the agency row above (owner, 19 Nov
+				// 2026: "why show SSM ? where is the outlet id ?"). The SSM number
+				// is the company's registration — it stays on the venue's sheet.
+				code: orgMemberIdStem("outlet", o.memberCodePrefix) ?? "—",
 				kind: "outlet",
 				typeLabel: t.admin.navOutlet,
 				typeTone: "live",
