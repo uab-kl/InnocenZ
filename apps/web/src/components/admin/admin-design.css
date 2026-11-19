@@ -197,7 +197,7 @@ body[data-admin-design] [data-slot="button"] {
 	box-shadow: none;
 }
 body[data-admin-design] [data-slot="button"][data-variant="default"] {
-	background: #68517f;
+	background: var(--iz-act);
 	color: #fff;
 }
 body[data-admin-design] [data-slot="button"][data-variant="default"]:hover {
@@ -531,7 +531,7 @@ body[data-admin-design] .admin-sidebar-collapse-toggle {
 	width: 28px;
 	height: 56px;
 	right: -14px;
-	border: 1px solid #877095;
+	border: 1px solid var(--iz-line-violet);
 	border-radius: var(--iz-radius-l, 14px);
 	background: #40334e;
 	color: var(--foreground);
@@ -566,7 +566,7 @@ body[data-admin-design]
 	height: 46px;
 	border: 1px solid #b9a3cf;
 	border-radius: 50%;
-	background: #68517f;
+	background: var(--iz-act);
 	color: #fff;
 	box-shadow: 0 4px 16px #0003;
 }
@@ -1040,9 +1040,20 @@ body[data-admin-design] .iz-admin-request-footer > button {
 .admin-todo__row--first::before {
 	opacity: 0.8;
 }
+/* No lift (DESIGN.md §8 M7 — agency and outlet's To do rows lost theirs on 18
+   Nov): the border answers the pointer, the row stays where it is. */
 .admin-todo__row:hover {
-	transform: translateY(-1px);
 	border-color: var(--signal-warn);
+}
+/* Reduced motion in admin, as in agency and outlet: transitions narrow to
+   colour and light — nothing that moves. The public styles.css gives every
+   button and link a `transform` transition; inside admin it stops here. */
+@media (prefers-reduced-motion: reduce) {
+	body[data-admin-design] :is(button, a, [role="tab"]) {
+		transition-property:
+			color, background-color, border-color, outline-color, opacity,
+			box-shadow !important;
+	}
 }
 .admin-todo__row:focus-visible {
 	outline: 2px solid var(--lavender);

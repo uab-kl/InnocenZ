@@ -224,7 +224,7 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 }
 
 .iz-nav-alert[data-tone="amber"] {
-	color: #12100c;
+	color: var(--iz-ink-on-light);
 	background: var(--iz-amber, #e8c27a);
 	border-color: color-mix(in oklab, var(--iz-amber, #e8c27a) 70%, #000);
 }
@@ -239,10 +239,10 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 /* The top bar's bell count is the same soft red pill (19 Nov 2026): white on
    #e5a1a6 measured 2.1:1 in the signed-in sweep; the rail's dark ink is 9.0:1. */
 .iz-bell-count {
-	color: #12100c;
+	color: var(--iz-ink-on-light);
 }
 .iz-nav-alert[data-tone="red"] {
-	color: #12100c;
+	color: var(--iz-ink-on-light);
 	background: var(--iz-red, #ff6b6b);
 	border-color: color-mix(in oklab, var(--iz-red, #ff6b6b) 70%, #000);
 }

@@ -7,6 +7,7 @@ import {
 } from "@agency-portal/components/ui/dialog";
 import { ArrowUp, CircleHelp } from "lucide-react";
 import { useEffect, useState } from "react";
+import { navSectionsKey } from "@/lib/nav-sections-storage";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export type PortalNavSection = "workspace" | "management" | "organization";
@@ -60,21 +61,22 @@ export function portalNavSection(path: string): PortalNavSection {
 }
 
 /**
- * A first visit opens the whole map.
+ * A fresh session shows ONE open group: the one holding the current page.
  *
- * ⚠️ Every group used to start `false` and stay there: `saved?.workspace ===
- * true` turns a MISSING preference into "closed", so a reader who had never
- * touched the rail landed facing three shut doors with no sign of what was
- * behind them. The admin rail does not have this problem because it opens the
- * group holding the current page — a rule this hook never had.
- *
- * A SAVED preference still wins in full, closed groups included: someone who
- * folded a group away meant it, and must not have it reopened every visit.
+ * Owner, 19 Nov 2026: "in default when the user log in to the agency and the
+ * outlet, their side panel all close it, just opened the today page". This
+ * REVERSES the 16 Nov "a first visit opens the whole map" — the worry then was
+ * three shut headings with nothing to say what lay behind them, and that is
+ * still answered: the current page's group opens (the effect below), and a
+ * closed group carries its alert count on the heading. Every sign-in clears
+ * the saved choice (`resetAllNavSections` in `saveAuthTokens` /
+ * `clearAuthTokens`), so each session starts here; inside a session a SAVED
+ * choice still wins in full, closed groups included.
  */
-const ALL_OPEN: PortalNavSections = {
-	workspace: true,
-	management: true,
-	organization: true,
+const ALL_CLOSED: PortalNavSections = {
+	workspace: false,
+	management: false,
+	organization: false,
 };
 
 export function usePortalNavSections(
@@ -82,8 +84,8 @@ export function usePortalNavSections(
 	/** The group holding the current page, opened on top of whatever is stored. */
 	activeSection?: PortalNavSection,
 ) {
-	const storageKey = `iz-${portal}-navigation-sections`;
-	const [sections, setSections] = useState<PortalNavSections>(ALL_OPEN);
+	const storageKey = navSectionsKey(portal);
+	const [sections, setSections] = useState<PortalNavSections>(ALL_CLOSED);
 	useEffect(() => {
 		try {
 			const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -96,11 +98,11 @@ export function usePortalNavSections(
 							management: saved.management === true,
 							organization: saved.organization === true,
 						}
-					: ALL_OPEN,
+					: ALL_CLOSED,
 			);
 		} catch {
 			/* Private browsing may make storage unavailable. */
-			setSections(ALL_OPEN);
+			setSections(ALL_CLOSED);
 		}
 	}, [storageKey]);
 	// Declared AFTER the restore, like the admin rail: on mount both updates
