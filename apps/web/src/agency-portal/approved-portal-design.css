@@ -63,6 +63,25 @@
 .iz-portal .iz-portal-main .iz-heading {
 	font-weight: 600;
 }
+/* ONE focus ring per field (owner, 19 Nov 2026: screenshot of Manage PR's
+   "Name" search, "fix all this"). `__inputwrap` draws the box and its focus;
+   the bare input inside also took the portal's (0,2,2) ring 3px outside
+   itself, so two rings showed, out of line. The roster filter bar fixed this
+   only inside `.iz-shift-filters`; this is the same rule everywhere the box
+   is used — the box rings, the field does not. A signed-in sweep of every
+   field on 21 agency / outlet / admin pages found this the only double. */
+body:is([data-outlet-design], [data-agency-design])
+	.iz-roster-filterbar__inputwrap
+	:is(input, select, textarea):focus-visible {
+	outline: none;
+}
+body:is([data-outlet-design], [data-agency-design])
+	.iz-roster-filterbar__inputwrap:has(
+		:is(input, select, textarea):focus-visible
+	) {
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 2px;
+}
 /* The shared page title (Nav.tsx) is a PAGE title: 24, not the raw 22 it
    carried (signed-in sweep, 19 Nov 2026 — outlet Profile measured 22px). */
 .iz-portal .iz-nav-title {
