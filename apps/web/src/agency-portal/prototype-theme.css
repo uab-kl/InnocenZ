@@ -13622,7 +13622,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	padding: 5px 12px;
 	border-radius: 999px;
-	font-size: 14px;
+	font-size: var(--iz-fs-label); /* was 14 — owner sweep, Manage Outlet */
 	font-weight: 700;
 	line-height: 1.2;
 }
@@ -13676,7 +13676,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-manage-card__kpi-empty {
 	font-family: var(--iz-font);
-	font-size: 28px;
+	font-size: var(--iz-fs-head); /* was 28 — the KPI figure step, 24 */
 	font-weight: 700;
 	line-height: 1;
 	color: var(--iz-muted2);
