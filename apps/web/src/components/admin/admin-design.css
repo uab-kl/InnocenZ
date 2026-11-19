@@ -757,6 +757,21 @@ body[data-admin-design] .iz-admin-request-footer > button {
 	}
 }
 
+/*
+ * A FINGER NEEDS 44px (ui-ux-pro-max priority 2, 19 Nov 2026). The signed-in
+ * sweep measured the top bar's menu, language, bell and profile buttons at
+ * 36-37px on a 390px phone — fine for a mouse, small for a thumb. Touch
+ * screens only, so the desktop bar is exactly as it was.
+ */
+@media (pointer: coarse) {
+	/* (0,2,2): must out-rank `body[data-admin-design] :is(.grid, .flex) > *
+	   { min-width: 0 }` (0,2,1), which held the width at 36px. */
+	body[data-admin-design] .iz-admin-header :is(button, a) {
+		min-width: 44px;
+		min-height: 44px;
+	}
+}
+
 /* ───────────────────────────────────────────────────────────────────────────
  * SORTABLE HEADERS AND SPLIT TIMESTAMPS (16 Nov 2026)
  *
