@@ -517,6 +517,10 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    authenticator secrets; keep it with the other secrets — changing or losing it locks enrolled admins out.
 10. **Not walked in a browser:** the Workspace time picker and refusal toast, and the Penalty rules editor clamps —
    unit-tested and API-checked only; click through on a dev build.
+19. **Not ours, left uncommitted (19 Nov):** `apps/web/src/routes/admin/dashboard.tsx` carries an import-order-only
+   working-tree change (`AdminTodoPanel` moved below the `@/agency-portal` import) and was re-saved with LF line
+   endings — no behaviour change; it clears the file's one pre-existing biome organize-imports error. Source unknown
+   (an editor's format-on-save?). Owner: commit it or discard it; until then this note keeps the TEST_SCRIPT hook truthful.
 18. **The four GitHub design tools at full strength — what is still unused (owner, 19 Nov 2026):** used so far:
    awesome-design-md (Stripe + Linear only, of 84), design-extract + dembrandt (the PUBLIC pages and six homepages
    for motion — they cannot carry the portal session, which lives in localStorage), ui-ux-pro-max (hover/active/
