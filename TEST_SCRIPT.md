@@ -517,6 +517,19 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    authenticator secrets; keep it with the other secrets — changing or losing it locks enrolled admins out.
 10. **Not walked in a browser:** the Workspace time picker and refusal toast, and the Penalty rules editor clamps —
    unit-tested and API-checked only; click through on a dev build.
+20. **RESUME HERE — design + motion task, open after 19 Nov (owner: "do all, start the motion", "the partly and
+   not done also do it now").** Done: §10 2026-11-19 (vi)-(xi). Left, in this order: (a) decision 3 — give the raw
+   colours tokens (`#12100c` dark ink, `#9274ad` / `#68517f` / `#795f93` act border / fill / hover, `#96616b` sign-out
+   border; grep the portal CSS + TSX) and re-run dembrandt; (b) POP-UPS — a read-only sweep that clicks every plain
+   button in `main` (skipping save / delete / sign out / approve / pay / send / confirm words; all non-GET aborted)
+   to reach the 31 `IzSheet` panels, then fix what it finds; (c) AGENCY FINANCE — no fixture and no DB write: intercept
+   `/auth/me` in Playwright with a Finance-lane profile built from the real `role_permission` rows (UI check only);
+   (d) MOTION — live check of agency + outlet (load, tab switch, pop-up open, reduced motion) against DESIGN.md §8;
+   (e) ADMIN MOTION PASS — its dialog still travels (slide-in), its lifts ignore reduced motion; apply §8 as agency /
+   outlet; (f) leftovers: Tailwind `rounded-*` 4 / 12 / 16 px and admin's shadcn radii, admin's two 500 weights and
+   150 ms classes. Tools: sweep scripts are rebuilt from §10 (vi)-(x) (read-only session via
+   `_probe-mint-session.ts` + `refresh_token` placeholder + `iz-session-kind=real` + `innocenz.activeOrg`). Servers on
+   3100 / 7790 when the owner's other project holds 3000 / 7777.
 19. ~~**Not ours, left uncommitted (19 Nov):** the import-order-only `admin/dashboard.tsx` change~~ CLOSED — the owner
    committed it as `42db1d8a` (19 Nov).
 18. **The four GitHub design tools at full strength — what is still unused (owner, 19 Nov 2026):** used so far:
