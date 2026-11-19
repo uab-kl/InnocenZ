@@ -2040,7 +2040,7 @@ function AgencyPV() {
 								 */}
 								<button
 									type="button"
-									className="iz-chip ml-auto !border-[#9274ad] !bg-[#68517f] font-bold !text-white enabled:hover:!bg-[#795f93] disabled:!cursor-default disabled:opacity-40"
+									className="iz-chip ml-auto !border-[var(--iz-act-line)] !bg-[var(--iz-act)] font-bold !text-white enabled:hover:!bg-[var(--iz-act-hover)] disabled:!cursor-default disabled:opacity-40"
 									disabled={selectedIds.length === 0 || bulkBusy}
 									onClick={() => {
 										if (bulkMode === "pay" && !bulkConfirmArmed) {

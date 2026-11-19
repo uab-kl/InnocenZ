@@ -774,7 +774,7 @@ export function UnchargedFeesPanel({
 								   `iz-btn-gold` itself: without `.iz-btn` that class keeps
 								   the prototype's glow (prototype-theme.css:641-647), and
 								   `.iz-btn` would make this row button 46px tall. */
-									className="rounded-lg border border-[#9274ad] bg-[#68517f] px-3 py-1.5 text-xs font-bold text-white transition-colors enabled:hover:bg-[#795f93] disabled:opacity-60"
+									className="rounded-lg border border-[var(--iz-act-line)] bg-[var(--iz-act)] px-3 py-1.5 text-xs font-bold text-white transition-colors enabled:hover:bg-[var(--iz-act-hover)] disabled:opacity-60"
 								>
 									{isMarking ? t.payroll.adding : t.payroll.addToVoucher}
 								</button>

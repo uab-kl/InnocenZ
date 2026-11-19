@@ -104,7 +104,7 @@ function PortalGateLoadingBody({
 						className={cn(
 							"mt-6 min-h-11 w-full rounded-lg px-4 py-3 text-base font-semibold disabled:opacity-60",
 							isPortal
-								? "bg-[#68517f] text-white"
+								? "bg-[var(--iz-act)] text-white"
 								: "bg-primary text-primary-foreground",
 						)}
 					>

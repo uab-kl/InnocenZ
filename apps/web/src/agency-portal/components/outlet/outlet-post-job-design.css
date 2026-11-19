@@ -31,16 +31,16 @@
 	font-size: var(--iz-fs-body);
 	font-weight: 600;
 	line-height: 1.5;
-	border: 1px solid #9274ad;
+	border: 1px solid var(--iz-act-line);
 	border-radius: var(--iz-radius-m, 10px);
-	background: #68517f;
+	background: var(--iz-act);
 	color: #fff;
 	box-shadow: none;
 }
 .iz-portal[data-portal="outlet"]
 	.outlet-post-job-design
 	.iz-post-job-submit-btn:hover:not(:disabled) {
-	background: #795f93;
+	background: var(--iz-act-hover);
 	box-shadow: none;
 }
 .iz-portal[data-portal="outlet"]
@@ -547,7 +547,7 @@
 }
 .iz-portal[data-portal="outlet"] .iz-event-card__placeholder {
 	height: 110px;
-	background: linear-gradient(135deg, #382b47, #292433);
+	background: linear-gradient(135deg, #382b47, var(--iz-panel2));
 }
 .iz-portal[data-portal="outlet"] .iz-event-card__placeholder svg {
 	width: 32px;

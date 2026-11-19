@@ -63,6 +63,19 @@
 	--font-weight-black: 700;
 	--default-transition-duration: var(--iz-motion-fast);
 }
+/* Colours that were written raw, now NAMED (TEST_SCRIPT §9 item 20 (a); the
+   consistency report listed them as colours with no token). Values unchanged.
+   On :root, not body — the portal gate can paint before body carries its
+   design attribute; colour names alone cannot change any other page. */
+:root {
+	--iz-act: #68517f; /* the one filled action — "gold" in old class names */
+	--iz-act-hover: #795f93;
+	--iz-act-line: #9274ad;
+	--iz-signout-line: #96616b;
+	--iz-ink-on-light: #12100c; /* dark digit on the soft red / amber pills */
+	--iz-line-violet: #877095; /* admin's sidebar collapse toggle */
+	--iz-surface-raised: #2c2539;
+}
 /* The public site's `styles.css` gives every button and link a 180 ms
    transition (`button, .island-shell, a`). Inside the portals that is the
    fast step instead. Same (0,0,1) weight and loaded later, so it wins over

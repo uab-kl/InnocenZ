@@ -286,13 +286,13 @@ body:is([data-outlet-design], [data-agency-design])
 }
 body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-btn-primary, .iz-btn-violet, .iz-btn-gold) {
-	background: #68517f;
-	border: 1px solid #9274ad;
+	background: var(--iz-act);
+	border: 1px solid var(--iz-act-line);
 	color: #fff;
 }
 body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-btn-primary, .iz-btn-violet, .iz-btn-gold):hover:not(:disabled) {
-	background: #795f93;
+	background: var(--iz-act-hover);
 }
 body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-btn-soft, .iz-btn-ghost) {
@@ -302,7 +302,7 @@ body:is([data-outlet-design], [data-agency-design])
 }
 body:is([data-outlet-design], [data-agency-design]) .iz-btn-danger {
 	color: var(--iz-red);
-	border: 1px solid #96616b;
+	border: 1px solid var(--iz-signout-line);
 	background: var(--iz-red-bg);
 }
 body:is([data-outlet-design], [data-agency-design]) :is(.iz-pill, .iz-chip) {
@@ -686,7 +686,7 @@ body:is([data-outlet-design], [data-agency-design])
 .iz-portal:is([data-portal="outlet"], [data-portal="agency"])
 	.iz-portal-nav-link.on {
 	color: #fff;
-	background: #2c2539;
+	background: var(--iz-surface-raised);
 }
 .iz-portal:is([data-portal="outlet"], [data-portal="agency"])
 	.iz-portal-nav-link.on::before {
@@ -707,7 +707,7 @@ body:is([data-outlet-design], [data-agency-design])
 }
 .iz-portal:is([data-portal="outlet"], [data-portal="agency"])
 	.iz-portal-sign-out {
-	border: 1px solid #96616b;
+	border: 1px solid var(--iz-signout-line);
 	background: var(--iz-red-bg);
 	color: var(--iz-red);
 	justify-content: center;
@@ -1138,7 +1138,7 @@ body:is([data-outlet-design], [data-agency-design])
 	border: 1px solid #ad91c4;
 	border-radius: 50%;
 	color: white;
-	background: #68517f;
+	background: var(--iz-act);
 	box-shadow: 0 4px 20px #0003;
 }
 @media (min-width: 768px) {
@@ -2325,14 +2325,14 @@ body[data-outlet-design]
 	width: 46px;
 }
 .iz-portal .iz-approved-plan-row button:not(:disabled) {
-	background: #68517f;
+	background: var(--iz-act);
 	border: 1px solid #a487bd;
 	color: #fff;
 	font-weight: 600;
 	min-height: 46px;
 }
 .iz-portal .iz-approved-plan-row button:not(:disabled):hover {
-	background: #795f93;
+	background: var(--iz-act-hover);
 }
 .iz-portal .iz-approved-plan-row button:focus-visible {
 	outline: 2px solid var(--iz-violet);
