@@ -550,6 +550,10 @@ function AgencyProfile() {
 							type="file"
 							accept="image/*"
 							className="sr-only"
+							/* Opened by the photo controls: out of the Tab order so a
+							   keyboard never lands on an unnamed field (19 Nov 2026). */
+							tabIndex={-1}
+							aria-hidden="true"
 							onChange={onAvatarFilePick}
 						/>
 						<AvatarCropSheet

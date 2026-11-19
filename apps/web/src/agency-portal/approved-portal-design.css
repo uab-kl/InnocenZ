@@ -63,6 +63,23 @@
 .iz-portal .iz-portal-main .iz-heading {
 	font-weight: 600;
 }
+/* The shared page title (Nav.tsx) is a PAGE title: 24, not the raw 22 it
+   carried (signed-in sweep, 19 Nov 2026 — outlet Profile measured 22px). */
+.iz-portal .iz-nav-title {
+	font-size: var(--iz-fs-head);
+}
+/* A finger needs 44px (ui-ux-pro-max priority 2): the top bar's language,
+   Icon guide, bell and profile controls measured 34-36px on a touch phone.
+   Touch screens only — the desktop bar is unchanged. (0,2,2) out-ranks any
+   flex-child `min-width: 0` reset. */
+@media (pointer: coarse) {
+	body:is([data-agency-design], [data-outlet-design])
+		.iz-portal-header-tools
+		:is(button, a) {
+		min-width: 44px;
+		min-height: 44px;
+	}
+}
 body:is([data-agency-design], [data-outlet-design])
 	:is(.iz-sheet, [role="dialog"]) {
 	font-family: var(--iz-font);

@@ -629,7 +629,7 @@ function AgencySubscription() {
 											onClick={handleAskForCustom}
 										>
 											<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
-											<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
+											<span className="iz-tiny font-semibold">
 												{sub.customRequestKind === "requote"
 													? t.subscription.renegotiating
 													: t.subscription.renegotiatePrice}
@@ -743,7 +743,7 @@ function AgencySubscription() {
 													onClick={handleAskForCustom}
 												>
 													<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
-													<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
+													<span className="iz-tiny font-semibold">
 														{sub.isRequesting
 															? t.subscription.sending
 															: t.subscription.askAdminForPrice}
