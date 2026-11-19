@@ -68,19 +68,34 @@
    the bare input inside also took the portal's (0,2,2) ring 3px outside
    itself, so two rings showed, out of line. The roster filter bar fixed this
    only inside `.iz-shift-filters`; this is the same rule everywhere the box
-   is used — the box rings, the field does not. A signed-in sweep of every
-   field on 21 agency / outlet / admin pages found this the only double. */
+   is used — the box rings, the field does not. The stylesheets name four
+   more boxes that react to a focused field inside them (owner: "any of this
+   on the website all help me to fix it") — the phone field (dial + number),
+   the Post Job PR search, the PR measurement fields and the older roster
+   filter input — each also let the field draw the portal ring: same rule. */
 body:is([data-outlet-design], [data-agency-design])
-	.iz-roster-filterbar__inputwrap
+	:is(
+		.iz-roster-filterbar__inputwrap,
+		.iz-roster-filter-input-wrap,
+		.iz-phone-field,
+		.iz-post-job-pr-search,
+		.iz-pr-measure-field__wrap
+	)
 	:is(input, select, textarea):focus-visible {
 	outline: none;
 }
 body:is([data-outlet-design], [data-agency-design])
-	.iz-roster-filterbar__inputwrap:has(
-		:is(input, select, textarea):focus-visible
-	) {
+	:is(
+		.iz-roster-filterbar__inputwrap,
+		.iz-roster-filter-input-wrap,
+		.iz-phone-field,
+		.iz-post-job-pr-search,
+		.iz-pr-measure-field__wrap
+	):has(:is(input, select, textarea):focus-visible) {
 	outline: 2px solid var(--iz-violet);
 	outline-offset: 2px;
+	/* Three of these boxes also glow on focus — one ring, not ring + halo. */
+	box-shadow: none;
 }
 /* The shared page title (Nav.tsx) is a PAGE title: 24, not the raw 22 it
    carried (signed-in sweep, 19 Nov 2026 — outlet Profile measured 22px). */

@@ -53,7 +53,7 @@
   "apps/web/src/agency-portal/components/ui/calendar.tsx::D-arbitrary-size": 2,
   "apps/web/src/agency-portal/components/ui/form.tsx::D-arbitrary-size": 2,
   "apps/web/src/agency-portal/prototype-theme.css::A-font-family": 2,
-  "apps/web/src/agency-portal/prototype-theme.css::B-font-size": 759,
+  "apps/web/src/agency-portal/prototype-theme.css::B-font-size": 757,
   "apps/web/src/routes/agency/pending.tsx::D-arbitrary-size": 3,
   "apps/web/src/routes/agency/prs.tsx::D-arbitrary-size": 4,
   "apps/web/src/routes/agency/pv.tsx::D-arbitrary-size": 1,
