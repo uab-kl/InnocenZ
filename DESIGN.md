@@ -137,6 +137,9 @@ One dark theme, shared by admin, agency and outlet (the token values are the sam
   `styles/portal-tabs.css`, two tokens (`--iz-tab-selected-bg` = `--gradient-royal`,
   `--iz-tab-selected-ink`). Gold here means "you are here"; "waiting" is the small amber
   COUNT badge, a different shape. A new tab strip is added to that file's list.
+  A count INSIDE a tab (Approvals' PR · Outlet · Team members) is one quiet pill tinted
+  from the tab's own text colour — the same shape selected or not, never a fill of its own
+  (owner, 19 Nov 2026: a solid black chip on the gold tab read as a second control).
 - **`act` (deep violet) fills the one button that does the thing.** Historically called
   "gold" in class names (`.iz-btn-gold`, `--iz-gold`) — the value is violet; do not
   "restore" a gold colour.
