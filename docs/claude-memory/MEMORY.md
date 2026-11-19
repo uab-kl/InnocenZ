@@ -226,3 +226,10 @@ Dated history lives in `TEST_SCRIPT.md` §8/§10; rules live in `CLAUDE.md`.
 ### Newly added - file these into a section above
 
 - [Social seo tools and keywords](social-seo-tools-and-keywords.md) — "19 Oct 2026: best SEO tools per platform (free first) + in-app search/Explore rules + Malaysia keyword traps; built as the 'SEO Tools' and 'SEO Keywords' tabs of the marketing workbook"
+
+### Newly added - file these into a section above
+
+- [Chat model languages en zh only](chat-model-languages-en-zh-only.md) — Landing-chat model choice is judged on English (incl. Manglish) and 中文 only — Malay is not a requirement because the app has no Malay option
+- [Higgsfield limits and connector](higgsfield-limits-and-connector.md) — "What Higgsfield can and can't do for InnocenZ videos (fake app UI, no Chinese captions, Mandarin untested) and the state of its claude.ai connector 'higgsfields' — added, never signed in, paid plan, uncapped credits"
+- [Hotpie style agency promo](hotpie-style-agency-promo.md) — "21 Oct 2026: owner wants a HotPie-style promo (a competitor's KTV reels) made with Higgsfield — the format, the ~28 s Mandarin agency-boss script, and the three app lines in it that overclaim the product"
+- [Innocenz social search](innocenz-social-search.md) — "How the 24 InnocenZ shorts get FOUND on Instagram, Facebook and 小红书 (19 Oct 2026): caption opening + 🔎 search-word line + 5 hashtags, banned tags, profile text, the keyword→shorts clusters, and the Google/AI path"
