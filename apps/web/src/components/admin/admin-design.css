@@ -1040,9 +1040,20 @@ body[data-admin-design] .iz-admin-request-footer > button {
 .admin-todo__row--first::before {
 	opacity: 0.8;
 }
+/* No lift (DESIGN.md §8 M7 — agency and outlet's To do rows lost theirs on 18
+   Nov): the border answers the pointer, the row stays where it is. */
 .admin-todo__row:hover {
-	transform: translateY(-1px);
 	border-color: var(--signal-warn);
+}
+/* Reduced motion in admin, as in agency and outlet: transitions narrow to
+   colour and light — nothing that moves. The public styles.css gives every
+   button and link a `transform` transition; inside admin it stops here. */
+@media (prefers-reduced-motion: reduce) {
+	body[data-admin-design] :is(button, a, [role="tab"]) {
+		transition-property:
+			color, background-color, border-color, outline-color, opacity,
+			box-shadow !important;
+	}
 }
 .admin-todo__row:focus-visible {
 	outline: 2px solid var(--lavender);

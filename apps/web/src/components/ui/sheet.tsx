@@ -37,7 +37,7 @@ function SheetOverlay({
 		<SheetPrimitive.Overlay
 			data-slot="sheet-overlay"
 			className={cn(
-				"fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+				"fixed inset-0 z-50 bg-black/50 motion-safe:data-[state=open]:animate-in data-[state=open]:fade-in-0",
 				className,
 			)}
 			{...props}
@@ -63,15 +63,15 @@ function SheetContent({
 			<SheetPrimitive.Content
 				data-slot="sheet-content"
 				className={cn(
-					"fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
+					"fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out motion-safe:data-[state=open]:animate-in data-[state=open]:duration-[var(--iz-motion-enter,360ms)]",
 					side === "right" &&
-						"inset-y-0 right-0 h-full max-h-dvh w-full overflow-y-auto border-l text-base data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-2xl md:max-w-3xl lg:max-w-4xl",
+						"inset-y-0 right-0 h-full max-h-dvh w-full overflow-y-auto border-l text-base data-[state=open]:slide-in-from-right sm:max-w-2xl md:max-w-3xl lg:max-w-4xl",
 					side === "left" &&
-						"inset-y-0 left-0 h-full max-h-dvh w-full overflow-y-auto border-r text-base data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-2xl md:max-w-3xl lg:max-w-4xl",
+						"inset-y-0 left-0 h-full max-h-dvh w-full overflow-y-auto border-r text-base data-[state=open]:slide-in-from-left sm:max-w-2xl md:max-w-3xl lg:max-w-4xl",
 					side === "top" &&
-						"inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+						"inset-x-0 top-0 h-auto border-b data-[state=open]:slide-in-from-top",
 					side === "bottom" &&
-						"inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+						"inset-x-0 bottom-0 h-auto border-t data-[state=open]:slide-in-from-bottom",
 					className,
 				)}
 				{...props}
