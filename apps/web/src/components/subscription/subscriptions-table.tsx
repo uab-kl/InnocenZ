@@ -1,19 +1,18 @@
 import "@/components/admin/admin-finance-design.css";
 import {
 	AlertCircle,
-	CheckCircle2,
 	CreditCard,
 	Loader2,
 	Pencil,
 	Plus,
 	RefreshCw,
-	XCircle,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
 import {
 	SourceToggle,
 	type SourceValue,
 } from "@/components/admin/source-toggle";
+import { StatusPill } from "@/components/admin/status-pill";
 import {
 	billingCycleLabel,
 	planAudienceLabel,
@@ -52,7 +51,6 @@ import {
 	formatNumber,
 	formatPrice,
 	getErrorMessage,
-	statusColors,
 } from "@/lib/utils";
 import type {
 	BillingCycle,
@@ -345,17 +343,10 @@ export function SubscriptionsTable({
 												{billingCycleLabel(sub.billingCycle, t)}
 											</TableCell>
 											<TableCell data-label={t.admin.colStatus}>
-												<Badge
-													variant="outline"
-													className={`${statusColors[sub.status] ?? statusColors.inactive} flex w-fit items-center gap-1 capitalize`}
-												>
-													{sub.status === "active" ? (
-														<CheckCircle2 className="h-3 w-3" />
-													) : (
-														<XCircle className="h-3 w-3" />
-													)}
-													{recordStatusLabel(sub.status, t)}
-												</Badge>
+												<StatusPill
+													status={sub.status}
+													label={recordStatusLabel(sub.status, t)}
+												/>
 											</TableCell>
 											<TableCell
 												data-label={t.adminSubscription.colLastEdited}

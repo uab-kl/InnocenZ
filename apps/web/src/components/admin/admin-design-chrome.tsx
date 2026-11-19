@@ -17,9 +17,13 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { navSectionsKey } from "@/lib/nav-sections-storage";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
-const storageKey = "iz-admin-navigation-sections";
+// Cleared at every sign-in and sign-out (`resetAllNavSections`), so a session
+// opens only the group holding the current page — owner, 19 Nov 2026: "admin
+// also just open dashboard".
+const storageKey = navSectionsKey("admin");
 
 /**
  * The admin's open/closed sidebar groups, remembered per browser.

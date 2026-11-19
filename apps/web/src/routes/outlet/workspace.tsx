@@ -17,6 +17,7 @@ import {
 	type OutletTierRateSettings,
 	snapTierWage,
 } from "@agency-portal/lib/agency-demo";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import {
 	OUTLET_DRINKS_PRICE_SECTION_ID,
 	OUTLET_PRICES_SECTION_ID,
@@ -27,6 +28,7 @@ import {
 	sortOutletDrinkMenuByPrice,
 	withOutletMenuNamesResolved,
 } from "@agency-portal/lib/outlet-demo";
+import { outletWriteRefusalText } from "@agency-portal/lib/outlet-write-refusal";
 import { useStore } from "@agency-portal/lib/store";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
@@ -38,6 +40,14 @@ export const Route = createFileRoute("/outlet/workspace")({
 	component: OutletWorkspacePage,
 });
 
+/*
+ * A native time picker, so the box can only ever produce a 24-hour "HH:MM" (or
+ * "" when cleared) — whatever the browser shows, its value is 24-hour. It was a
+ * free-text box, and "9pm" or "21.00" saved without a word: the PR's phone and
+ * the live-sales split both read anything but HH:MM as "no happy hour", so a
+ * typo silently switched the venue's happy hour off. The server now refuses
+ * such a value too (outlet-workspace.schema.ts), and Save shows its sentence.
+ */
 function TimeField({
 	label,
 	value,
@@ -55,7 +65,8 @@ function TimeField({
 				{label}
 			</div>
 			<input
-				type="text"
+				type="time"
+				step={60}
 				value={value}
 				readOnly={readOnly}
 				onChange={(e) => onChange?.(e.target.value)}
@@ -180,9 +191,10 @@ function OutletWorkspacePage() {
 			// Scroll after the newly expanded body has laid out, or the section
 			// lands off-screen at its collapsed height.
 			requestAnimationFrame(() => {
-				document
-					.getElementById(targetId)
-					?.scrollIntoView({ behavior: "smooth", block: "start" });
+				document.getElementById(targetId)?.scrollIntoView({
+					behavior: portalScrollBehavior(),
+					block: "start",
+				});
 			});
 		};
 		openLinkedSection();
@@ -324,8 +336,20 @@ function OutletWorkspacePage() {
 											// they were about to retry.
 											draftDirtyRef.current = false;
 										})
-										.catch(() =>
-											toast(t.workspace.couldNotSaveWorkspace, "warn"),
+										// The SERVER's sentence when it gave one — "Set both a
+										// start and an end for happy hour…", "Tier II appears more
+										// than once…" — so a refused save says what to fix. The
+										// generic line only when it gave no reason (confirm-every-
+										// action rule). The draft stays dirty for the retry.
+										.catch((err) =>
+											toast(
+												outletWriteRefusalText(
+													err,
+													t,
+													t.workspace.couldNotSaveWorkspace,
+												),
+												"warn",
+											),
 										);
 								} else {
 									saveOutletWorkspace(toSave);

@@ -1,4 +1,8 @@
-import { NavAlertContext } from "@agency-portal/components/portal/NavAlertBadge";
+import {
+	NavAlertContext,
+	NavAlertSettledContext,
+	PortalTodoCountsContext,
+} from "@agency-portal/components/portal/NavAlertBadge";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
@@ -34,11 +38,35 @@ import { type ReactNode, useMemo } from "react";
  */
 function AgencyNavAlerts({ children }: { children: ReactNode }) {
 	const approvals = useAgencyApprovalQueue();
-	const { pvs } = useAgencyPvs();
-	const { disputes } = useAgencyDisputes();
-	const { receipts } = useAgencyReceipts();
-	const { claims: overtime } = useAgencyOvertime();
+	const { pvs, isLoading: pvsLoading } = useAgencyPvs();
+	const { disputes, isLoading: disputesLoading } = useAgencyDisputes();
+	const { receipts, isLoading: receiptsLoading } = useAgencyReceipts();
+	const { claims: overtime, isLoading: overtimeLoading } = useAgencyOvertime();
 	const billing = useUnpaidBilling("agency");
+	/*
+	 * EVERY approval term, not just cutlost + MC/leave (owner, 18 Nov 2026 —
+	 * "yes fix the to do panel"). `approvals.isLoading` left out sign-ups,
+	 * venue links and team members, so the To do panel could say "All clear"
+	 * and then grow an Approvals row a moment later. `totalIsLoading` waits for
+	 * all five reads behind `approvals.total`, the number the row shows.
+	 *
+	 * The flag does three things: it picks the line under the To do list
+	 * ("Checking…" or All clear), it lets TodoPanel mark the list settled — the
+	 * only state in which its "start here" ring plays (portal-motion.css M3) —
+	 * and it is the rail badges' "settled" flag (`badgesSettled`, below), so a
+	 * count landing late is not popped as news.
+	 *
+	 * It does NOT hold the rows back: each row still mounts as its own count
+	 * lands. The ring is what waits, and TodoPanel's settled latch is sticky, so
+	 * a row landing above one already shown can no longer ring gold a second time.
+	 */
+	const todoLoading =
+		approvals.totalIsLoading ||
+		pvsLoading ||
+		disputesLoading ||
+		receiptsLoading ||
+		overtimeLoading ||
+		billing.isLoading;
 
 	const alerts = useMemo(
 		() =>
@@ -79,9 +107,37 @@ function AgencyNavAlerts({ children }: { children: ReactNode }) {
 		],
 	);
 
+	// The same numbers, kept apart for the Today page's To do panel — one
+	// computation, so a row and the pill it sits behind cannot disagree.
+	const todo = useMemo(
+		() => ({
+			loading: todoLoading,
+			counts: {
+				approvals: approvals.total,
+				vouchers: countPvsNeedingAction(
+					pvs,
+					voucherIdsWithOpenDispute(disputes),
+				),
+				disputes: disputes.length,
+				receipts: countReceiptsNeedingAction(receipts),
+				overtime: overtime.length,
+			},
+		}),
+		[todoLoading, approvals.total, pvs, disputes, receipts, overtime.length],
+	);
+
+	// The badges wait for EVERY query behind them — the same flag as the To do
+	// panel, which now covers every approval term too. Until then a number
+	// arriving is the page loading, not news — see `NavAlertSettledContext`.
+	const badgesSettled = !todoLoading;
+
 	return (
 		<NavAlertContext.Provider value={alerts}>
-			{children}
+			<NavAlertSettledContext.Provider value={badgesSettled}>
+				<PortalTodoCountsContext.Provider value={todo}>
+					{children}
+				</PortalTodoCountsContext.Provider>
+			</NavAlertSettledContext.Provider>
 		</NavAlertContext.Provider>
 	);
 }
@@ -126,9 +182,28 @@ function OutletNavAlerts({ children }: { children: ReactNode }) {
 		[today.shifts, billing.periods, pendingMembers],
 	);
 
+	const todoLoading =
+		today.isLoading || billing.isLoading || memberRows.isLoading;
+	const todo = useMemo(
+		() => ({
+			loading: todoLoading,
+			counts: {
+				shiftsNeedingStaff: countShiftsNeedingStaff(today.shifts),
+				pendingMembers,
+			},
+		}),
+		[todoLoading, today.shifts, pendingMembers],
+	);
+
+	// The same three reads feed every outlet badge, so their flag is the
+	// badges' too.
 	return (
 		<NavAlertContext.Provider value={alerts}>
-			{children}
+			<NavAlertSettledContext.Provider value={!todoLoading}>
+				<PortalTodoCountsContext.Provider value={todo}>
+					{children}
+				</PortalTodoCountsContext.Provider>
+			</NavAlertSettledContext.Provider>
 		</NavAlertContext.Provider>
 	);
 }

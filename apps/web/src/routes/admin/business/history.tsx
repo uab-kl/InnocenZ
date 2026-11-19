@@ -422,7 +422,9 @@ function HistoryPage() {
 										{t.adminBusiness.colRole}
 									</TableHead>
 									<TableHead>{t.adminBusiness.colPlan}</TableHead>
-									<TableHead>{t.adminBusiness.colAmount}</TableHead>
+									<TableHead className="text-right tabular-nums">
+										{t.adminBusiness.colAmount}
+									</TableHead>
 									<TableHead>{t.adminBusiness.colBillingCycle}</TableHead>
 									<TableHead className="w-[120px]">
 										{t.admin.colStatus}
@@ -496,7 +498,10 @@ function HistoryPage() {
 											<TableCell data-label={t.adminBusiness.colPlan}>
 												{record.planName}
 											</TableCell>
-											<TableCell data-label={t.adminBusiness.colAmount}>
+											<TableCell
+												data-label={t.adminBusiness.colAmount}
+												className="text-right tabular-nums"
+											>
 												{formatPrice(record.amount)}
 											</TableCell>
 											<TableCell data-label={t.adminBusiness.colBillingCycle}>

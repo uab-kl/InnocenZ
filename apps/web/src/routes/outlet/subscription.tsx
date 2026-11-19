@@ -806,7 +806,9 @@ function OutletSubscriptionPage() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.outletSettings.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>
+						{t.outletSettings.accessRestricted}
+					</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
@@ -825,7 +827,7 @@ function OutletSubscriptionPage() {
 	return (
 		<div className="iz-screen">
 			<header>
-				<IzPageTitle>{t.nav.subscription}</IzPageTitle>
+				<IzPageTitle level={1}>{t.nav.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{outletOwner.orgName}</p>
 				{/*
 				 * Every lane that cannot PAY, not one named lane. Ops Head and
@@ -1031,7 +1033,7 @@ function OutletSubscriptionPage() {
 								<p className="iz-tiny iz-muted2">
 									{t.outletSubscription.owedNow}
 								</p>
-								<p className="mt-1 iz-heading text-base font-bold text-[var(--iz-gold-l)]">
+								<p className="mt-1 iz-heading iz-nums text-base font-semibold text-[var(--iz-txt)]">
 									{formatRM(collections.totals.owedRm)}
 								</p>
 							</div>
@@ -1042,7 +1044,7 @@ function OutletSubscriptionPage() {
 								<p
 									className={`mt-1 iz-heading text-base font-bold ${
 										collections.totals.overdueRm > 0
-											? "text-[var(--iz-red-l,#ff8080)]"
+											? "text-[var(--iz-red)]"
 											: ""
 									}`}
 								>

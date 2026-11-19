@@ -5,7 +5,10 @@ import { SYSTEM_ACTOR } from '@/util/actor.js';
 import { agencyPenaltyRuleController } from '@/composition-root.js';
 import { AgencyPenaltyRuleTable } from '@/features/agency/agency-penalty-rule.model.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
+import { writeSystemAudit } from '@/features/audit-log/audit-log.system.js';
 import type { JobDefinition } from './scheduler.js';
+
+const JOB_NAME = 'penalty-seal';
 
 /**
  * A BREACH BECOMES A RECORDED CHARGE ON ITS OWN, ONCE THE WEEK IS OVER.
@@ -74,6 +77,8 @@ export async function runPenaltySeal(
 
   let sealed = 0;
   let evaluated = 0;
+  /** Which agencies this run recorded charges for, and how many — for the audit row. */
+  const sealedByAgency: { agencyId: string; sealed: number }[] = [];
   for (const { agencyId } of agencyRows) {
     try {
       const result = await agencyPenaltyRuleController.sealClosedWeek(
@@ -85,6 +90,7 @@ export async function runPenaltySeal(
       );
       sealed += result.sealed;
       evaluated += result.evaluated;
+      if (result.sealed > 0) sealedByAgency.push({ agencyId, sealed: result.sealed });
     } catch (error) {
       // One agency's bad data must not cost the others their week. The
       // scheduler would swallow a throw from here anyway — but it would swallow
@@ -98,11 +104,33 @@ export async function runPenaltySeal(
       `${evaluated} breach(es) evaluated · ${sealed} newly recorded` +
       (options.dryRun ? ' (DRY RUN — nothing written)' : ''),
   );
+
+  // The run's audit row, after every agency's charges are recorded. Filed under
+  // `agency` like the REST seal (`POST /agency/:id/penalties/seal`), so one
+  // agency's sealed week is found by its id either way. A dry run seals
+  // nothing, so it writes none; the helper never throws.
+  if (!options.dryRun) {
+    await writeSystemAudit({
+      job: JOB_NAME,
+      entity: 'agency',
+      action: 'BULK_CREATE',
+      changed: sealed,
+      ids: sealedByAgency.map((a) => a.agencyId),
+      summary: {
+        weekStart,
+        weekEnd,
+        agencies: agencyRows.length,
+        evaluated,
+        sealed,
+        sealedByAgency,
+      },
+    });
+  }
   return { agencies: agencyRows.length, sealed, evaluated, weekStart, weekEnd };
 }
 
 export const PENALTY_SEAL_JOB: JobDefinition = {
-  name: 'penalty-seal',
+  name: JOB_NAME,
   schedule: SCHEDULE,
   run: async () => {
     await runPenaltySeal();

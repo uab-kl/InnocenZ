@@ -427,7 +427,9 @@ export function AppHeader({
 			<AppTopbar {...topbar} />
 
 			{(subtitle || title || right) && (
-				<div className="pb-2">
+				// `iz-app-header`: the page-title hook portal-motion.css M1 rises on
+				// arrival, as it does every `.iz-screen > header`.
+				<div className="iz-app-header pb-2">
 					{subtitle && (
 						<p className="iz-tiny iz-muted2 uppercase tracking-widest">
 							{subtitle}
@@ -436,7 +438,7 @@ export function AppHeader({
 
 					<div className="flex items-start justify-between gap-2">
 						{title ? (
-							<h1 className="iz-heading text-[22px] font-extrabold tracking-tight text-[var(--iz-txt)]">
+							<h1 className="iz-heading iz-nav-title font-extrabold tracking-tight text-[var(--iz-txt)]">
 								<TitleWithIcon iconKey={iconKey}>{title}</TitleWithIcon>
 							</h1>
 						) : (

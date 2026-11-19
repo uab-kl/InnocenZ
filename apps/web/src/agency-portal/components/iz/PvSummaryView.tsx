@@ -162,7 +162,7 @@ export function PvSummaryView({
 							<th>{t.izPv.description}</th>
 							<th>{t.table.outlet}</th>
 							<th>{t.izPv.ref}</th>
-							<th className="text-right">{t.izPv.amount}</th>
+							<th className="iz-money">{t.izPv.amount}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -176,7 +176,7 @@ export function PvSummaryView({
 								<td>{r.desc}</td>
 								<td>{r.outlet}</td>
 								<td>{r.ref}</td>
-								<td className="text-right font-semibold text-[var(--iz-gold-l)]">
+								<td className="iz-money iz-nums text-[var(--iz-txt)]">
 									{formatRM(r.amt)}
 								</td>
 							</tr>
@@ -185,13 +185,13 @@ export function PvSummaryView({
 					<tfoot>
 						<tr className="iz-data-table-tot">
 							<td colSpan={5}>{t.payroll.subtotal}</td>
-							<td className="text-right">{formatRM(getPvSalesTotal(pv))}</td>
+							<td className="iz-money">{formatRM(getPvSalesTotal(pv))}</td>
 						</tr>
 						{pv.deduct > 0 && (
 							<tr className="iz-data-table-tot">
 								<td colSpan={5}>{t.payroll.deductions}</td>
 								{/* Passed negative: the formatter prints the one sign. */}
-								<td className="text-right text-[var(--iz-red)]">
+								<td className="iz-money text-[var(--iz-red)]">
 									{formatRM(-pv.deduct)}
 								</td>
 							</tr>
@@ -201,8 +201,8 @@ export function PvSummaryView({
 								<td colSpan={5}>
 									<b>{t.payroll.netPayable}</b>
 								</td>
-								<td className="text-right">
-									<b className="text-[var(--iz-gold)]">
+								<td className="iz-money">
+									<b className="iz-nums font-semibold text-[var(--iz-txt)]">
 										{formatRM(getPvNetTotal(pv))}
 									</b>
 								</td>

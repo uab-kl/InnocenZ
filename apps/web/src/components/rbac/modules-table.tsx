@@ -1,6 +1,5 @@
 import {
 	AlertCircle,
-	CheckCircle2,
 	LayoutGrid,
 	Loader2,
 	MoreHorizontal,
@@ -9,10 +8,9 @@ import {
 	RefreshCw,
 	Search,
 	Trash2,
-	XCircle,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -49,10 +47,13 @@ import {
 	portalCodeLabel,
 	recordStatusLabel,
 } from "@/lib/portal-i18n/rbac-label";
-import { formatDate, getErrorMessage, statusColors } from "@/lib/utils";
-import type { RbacModule, RbacPagination } from "@/services/rbac";
+import { formatDate, getErrorMessage } from "@/lib/utils";
+import type { PortalCode, RbacModule, RbacPagination } from "@/services/rbac";
 
 export type ModuleStatusFilter = "all" | "active" | "inactive";
+
+/** "all", or the portal whose modules the reader wants to see. */
+export type ModulePortalFilter = "all" | PortalCode;
 
 interface ModulesTableProps {
 	modules: RbacModule[];
@@ -65,8 +66,10 @@ interface ModulesTableProps {
 	error: Error | null;
 	search: string;
 	statusFilter: ModuleStatusFilter;
+	portalFilter: ModulePortalFilter;
 	onSearchChange: (value: string) => void;
 	onStatusFilterChange: (value: ModuleStatusFilter) => void;
+	onPortalFilterChange: (value: ModulePortalFilter) => void;
 	onPageChange: (page: number) => void;
 	onRetry: () => void;
 	onCreateClick: () => void;
@@ -85,8 +88,10 @@ export function ModulesTable({
 	error,
 	search,
 	statusFilter,
+	portalFilter,
 	onSearchChange,
 	onStatusFilterChange,
+	onPortalFilterChange,
 	onPageChange,
 	onRetry,
 	onCreateClick,
@@ -139,6 +144,32 @@ export function ModulesTable({
 									<SelectItem value="inactive">
 										{t.rbac.statusInactive}
 									</SelectItem>
+								</SelectContent>
+							</Select>
+							{/*
+							  The Portal column was readable but not actionable: with every
+							  portal's modules in one paginated list, "show me only the
+							  outlet's" meant reading down the page. The narrowing happens
+							  SERVER-side (see fetchModules), so the count under the table
+							  keeps matching the rows above it.
+							*/}
+							<Select
+								value={portalFilter}
+								onValueChange={(value) =>
+									onPortalFilterChange(value as ModulePortalFilter)
+								}
+							>
+								<SelectTrigger
+									className="sm:w-40"
+									aria-label={t.rbac.filterByPortal}
+								>
+									<SelectValue placeholder={t.rbac.filterByPortal} />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">{t.rbac.allPortals}</SelectItem>
+									<SelectItem value="admin">{t.rbac.portalAdmin}</SelectItem>
+									<SelectItem value="agency">{t.rbac.portalAgency}</SelectItem>
+									<SelectItem value="outlet">{t.rbac.portalOutlet}</SelectItem>
 								</SelectContent>
 							</Select>
 						</AdminFilters>
@@ -217,17 +248,10 @@ export function ModulesTable({
 												: "—"}
 										</TableCell>
 										<TableCell>
-											<Badge
-												variant="outline"
-												className={`${statusColors[module.status]} flex w-fit items-center gap-1 capitalize`}
-											>
-												{module.status === "active" ? (
-													<CheckCircle2 className="h-3 w-3" />
-												) : (
-													<XCircle className="h-3 w-3" />
-												)}
-												{recordStatusLabel(module.status, t)}
-											</Badge>
+											<StatusPill
+												status={module.status}
+												label={recordStatusLabel(module.status, t)}
+											/>
 										</TableCell>
 										<TableCell className="text-muted-foreground text-sm">
 											{formatDate(module.createdAt)}

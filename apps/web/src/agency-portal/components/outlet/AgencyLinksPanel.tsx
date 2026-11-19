@@ -349,7 +349,7 @@ export function AgencyLinksPanel({
 												: t.agencyLinks.withdrawNamed,
 											{ name: link.agencyName },
 										)}
-										className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--iz-line)] iz-muted transition-colors hover:border-rose-400/40 hover:text-rose-400 disabled:opacity-40"
+										className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--iz-line)] iz-muted transition-colors hover:border-rose-400/40 hover:text-rose-400 disabled:opacity-40 pointer-coarse:h-11 pointer-coarse:w-11"
 										disabled={save.isPending}
 										onClick={() => setPendingRemoval(link)}
 									>

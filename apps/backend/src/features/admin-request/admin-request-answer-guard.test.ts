@@ -19,6 +19,12 @@ vi.mock('@/features/subscription/plan-limit.js', () => ({
   subscriberOrgExists: vi.fn(async () => true),
   lockLivePlanRows: vi.fn(async () => []),
 }));
+// The POS re-quote reads the venue's live add-on lines under the lane lock
+// (live-lane-guard.ts); these venues hold none. The lock itself is proved in
+// admin-request-ledger-pos.test.ts.
+vi.mock('@/features/member-subscription/live-lane-guard.js', () => ({
+  lockLiveAddonRows: vi.fn(async () => []),
+}));
 
 import type { Request, Response } from 'express';
 import type { AdminRequest } from './admin-request.model';

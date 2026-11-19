@@ -54,7 +54,7 @@ function CalendarPage() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.calendar.pageTitle}</IzPageTitle>
+					<IzPageTitle level={1}>{t.calendar.pageTitle}</IzPageTitle>
 				</header>
 				<p className="iz-tiny iz-muted mt-4 rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
 					{t.calendar.noAccess}

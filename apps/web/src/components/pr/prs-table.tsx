@@ -1,7 +1,6 @@
 import {
 	AlertCircle,
 	Check,
-	CheckCircle2,
 	ChevronDown,
 	ChevronsUpDown,
 	Loader2,
@@ -9,11 +8,10 @@ import {
 	MoreHorizontal,
 	RefreshCw,
 	Search,
-	XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { AdminFilters } from "@/components/admin/admin-filters";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -53,7 +51,7 @@ import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
-import { formatDate, getErrorMessage, statusColors } from "@/lib/utils";
+import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Agency } from "@/services/agency";
 import {
 	currentAgencyLinks,
@@ -278,17 +276,11 @@ export function PrsTable({
 											/>
 										</TableCell>
 										<TableCell data-label={t.admin.colStatus}>
-											<Badge
-												variant="outline"
-												className={`${statusColors[user.status] ?? statusColors.inactive} flex w-fit items-center gap-1 text-sm capitalize`}
-											>
-												{user.status === "active" ? (
-													<CheckCircle2 className="h-3.5 w-3.5" />
-												) : (
-													<XCircle className="h-3.5 w-3.5" />
-												)}
-												{recordStatusLabel(user.status, t)}
-											</Badge>
+											<StatusPill
+												status={user.status}
+												label={recordStatusLabel(user.status, t)}
+												className="text-sm"
+											/>
 											<div className="iz-admin-record-secondary">
 												{formatDate(user.createdAt)}
 											</div>

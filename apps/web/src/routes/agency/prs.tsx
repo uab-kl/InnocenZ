@@ -481,7 +481,7 @@ function AgencyManagePRs() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
@@ -538,7 +538,7 @@ function AgencyManagePRs() {
 		<div className="iz-screen iz-agency-pr-management">
 			<header className="iz-pr-manage-header">
 				<div className="min-w-0">
-					<IzPageTitle>{t.managePr.title}</IzPageTitle>
+					<IzPageTitle level={1}>{t.managePr.title}</IzPageTitle>
 					<p className="iz-tiny iz-muted mt-0.5">{t.managePr.subtitle}</p>
 				</div>
 				<div className="iz-pr-manage-header__actions">
@@ -1331,7 +1331,7 @@ function AgencyPrDetail({
 					{t.managePr.managedPr}
 				</p>
 				{/* The ONE payee formatter — "(Vicky) Victoria Tan Mei Lin". */}
-				<IzPageTitle>
+				<IzPageTitle level={1}>
 					{formatPayeeLabel(display.name, display.icName)}
 				</IzPageTitle>
 				<div className="mt-1 flex flex-wrap items-center gap-1.5">

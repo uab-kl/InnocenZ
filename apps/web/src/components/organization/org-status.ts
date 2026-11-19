@@ -1,5 +1,6 @@
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import { STATUS_TONE_CLASS } from "@/lib/status-tone";
 import type { AgencyStatus } from "@/services/agency";
 import type { AgencyOutletApproveStatus } from "@/services/agency-outlet";
 import type { OutletStatus } from "@/services/outlet";
@@ -45,14 +46,18 @@ export function orgStatusLabel(status: string, t: PortalTranslations): string {
 	return recordStatusLabel(status, t);
 }
 
+/**
+ * The four org states as badge classes, DERIVED from the one colour code in
+ * `lib/status-tone.ts`: amber waiting · green working · red stopped · grey
+ * switched off. The tones were written out by hand here and again in
+ * `statusColors`; they agreed, but nothing made them agree, and only one of
+ * the two knew the word "pending".
+ */
 export const orgStatusBadgeColors: Record<OrgStatus, string> = {
-	pending_review:
-		"border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-	active:
-		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-	suspended:
-		"border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
-	inactive: "border-muted-foreground/30 bg-muted text-muted-foreground",
+	pending_review: STATUS_TONE_CLASS.caution,
+	active: STATUS_TONE_CLASS.safe,
+	suspended: STATUS_TONE_CLASS.warning,
+	inactive: STATUS_TONE_CLASS.neutral,
 };
 
 /**

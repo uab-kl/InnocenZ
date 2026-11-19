@@ -133,3 +133,34 @@ export function payrollWeekWork(parts: {
 		total: parts.vouchers + parts.receipts + parts.disputes + parts.overtime,
 	};
 }
+
+/** One of the four piles a payroll week holds — the sub-tab names. */
+export type PayrollWorkKind = "vouchers" | "receipts" | "disputes" | "overtime";
+
+/**
+ * LAND WHERE THE WORK IS (owner, 17 Nov 2026 — users "dont know … where and
+ * what he need to decide").
+ *
+ * Payroll always opened on Last Week, and every To do link ("3 disputes to
+ * resolve") landed there too — so with the work under Payment Week the reader
+ * arrived on an empty list one tab away from it. This answers "which week holds
+ * this kind of work", walking `order` and returning the FIRST week whose count
+ * is above zero, or null when no week has any (the caller then keeps its
+ * deliberate default).
+ *
+ * `kind` narrows to one pile (a To do link names its sub-tab); without it the
+ * week's `total` decides. It reads the SAME `PayrollWeekWork` numbers the week
+ * and sub-tab badges show, so the tab it lands on is always one that carries a
+ * badge — never a guess the badges contradict.
+ */
+export function weekHoldingWork<Week extends string>(
+	work: Readonly<Record<Week, PayrollWeekWork>>,
+	order: readonly Week[],
+	kind?: PayrollWorkKind,
+): Week | null {
+	for (const week of order) {
+		const count = kind ? work[week][kind] : work[week].total;
+		if (count > 0) return week;
+	}
+	return null;
+}

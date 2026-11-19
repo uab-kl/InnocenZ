@@ -24,6 +24,7 @@ import {
 	getPayrollWeekSundayIso,
 	getPreviousWeekSundayIso,
 } from "@agency-portal/lib/demo-clock";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import { averageDrinkPrice } from "@agency-portal/lib/outlet-demo";
 import {
 	defaultCustomReportDateIsos,
@@ -266,7 +267,7 @@ function EarningsTooltip({
 			<p className="iz-heading text-[11px] font-bold text-[var(--iz-txt)]">
 				{row.dayFull} · {row.dateDisplay}
 			</p>
-			<p className="mt-1 iz-nums text-sm font-semibold tabular-nums text-[var(--iz-gold-l)]">
+			<p className="mt-1 iz-nums text-sm font-semibold tabular-nums text-[var(--iz-txt)]">
 				{formatRM(row.earned)}
 			</p>
 			<p className="mt-1 text-[10px] text-[var(--iz-muted2)]">
@@ -682,7 +683,10 @@ export function OutletSalesDashboard() {
 
 	const scrollToTopPrs = () => {
 		requestAnimationFrame(() => {
-			topPrsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+			topPrsRef.current?.scrollIntoView({
+				behavior: portalScrollBehavior(),
+				block: "start",
+			});
 		});
 	};
 
@@ -781,7 +785,7 @@ export function OutletSalesDashboard() {
 													<span className="text-right iz-nums text-[10px] tabular-nums text-[var(--iz-muted)]">
 														{formatRM(row.serviceSales)}
 													</span>
-													<span className="text-right iz-nums text-[10px] font-semibold tabular-nums text-[var(--iz-gold-l)]">
+													<span className="text-right iz-nums text-[10px] font-semibold tabular-nums text-[var(--iz-txt)]">
 														{formatRM(row.total)}
 													</span>
 												</div>
@@ -996,7 +1000,7 @@ export function OutletSalesDashboard() {
 										dataKey="chartTick"
 										tickLine={false}
 										axisLine={false}
-										tick={{ fill: "var(--iz-muted2)", fontSize: 14 }}
+										tick={{ fill: "var(--iz-muted2)", fontSize: 16 }}
 										interval={0}
 									/>
 									{/* Zero stays on the axis at both ends, so a loss night
@@ -1011,21 +1015,28 @@ export function OutletSalesDashboard() {
 									<ChartTooltip
 										cursor={{ fill: "rgba(217, 185, 122, 0.08)" }}
 										content={<EarningsTooltip />}
+										isAnimationActive={false}
 									/>
 									<Bar
 										dataKey="earned"
 										fill="var(--iz-gold)"
 										radius={[6, 6, 0, 0]}
 										maxBarSize={40}
+										isAnimationActive={false}
 									>
+										{/* The figure over each bar opens nothing, so it is ink, not
+										    the lavender kept for links; the bar keeps its colour.
+										    Its size is the ladder token, passed as the SVG
+										    font-size attribute — var() resolves there exactly as
+										    it does in the bar's own `fill` attribute. */}
 										<LabelList
 											dataKey="earned"
 											position="top"
 											formatter={(value: unknown) =>
 												formatCompactRm(Number(value))
 											}
-											fill="var(--iz-gold-l)"
-											fontSize={14}
+											fill="var(--iz-txt)"
+											fontSize="var(--iz-fs-micro)"
 											fontWeight={700}
 										/>
 									</Bar>
@@ -1093,7 +1104,7 @@ export function OutletSalesDashboard() {
 											<span className="hidden whitespace-nowrap text-right iz-nums text-[10px] tabular-nums text-amber-400/80 sm:block">
 												{formatRM(-row.prCost)}
 											</span>
-											<span className="whitespace-nowrap text-right iz-nums text-xs font-semibold tabular-nums text-[var(--iz-gold-l)]">
+											<span className="whitespace-nowrap text-right iz-nums text-xs font-semibold tabular-nums text-[var(--iz-txt)]">
 												{formatRM(row.earned)}
 											</span>
 											<span className="col-span-full text-[10px] text-[var(--iz-muted2)] sm:hidden">

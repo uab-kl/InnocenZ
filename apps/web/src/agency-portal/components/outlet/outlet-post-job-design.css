@@ -13,7 +13,7 @@
 	font-weight: 400;
 	line-height: 1.5;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 	box-shadow: none;
 }
@@ -31,23 +31,23 @@
 	font-size: var(--iz-fs-body);
 	font-weight: 600;
 	line-height: 1.5;
-	border: 1px solid #9274ad;
-	border-radius: 8px;
-	background: #68517f;
+	border: 1px solid var(--iz-act-line);
+	border-radius: var(--iz-radius-m, 10px);
+	background: var(--iz-act);
 	color: #fff;
 	box-shadow: none;
 }
 .iz-portal[data-portal="outlet"]
 	.outlet-post-job-design
 	.iz-post-job-submit-btn:hover:not(:disabled) {
-	background: #795f93;
+	background: var(--iz-act-hover);
 	box-shadow: none;
 }
 .iz-portal[data-portal="outlet"]
 	.outlet-post-job-design
 	:is(.iz-post-job-action-panel, .iz-post-job-summary-card__cost-box) {
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	box-shadow: none;
 }
@@ -100,7 +100,7 @@
 	min-width: 0;
 	padding: 22px;
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-card, #241f30);
 }
 .outlet-job-section > .iz-post-job-group-header {
@@ -303,6 +303,51 @@
 .outlet-post-job-design .iz-event-card {
 	min-width: 0;
 	background: var(--iz-card, #241f30);
+	transition:
+		border-color var(--iz-motion-fast, var(--iz-motion-fast, 160ms)) var(--iz-ease-soft, ease),
+		transform var(--iz-motion-fast, var(--iz-motion-fast, 160ms)) var(--iz-ease-settle, ease);
+}
+/*
+ * THE PICTURE IS THE BUTTON (owner, 17 Nov 2026 — "user dont know this can
+ * click"). Clicking a saved event's picture + name USES it, but the card only
+ * showed "Edit template" as a button, so the main action read as decoration.
+ * The card lifts 2px with the accent border under the pointer (DESIGN.md §8)
+ * and the name carries a "→" — the same cue on a phone, where there is no hover.
+ */
+.outlet-post-job-design .iz-event-card__pick {
+	cursor: pointer;
+}
+/* Only when the card can actually be used: a view-only role (Director) gets
+   the picker inside a disabled <fieldset>, and an arrow there would promise a
+   click that does nothing. */
+.outlet-post-job-design
+.iz-event-card:has(.iz-event-card__pick:not(:disabled):hover) {
+	border-color: var(--iz-violet);
+}
+.outlet-post-job-design
+	.iz-event-card__pick:not(:disabled)
+	.iz-event-card__name::after {
+	content: " →" / "";
+	color: var(--iz-violet);
+}
+/* The lift is for a real pointer only, as M7 (portal-motion.css): a tap must
+   never leave a card raised. The violet border and the name's " →" still
+   answer every pointer. The reduced-motion block below has the same weight and
+   comes later, so it still wins. */
+@media (hover: hover) and (pointer: fine) {
+	.outlet-post-job-design
+		.iz-event-card:has(.iz-event-card__pick:not(:disabled):hover) {
+		transform: translateY(-2px);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.outlet-post-job-design .iz-event-card {
+		transition: none;
+	}
+	.outlet-post-job-design
+		.iz-event-card:has(.iz-event-card__pick:not(:disabled):hover) {
+		transform: none;
+	}
 }
 .outlet-post-job-design .iz-event-card__img,
 .outlet-post-job-design .iz-event-card__placeholder {
@@ -403,7 +448,7 @@
 		margin-top: 20px;
 		padding: 16px;
 		border: 1px solid var(--iz-line);
-		border-radius: 14px;
+		border-radius: var(--iz-radius-l, 14px);
 		box-shadow: none;
 		background: var(--iz-card, #241f30);
 	}
@@ -453,7 +498,7 @@
 	padding: 24px;
 	background: var(--iz-panel);
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-portal[data-portal="outlet"] .iz-event-picker__head {
 	margin-bottom: 32px;
@@ -479,7 +524,7 @@
 	margin: 0 16px 16px;
 	padding: 10px 16px;
 	border: 1px solid var(--iz-violet-l);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: color-mix(in srgb, var(--iz-violet) 20%, var(--iz-panel));
 	font-size: var(--iz-fs-body);
 	font-weight: 600;
@@ -502,7 +547,7 @@
 }
 .iz-portal[data-portal="outlet"] .iz-event-card__placeholder {
 	height: 110px;
-	background: linear-gradient(135deg, #382b47, #292433);
+	background: linear-gradient(135deg, #382b47, var(--iz-panel2));
 }
 .iz-portal[data-portal="outlet"] .iz-event-card__placeholder svg {
 	width: 32px;
@@ -512,7 +557,7 @@
 	font-size: var(--iz-fs-body);
 	font-weight: 400;
 	min-height: 46px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-portal[data-portal="outlet"] .iz-post-job-legend__list li {
 	font-size: var(--iz-fs-label);
@@ -538,7 +583,7 @@
 	margin: 16px 0 20px;
 	padding: 6px;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel2);
 }
 .outlet-job-shift-tabs > button {
@@ -547,7 +592,7 @@
 	min-height: 46px;
 	padding: 10px 16px;
 	border: 1px solid transparent;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 	color: var(--iz-muted);
 	background: transparent;
 }

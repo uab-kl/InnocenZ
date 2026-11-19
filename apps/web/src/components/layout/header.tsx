@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { Bell, LogOut, Settings, User as UserIcon } from "lucide-react";
 import { AdminIconGuide } from "@/components/admin/admin-design-chrome";
 import { adminConsoleRoleLabel } from "@/components/admin/admin-role-label";
+import { useAdminTrail } from "@/components/admin/admin-trail";
+import { StatusLegend } from "@/components/admin/status-pill";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,106 +18,11 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { getBusinessSectionByKey } from "@/constants/business-sections";
-import { sidebarSections } from "@/constants/links";
-import { getRbacSectionByKey } from "@/constants/rbac-sections";
-import { getUserTypeByKey } from "@/constants/user-types";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
-import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
-import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchPendingCount } from "@/services/admin-request";
-
-/** Pure, so the hook below can post-process every branch in one place. */
-function resolveBreadcrumbSegments(
-	pathname: string,
-	t: PortalTranslations,
-): string[] {
-	if (pathname.startsWith("/user-management/")) {
-		const userTypeKey = pathname.split("/").pop();
-		const userType = userTypeKey ? getUserTypeByKey(userTypeKey) : undefined;
-		if (userType)
-			return [
-				t.admin.navUser,
-				adminNavLabel(`sidebar-user-${userType.key}`, userType.title, t),
-			];
-	}
-
-	if (pathname.startsWith("/rbac/")) {
-		const rbacKey = pathname.split("/").pop();
-		if (rbacKey === "pending") return [t.admin.navRbac, t.rbac.pendingTitle];
-		const rbacSection = rbacKey ? getRbacSectionByKey(rbacKey) : undefined;
-		if (rbacSection)
-			return [
-				t.admin.navRbac,
-				adminNavLabel(`sidebar-rbac-${rbacSection.key}`, rbacSection.title, t),
-			];
-	}
-
-	if (pathname.startsWith("/business/")) {
-		const businessKey = pathname.split("/").pop();
-		const businessSection = businessKey
-			? getBusinessSectionByKey(businessKey)
-			: undefined;
-		if (businessSection)
-			return [
-				t.admin.navBusiness,
-				adminNavLabel(
-					`sidebar-business-${businessSection.key}`,
-					businessSection.title,
-					t,
-				),
-			];
-	}
-
-	if (pathname === "/profile") return [t.admin.navProfile];
-	if (pathname === "/settings") return [t.admin.navSettings];
-
-	/*
-	 * Fall back to the SIDEBAR config rather than `allNavigationItems`, which
-	 * lists only Dashboard / User / RBAC / Audit Log — every Service and
-	 * Subscription page missed it and rendered "Dashboard" as its breadcrumb.
-	 * `sidebarSections` is the one config carrying every admin page, and it
-	 * carries the section each page sits under, so a hit yields both segments.
-	 */
-	for (const section of sidebarSections) {
-		for (const item of section.items) {
-			const href = item.href.replace(/^\/en/, "").replace(/^\/admin/, "");
-			if (pathname !== href && !pathname.startsWith(`${href}/`)) continue;
-			const title = adminNavLabel(item.key, item.title, t);
-			// Overview is the top level — no group segment to prefix it with.
-			return section.key === "overview"
-				? [title]
-				: [adminNavLabel(section.key, section.label, t), title];
-		}
-	}
-
-	return [t.admin.navDashboard];
-}
-
-function useBreadcrumbSegments() {
-	const { t } = usePortalLocale();
-	const location = useLocation();
-	/*
-	 * BOTH prefixes come off. `location.pathname` is `/en/admin/settings`, but
-	 * every comparison in `resolveBreadcrumbSegments` is written against a
-	 * portal-relative path (`/settings`, `/user-management/…`). Stripping only
-	 * `/en` left them all dead, so Settings and Profile fell through to the
-	 * final fallback and rendered "Dashboard".
-	 */
-	const pathname = location.pathname
-		.replace(/^\/en/, "")
-		.replace(/^\/admin/, "")
-		.replace(/\/$/, "");
-
-	// The RBAC tab is titled "RBAC" inside a group also called "RBAC", so the
-	// honest two-segment answer reads as a glitch: "RBAC › RBAC".
-	return resolveBreadcrumbSegments(pathname, t).filter(
-		(segment, i, all) => i === 0 || segment !== all[i - 1],
-	);
-}
 
 /** Where the bell opens, and the count that page will show. */
 export function bellTarget(
@@ -183,7 +90,7 @@ export function Header() {
 	const { t } = usePortalLocale();
 	const { logout } = useAuthActions();
 	const { user } = useCurrentUser();
-	const breadcrumbSegments = useBreadcrumbSegments();
+	const breadcrumbSegments = useAdminTrail();
 	/* Keyed on the trail so far, not on the position: a label can repeat inside
 	   one trail (User › User), so the segment alone is not unique, while the
 	   prefix that leads to it is — and it is stable when the route changes. */
@@ -272,6 +179,7 @@ export function Header() {
 
 			<div className="iz-admin-header-controls flex shrink-0 items-center gap-2">
 				<AdminIconGuide />
+				<StatusLegend />
 				{/*
 				  Inside the existing control cluster. It adds no overlay and no
 				  portal, so the breadcrumb on the left and the avatar dropdown on

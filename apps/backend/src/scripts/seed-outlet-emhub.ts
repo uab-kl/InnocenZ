@@ -3,7 +3,7 @@ import { nextOrgMemberCode } from '@/util/member-code';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { AgencyOutletTable } from '@/features/agency/agency-outlet.model';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
@@ -78,18 +78,14 @@ async function onboardingAgencyId(): Promise<string | null> {
  * `approved`, because a seed exists to produce a working fixture: a `pending`
  * link would leave this outlet unable to post until somebody clicked Approve in
  * the agency portal.
+ *
+ * Through `ensureLink`, never a raw insert: it writes the link AND its
+ * `agency_outlet_event` in one transaction, so a seeded partnership has the same
+ * history every real one has instead of a status with no story behind it. Still
+ * insert-if-missing — an existing link, in any state, is left alone.
  */
 async function linkOutletToAgency(outletId: string, agencyId: string): Promise<void> {
-  await db
-    .insert(AgencyOutletTable)
-    .values({
-      agencyId,
-      outletId,
-      approveStatus: 'approved',
-      createdBy: ACTOR,
-      updatedBy: ACTOR,
-    })
-    .onConflictDoNothing();
+  await new AgencyOutletRepository().ensureLink(outletId, agencyId, ACTOR, 'approved');
 }
 
 async function upsertOutlet(): Promise<{ id: string; created: boolean } | null> {

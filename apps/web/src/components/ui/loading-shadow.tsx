@@ -19,7 +19,7 @@ export function GlobalLoadingShadow({ className }: { className?: string }) {
 			<div className="absolute inset-0 bg-background/35 backdrop-blur-[2px]" />
 			<div className="absolute top-4 right-4 rounded-lg border bg-card/90 px-3 py-2 shadow-sm">
 				<div className="flex items-center gap-2">
-					<div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+					<div className="h-2 w-2 rounded-full bg-primary motion-safe:animate-pulse" />
 					<div className="text-xs text-muted-foreground">
 						{t.common.loading}
 					</div>

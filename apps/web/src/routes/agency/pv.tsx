@@ -62,6 +62,7 @@ import {
 	type PayrollWeekWork,
 	payrollWeekWork,
 	voucherIdsWithOpenDispute,
+	weekHoldingWork,
 } from "@agency-portal/lib/payroll-action-counts";
 import {
 	formatPayrollDay,
@@ -112,8 +113,13 @@ import {
 	canResolveDispute,
 	canSendToPr,
 } from "@agency-portal/lib/pv-money-actions";
+import { pvPayoutBuckets } from "@agency-portal/lib/pv-payout-buckets";
 import { downloadPvBreakdownCsv } from "@agency-portal/lib/pv-pdf";
 import { voucherPayeeIc } from "@agency-portal/lib/pv-roster-pr";
+import {
+	type AgencyPvSortField,
+	sortAgencyPvs,
+} from "@agency-portal/lib/pv-table-sort";
 import {
 	buildAgencyPayee,
 	formatPvSignStamp,
@@ -122,6 +128,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+	AlertTriangle,
 	CheckCircle2,
 	ChevronRight,
 	Clock,
@@ -135,14 +142,61 @@ import {
 	Shield,
 	Wallet,
 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import type { SortState } from "@/lib/table-sort-state";
 import { createVoucherExportTicket } from "@/services/payment-voucher";
+
+/**
+ * The Sort choices in the payroll "Filter & sort" panel. Each names the
+ * question it answers, in the reader's words, rather than a column and an
+ * arrow — Issued is not a column on this page (the date sits inside the
+ * PR / voucher cell), so a header click could not have offered it.
+ */
+const PV_SORT_OPTIONS: {
+	key: string;
+	sort: SortState<AgencyPvSortField>;
+	label: (t: PortalTranslations) => string;
+}[] = [
+	{
+		key: "issued-desc",
+		sort: { field: "issued", direction: "desc" },
+		label: (t) => t.payroll.sortIssuedNewest,
+	},
+	{
+		key: "issued-asc",
+		sort: { field: "issued", direction: "asc" },
+		label: (t) => t.payroll.sortIssuedOldest,
+	},
+	{
+		key: "pr-asc",
+		sort: { field: "pr", direction: "asc" },
+		label: (t) => t.payroll.sortPrAz,
+	},
+	{
+		key: "net-desc",
+		sort: { field: "net", direction: "desc" },
+		label: (t) => t.payroll.sortNetHigh,
+	},
+	{
+		key: "net-asc",
+		sort: { field: "net", direction: "asc" },
+		label: (t) => t.payroll.sortNetLow,
+	},
+];
+
 export const Route = createFileRoute("/agency/pv")({
 	component: AgencyPV,
 	validateSearch: (
@@ -222,6 +276,16 @@ function statusPill(status: PrPvStatus) {
 type PvStatusFilter = "all" | "TO_PAY" | "PENDING_ANY" | PrPvStatus;
 
 type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
+
+/**
+ * Where an arrival looks for work: the page's default (Last Week) first, then
+ * the payment week, then the week still running. See `weekHoldingWork`.
+ */
+const ARRIVAL_ORDER: readonly PayrollWeekTab[] = [
+	"last_week",
+	"last_last_week",
+	"this_week",
+];
 
 /*
  * "payouts" is GONE (owner's call, 3 Sep 2026): *"remove the payout run
@@ -397,6 +461,7 @@ function AgencyPV() {
 	const {
 		pvs: prPaymentVouchers,
 		isError: pvsFailed,
+		isLoading: pvsLoading,
 		bulkMarkPaid,
 		bulkSendToPr,
 	} = useAgencyPvs();
@@ -409,8 +474,10 @@ function AgencyPV() {
 	// used to sit open above the fold, and an undecided overtime claim is WHY the
 	// week below refuses to send — hiding that behind a click with no number
 	// would turn a visible blocker into an invisible one.
-	const { disputes: openDisputes } = useAgencyDisputes();
-	const { claims: pendingOtClaims } = useAgencyOvertime();
+	const { disputes: openDisputes, isLoading: disputesLoading } =
+		useAgencyDisputes();
+	const { claims: pendingOtClaims, isLoading: overtimeLoading } =
+		useAgencyOvertime();
 	/* Which PR's vouchers to show. Keyed on the PR ID, never the printed label:
 	   two people can share a legal name, and the label carries a nickname that
 	   an edit to the roster would change under a filter still holding the old
@@ -419,11 +486,17 @@ function AgencyPV() {
 	const [statusFilter, setStatusFilter] = useState<PvStatusFilter>("all");
 	/* Free text — a PV number, a name, an IC or a venue. See `pvMatchesSearch`. */
 	const [search, setSearch] = useState("");
+	/*
+	 * "field-direction", or "" for the default order. A string because it
+	 * drives a <select>; decoded once by `PV_SORT_OPTIONS` below.
+	 */
+	const [pvSortKey, setPvSortKey] = useState("");
 	// The plan the agency is actually billed on, for the header. A demo session
 	// has no plan row and keeps the demo line.
 	const livePlan = useAgencyLivePlan();
 	// Count only — the panel below runs the same query and React Query dedupes it.
-	const { receipts: backendReceipts } = useAgencyReceipts();
+	const { receipts: backendReceipts, isLoading: receiptsLoading } =
+		useAgencyReceipts();
 
 	const payrollActivePvs = useMemo(
 		() => prPaymentVouchers.filter((p) => p.status !== "PAID"),
@@ -876,6 +949,44 @@ function AgencyPV() {
 	const activeWeekWork = weekWork[payrollWeekTab];
 
 	/*
+	 * LAND WHERE THE WORK IS (owner, 17 Nov 2026 — users "dont know … where and
+	 * what he need to decide"). The page opened on Last Week, and every To do
+	 * link (`?tab=disputes`, …) landed there too, so with the work under Payment
+	 * Week the reader arrived on an empty list beside a red badge. Once — after
+	 * ALL FOUR sources have loaded, so the pick is never made on half the data —
+	 * an EMPTY opening week gives way to the first week that holds the work
+	 * (`ARRIVAL_ORDER`), for the pile `?tab=` names or the week's total.
+	 *
+	 * What it never does: move off a week that has work, override an explicit
+	 * `?status` / `?pv` / `?receipt` (each has its own week rule above), run a
+	 * second time, or run after the reader has clicked a tab — so deciding the
+	 * last claim of a week cannot snap them to another week mid-task.
+	 */
+	const arrivalSettled = useRef(false);
+	const workLoaded =
+		!pvsLoading && !disputesLoading && !overtimeLoading && !receiptsLoading;
+	useEffect(() => {
+		if (arrivalSettled.current || !workLoaded) return;
+		arrivalSettled.current = true;
+		if (statusFromSearch || pvFromSearch || receiptFromSearch) return;
+		const kind = tabFromSearch ?? undefined;
+		const here = kind
+			? weekWork[payrollWeekTab][kind]
+			: weekWork[payrollWeekTab].total;
+		if (here > 0) return;
+		const pick = weekHoldingWork(weekWork, ARRIVAL_ORDER, kind);
+		if (pick) setPayrollWeekTab(pick);
+	}, [
+		workLoaded,
+		weekWork,
+		payrollWeekTab,
+		statusFromSearch,
+		pvFromSearch,
+		receiptFromSearch,
+		tabFromSearch,
+	]);
+
+	/*
 	 * IS THE OVERTIME TAB OFFERED ON THIS WEEK?
 	 *
 	 * Everywhere except the payment week: yes. On the PAYMENT week it was hidden
@@ -955,6 +1066,8 @@ function AgencyPV() {
 	};
 
 	const selectPayrollWeekTab = (tab: PayrollWeekTab) => {
+		// The reader chose: the one-time arrival pick must never override them.
+		arrivalSettled.current = true;
 		setPayrollWeekTab(tab);
 		setStatusFilter("all");
 		// NEITHER queue is bounced any more. `showOvertimeTab` / `showDisputesTab`
@@ -982,6 +1095,7 @@ function AgencyPV() {
 	 * seconds after they clicked Receipts.
 	 */
 	const selectPvSubTab = (next: PvSubTab) => {
+		arrivalSettled.current = true;
 		setPvSubTab(next);
 		clearLandingParams();
 	};
@@ -1034,17 +1148,27 @@ function AgencyPV() {
 	 * chip you are standing on. The chips choose which CARDS to show; this is
 	 * what the selected PR is owed for the week either way.
 	 */
+	/*
+	 * ⚠️ THREE FIGURES THAT ADD UP, not one that looks wrong.
+	 *
+	 * This was a single total of the SIGNED vouchers under the heading "Pending
+	 * Payout". The rule is right — only a signed voucher is owed and payable —
+	 * but alone it reads as a contradiction: an agency looking at a RM 150.00
+	 * voucher saw "RM 0.00" directly above it, because that voucher was still
+	 * awaiting review. `pvPayoutBuckets` keeps the same payable figure and adds
+	 * the two stages the money can otherwise be sitting in, so the card says
+	 * where it is instead of appearing to deny it exists.
+	 *
+	 * The COUNTS travel with the totals so each figure can say what it is made
+	 * of. They count VOUCHERS by status, not the cards on screen — those differ
+	 * whenever a status chip is on, and a total explained by the wrong number
+	 * of vouchers is worse than one left unexplained.
+	 */
 	const filteredPendingPayout = useMemo(() => {
 		const rows = prFilter
 			? weekTabPvs.filter((p) => p.prId === prFilter)
 			: weekTabPvs;
-		const owed = rows.filter((p) => p.status === "SIGNED");
-		const total = owed.reduce((sum, p) => sum + getPvNetTotal(p), 0);
-		// The COUNT travels with the total so the card can say what the figure is
-		// made of. It counts the signed vouchers, not the cards on screen — those
-		// differ whenever a status chip is on, and a total explained by the wrong
-		// number of vouchers is worse than one left unexplained.
-		return { total: Math.round(total * 100) / 100, count: owed.length };
+		return pvPayoutBuckets(rows);
 	}, [weekTabPvs, prFilter]);
 
 	/**
@@ -1087,10 +1211,20 @@ function AgencyPV() {
 	// were bypassed there because that tab held only SIGNED vouchers and a filter
 	// over one status is pointless — now that it shows unsigned ones too, "To pay"
 	// is what narrows it back down to the payment run.
-	const filteredVouchers = useMemo(
-		() => sortPvsBySales(statusFilteredPvs, "default"),
-		[statusFilteredPvs],
-	);
+	/*
+	 * The panel above this list was titled "Filter & sort" and offered no sort
+	 * at all. Sorting happens HERE, in the browser, and that is correct for this
+	 * page: the week tabs are derived from vouchers already loaded in full, so
+	 * there is no pagination for a client sort to fall foul of (the admin list,
+	 * which IS paginated, sorts on the server instead).
+	 */
+	const filteredVouchers = useMemo(() => {
+		const base = sortPvsBySales(statusFilteredPvs, "default");
+		const chosen = PV_SORT_OPTIONS.find((o) => o.key === pvSortKey);
+		return sortAgencyPvs(base, chosen?.sort ?? null, (pv) =>
+			resolvePvPrName(pv, voucherRoster),
+		);
+	}, [statusFilteredPvs, pvSortKey, voucherRoster]);
 
 	// Not memoised: `isBulkEligible` is rebuilt every render (it closes over
 	// `bulkMode`), so a dependency list naming it would recompute regardless —
@@ -1240,12 +1374,16 @@ function AgencyPV() {
 	}, [weekTabPvs]);
 
 	const hasActiveFilters =
-		statusFilter !== "all" || prFilter !== "" || search.trim() !== "";
+		statusFilter !== "all" ||
+		prFilter !== "" ||
+		search.trim() !== "" ||
+		pvSortKey !== "";
 
 	const clearFilters = () => {
 		setStatusFilter("all");
 		setPrFilter("");
 		setSearch("");
+		setPvSortKey("");
 	};
 
 	const detail = prPaymentVouchers.find((p) => p.id === detailId);
@@ -1286,6 +1424,7 @@ function AgencyPV() {
 				    than forming a second one: they are more facts about today, not a
 				    separate subtitle. */}
 				<IzPageTitle
+					level={1}
 					dateTime
 					meta={
 						<>
@@ -1404,7 +1543,7 @@ function AgencyPV() {
 				data-payment-week={payrollWeekTab === "last_last_week"}
 			>
 				<div className="iz-stat-tile">
-					<div className="n text-[var(--iz-gold-l)]">
+					<div className="n iz-nums text-[var(--iz-txt)]">
 						{activeWeekStats.prCount}
 					</div>
 					<IzKpiLabel>PR</IzKpiLabel>
@@ -1415,7 +1554,7 @@ function AgencyPV() {
 				</div>
 				{payrollWeekTab === "last_last_week" && (
 					<div className="iz-stat-tile">
-						<div className="n text-[var(--iz-gold-l)]">
+						<div className="n iz-nums text-[var(--iz-txt)]">
 							{formatRM(activeWeekStats.pendingPayout)}
 						</div>
 						<IzKpiLabel>{t.payroll.pendingPayout}</IzKpiLabel>
@@ -1725,6 +1864,24 @@ function AgencyPV() {
 										))}
 									</IzSelect>
 								</div>
+								<div className="iz-filter-group">
+									<span className="iz-payroll-filter-label">
+										{t.payroll.sortBy}
+									</span>
+									<IzSelect
+										block
+										aria-label={t.payroll.sortBy}
+										value={pvSortKey}
+										onChange={(e) => setPvSortKey(e.target.value)}
+									>
+										<option value="">{t.payroll.sortDefault}</option>
+										{PV_SORT_OPTIONS.map((o) => (
+											<option key={o.key} value={o.key}>
+												{o.label(t)}
+											</option>
+										))}
+									</IzSelect>
+								</div>
 							</div>
 						</IzCard>
 					</OutletMobileFilters>
@@ -1767,18 +1924,53 @@ function AgencyPV() {
 											: t.receipts.allPrs}{" "}
 										·{" "}
 										{fill(t.payroll.pendingPayoutCount, {
-											n: filteredPendingPayout.count,
+											n: filteredPendingPayout.toPay.count,
 										})}
 									</p>
 								</div>
 							</div>
-							<div className="shrink-0 text-right">
-								<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-gold-l)]">
-									{formatRM(filteredPendingPayout.total)}
+							{/*
+							  WHERE THE MONEY IS, in figures that add up to the total.
+							  All three render at one size and one weight (16px, 600 —
+							  `.iz-portal .iz-portal-main .iz-heading` is un-layered and
+							  outranks `font-bold`), so COLOUR carries the difference:
+							  "To pay now", the one that goes to the bank, is in ink;
+							  "Awaiting signature" is muted — not payable yet; "Held —
+							  disputed" is red. None of them opens anything, so none is
+							  lavender. The other two explain the rest instead of leaving
+							  the reader to wonder why a RM 150.00 voucher sat under "RM 0.00".
+							  A bucket with nothing in it is not drawn — an empty row is
+							  width spent saying nothing.
+							*/}
+							<div className="iz-payout-split shrink-0">
+								<div className="iz-payout-split__item iz-payout-split__item--pay">
+									<div className="iz-ledger iz-nums iz-heading text-base font-semibold text-[var(--iz-txt)]">
+										{formatRM(filteredPendingPayout.toPay.total)}
+									</div>
+									<p className="iz-tiny iz-muted2 mt-0.5">
+										{t.payroll.toPayNow}
+									</p>
 								</div>
-								<p className="iz-tiny iz-muted2 mt-0.5">
-									{t.payroll.netPayable}
-								</p>
+								{filteredPendingPayout.awaiting.count > 0 && (
+									<div className="iz-payout-split__item">
+										<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-muted)]">
+											{formatRM(filteredPendingPayout.awaiting.total)}
+										</div>
+										<p className="iz-tiny iz-muted2 mt-0.5">
+											{t.payroll.awaitingSignature}
+										</p>
+									</div>
+								)}
+								{filteredPendingPayout.disputed.count > 0 && (
+									<div className="iz-payout-split__item">
+										<div className="iz-ledger iz-heading text-base font-bold text-[var(--iz-red)]">
+											{formatRM(filteredPendingPayout.disputed.total)}
+										</div>
+										<p className="iz-tiny iz-muted2 mt-0.5">
+											{t.payroll.heldDisputed}
+										</p>
+									</div>
+								)}
 							</div>
 						</IzCard>
 					)}
@@ -1838,20 +2030,17 @@ function AgencyPV() {
 										: t.payroll.bulkSelectAll}
 								</button>
 								{/*
-								 * Champagne = ACT, the owner's colour rule. Same gradient and
-								 * ink as `.iz-btn-primary`, at chip size.
-								 *
-								 * ⚠️ `bg-[image:…]`, not `bg-[…]`. `--iz-grad-accent` holds a
-								 * `linear-gradient()`, and the plain form compiles to
-								 * `background-color`, where a gradient is an invalid value and
-								 * is dropped without a word — leaving this button on the chip's
-								 * default glass with `#241a08` ink on top of it, i.e. near-black
-								 * text on a near-black pill. The `image:` hint puts it in
-								 * `background-image`, which is the slot a gradient belongs in.
+								 * The ACT colour, the owner's colour rule, at chip size: the
+								 * approved design's `.iz-btn-primary` / `.iz-btn-gold`
+								 * (approved-portal-design.css:236-245), flat violet with white
+								 * ink. It forced the prototype's champagne gradient, which the
+								 * approved palette retired from every other act button.
+								 * `!` because `.iz-chip`'s own glass, line and muted ink are
+								 * un-layered CSS, which beats a plain (layered) utility.
 								 */}
 								<button
 									type="button"
-									className="iz-chip ml-auto !border-[rgba(201,155,78,.45)] !bg-[image:var(--iz-grad-accent)] font-bold !text-[#241a08] disabled:opacity-40"
+									className="iz-chip ml-auto !border-[var(--iz-act-line)] !bg-[var(--iz-act)] font-bold !text-white enabled:hover:!bg-[var(--iz-act-hover)] disabled:!cursor-default disabled:opacity-40"
 									disabled={selectedIds.length === 0 || bulkBusy}
 									onClick={() => {
 										if (bulkMode === "pay" && !bulkConfirmArmed) {
@@ -1929,11 +2118,13 @@ function AgencyPV() {
 								<thead>
 									<tr>
 										<th>{t.approvedDesign.prVoucher}</th>
-										<th>{t.approvedDesign.wages}</th>
-										<th>{t.approvedDesign.drinksTips}</th>
-										<th>{t.approvedDesign.otherEarnings}</th>
-										<th>{t.approvedDesign.deductions}</th>
-										<th>{t.payroll.netPayable}</th>
+										<th className="iz-money">{t.approvedDesign.wages}</th>
+										<th className="iz-money">{t.approvedDesign.drinksTips}</th>
+										<th className="iz-money">
+											{t.approvedDesign.otherEarnings}
+										</th>
+										<th className="iz-money">{t.approvedDesign.deductions}</th>
+										<th className="iz-money">{t.payroll.netPayable}</th>
 										<th>{t.approvedDesign.statusAction}</th>
 									</tr>
 								</thead>
@@ -1942,6 +2133,10 @@ function AgencyPV() {
 										const selectable = isBulkEligible(pv);
 										const ticked = selectedIds.includes(pv.id);
 										const amounts = summarizePv(pv);
+										// The figure the Deductions cell prints, named once so its
+										// red follows the same number (`!== 0`, as pvBreakdownRows:
+										// deductions are stored NEGATIVE, so `> 0` would never fire).
+										const deductionsRm = amounts.deductions - pv.deduct;
 										return (
 											<tr key={pv.id}>
 												<td>
@@ -1977,11 +2172,25 @@ function AgencyPV() {
 														/>
 													</div>
 												</td>
-												<td>{formatRM(amounts.wages)}</td>
-												<td>{formatRM(amounts.drinks + amounts.tips)}</td>
-												<td>{formatRM(amounts.overtime + amounts.other)}</td>
-												<td>{formatRM(amounts.deductions - pv.deduct)}</td>
-												<td>{formatRM(getPvNetTotal(pv))}</td>
+												<td className="iz-money">{formatRM(amounts.wages)}</td>
+												<td className="iz-money">
+													{formatRM(amounts.drinks + amounts.tips)}
+												</td>
+												<td className="iz-money">
+													{formatRM(amounts.overtime + amounts.other)}
+												</td>
+												<td
+													className={
+														deductionsRm !== 0
+															? "iz-money iz-money--deduction"
+															: "iz-money"
+													}
+												>
+													{formatRM(deductionsRm)}
+												</td>
+												<td className="iz-money iz-money--net">
+													{formatRM(getPvNetTotal(pv))}
+												</td>
 												<td>
 													<IzPill variant={statusPill(pv.status)}>
 														{agencyPvStatusLabel(pv.status, t)}
@@ -2264,7 +2473,9 @@ function PvBreakdownCard({
 			))}
 			<div className="iz-v-sum tot">
 				<span>{t.payroll.subtotal}</span>
-				<b className="text-[var(--iz-gold)]">{formatRM(breakdown.total)}</b>
+				<b className="iz-nums font-semibold text-[var(--iz-txt)]">
+					{formatRM(breakdown.total)}
+				</b>
 			</div>
 		</IzCard>
 	);
@@ -2591,11 +2802,18 @@ function PvDetail({
 					{t.common.close}
 				</button>
 			</div>
-			{/* `v`, the DETAIL copy — only the detail read carries the IC check. */}
+			{/* `v`, the DETAIL copy — only the detail read carries the IC check.
+			    An amber NOTICE, not a door: a plain <div> with no `__cta` and no
+			    arrow, so no `a.iz-alert` hover or lift rule can reach it. */}
 			{v.prIcMismatch && (
-				<p className="iz-tiny mb-2 text-[var(--iz-amber)]">
-					{t.izPv.prIcDiffersFromProfile}
-				</p>
+				<div className="iz-alert iz-alert--amber iz-alert--notice">
+					<span className="iz-alert__head">
+						<AlertTriangle className="iz-alert__icon" aria-hidden />
+						<span className="iz-alert__title">
+							{t.izPv.prIcDiffersFromProfile}
+						</span>
+					</span>
+				</div>
 			)}
 
 			<PvWorkflowRail status={pv.status} />
@@ -2940,19 +3158,24 @@ function PvDetail({
 					 * action behind it. The server refuses the send without it (409),
 					 * so the pad is offered here rather than letting the button fail.
 					 */}
+					{/* Why you cannot sign yet, as the amber notice — a plain <div>,
+					    never a link: no `__cta`, no arrow, nothing that lifts. */}
 					{!financeSigned && weekStillOpen && (
-						<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
-							<p className="iz-sm font-bold">
-								{t.agencyPv.signingOpensWhenWeekCloses}
-							</p>
+						<div className="iz-alert iz-alert--amber iz-alert--notice mt-2">
+							<span className="iz-alert__head">
+								<AlertTriangle className="iz-alert__icon" aria-hidden />
+								<span className="iz-alert__title">
+									{t.agencyPv.signingOpensWhenWeekCloses}
+								</span>
+							</span>
 							{/* Split around the bold tab NAME, not mid-sentence by accident:
 							    the cycle rides in as a {cycle} slot so each language can put
 							    it where its own grammar wants, and the two halves meet either
 							    side of the one word that must stay emphasised. */}
-							<p className="iz-tiny iz-muted2 mt-0.5">
+							<span className="iz-alert__meta">
 								{fill(t.agencyPv.weekStillOpenBody, { cycle: thisWeekCycle })}{" "}
 								<b>{t.payroll.lastWeek}</b> {t.agencyPv.weekStillOpenTail}
-							</p>
+							</span>
 						</div>
 					)}
 
@@ -3006,22 +3229,29 @@ function PvDetail({
 						    "not allowed" and has nothing to point at yet. */}
 					{/* `sendGate.reason` still arrives in English from the hook; only the
 						    pointer after it is under the locale here. */}
+					{/* Still under the button, now as the amber notice: a plain <div>,
+					    no `__cta`, no arrow — it explains, it does not go anywhere. */}
 					{!sendGate.allowed &&
 						(sendGate.pendingReceipts.length > 0 ||
 							sendGate.pendingOvertime.length > 0) && (
-							<p className="iz-tiny iz-muted2 mt-1 text-center">
-								{sendGate.reason} —{" "}
-								{[
-									sendGate.pendingReceipts.length > 0
-										? t.agencyPv.approveInPayrollReceipts
-										: null,
-									sendGate.pendingOvertime.length > 0
-										? t.agencyPv.decideInPayrollOvertime
-										: null,
-								]
-									.filter(Boolean)
-									.join(" ")}
-							</p>
+							<div className="iz-alert iz-alert--amber iz-alert--notice mt-2">
+								<span className="iz-alert__head">
+									<AlertTriangle className="iz-alert__icon" aria-hidden />
+									<span className="iz-alert__title">
+										{sendGate.reason} —{" "}
+										{[
+											sendGate.pendingReceipts.length > 0
+												? t.agencyPv.approveInPayrollReceipts
+												: null,
+											sendGate.pendingOvertime.length > 0
+												? t.agencyPv.decideInPayrollOvertime
+												: null,
+										]
+											.filter(Boolean)
+											.join(" ")}
+									</span>
+								</span>
+							</div>
 						)}
 				</>
 			)}

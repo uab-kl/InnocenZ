@@ -34,6 +34,13 @@ import { PortalLocaleProvider } from "@/lib/portal-i18n/context";
 import "@agency-portal/prototype-theme.css";
 import "@agency-portal/agency-app-overrides.css";
 import "@agency-portal/approved-portal-design.css";
+// One hover/press/focus language for all three portals — after the portal's
+// own CSS so it wins the cascade. See styles/portal-interaction.css.
+import "@/styles/portal-interaction.css";
+// One selected-tab look (gold, dark ink) for all three portals.
+import "@/styles/portal-tabs.css";
+// Motion that guides — agency + outlet only. See agency-portal/portal-motion.css.
+import "@agency-portal/portal-motion.css";
 
 export const Route = createFileRoute("/agency")({
 	// Agency-only tree: admin/outlet sessions are sent to their own portal.

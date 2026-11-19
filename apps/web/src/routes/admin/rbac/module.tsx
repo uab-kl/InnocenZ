@@ -12,6 +12,7 @@ import { PageHeader, PageShell } from "@/components/admin/page-header";
 import {
 	ConfirmDialog,
 	ModuleFormSheet,
+	type ModulePortalFilter,
 	type ModuleStatusFilter,
 	ModulesTable,
 } from "@/components/rbac";
@@ -43,6 +44,7 @@ function ModulePage() {
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const [statusFilter, setStatusFilter] = useState<ModuleStatusFilter>("all");
+	const [portalFilter, setPortalFilter] = useState<ModulePortalFilter>("all");
 	const [searchInput, setSearchInput] = useState("");
 	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [currentPage, setCurrentPage] = useState(1);
@@ -64,6 +66,9 @@ function ModulePage() {
 		pageSize: PAGE_SIZE,
 	};
 	if (statusFilter !== "all") queryParams.status = statusFilter;
+	// In the query KEY as well as the request, so switching portals refetches
+	// instead of re-showing the previous portal out of cache.
+	if (portalFilter !== "all") queryParams.portalCode = portalFilter;
 	if (debouncedSearch) queryParams.moduleName = debouncedSearch;
 
 	const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
@@ -141,9 +146,15 @@ function ModulePage() {
 				error={error as Error | null}
 				search={searchInput}
 				statusFilter={statusFilter}
+				portalFilter={portalFilter}
 				onSearchChange={setSearchInput}
 				onStatusFilterChange={(value) => {
 					setStatusFilter(value);
+					setCurrentPage(1);
+				}}
+				onPortalFilterChange={(value) => {
+					setPortalFilter(value);
+					// Page 3 of every portal is rarely page 3 of one of them.
 					setCurrentPage(1);
 				}}
 				onPageChange={setCurrentPage}

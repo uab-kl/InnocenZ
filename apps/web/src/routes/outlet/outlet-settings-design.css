@@ -19,7 +19,7 @@
 	max-width: 100%;
 	padding: 5px;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-bg2);
 }
 
@@ -27,7 +27,7 @@
 	min-height: 44px;
 	padding: 10px 20px;
 	border: 0;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: transparent;
 	color: var(--iz-muted);
 	font: inherit;
@@ -72,7 +72,7 @@
 	gap: 20px;
 	padding: 24px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 
@@ -103,7 +103,7 @@
 
 .iz-outlet-settings .iz-profile-section {
 	padding: 8px 24px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 
@@ -128,7 +128,7 @@
 
 [data-portal="outlet"] .iz-outlet-settings .iz-profile-field__label {
 	font-size: var(--iz-fs-tiny);
-	font-weight: 500;
+	font-weight: 600;
 	letter-spacing: 0;
 	text-transform: none;
 }

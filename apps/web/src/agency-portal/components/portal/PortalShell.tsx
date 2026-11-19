@@ -4,6 +4,7 @@ import { type NavItem, navIsActive } from "@agency-portal/components/Nav";
 import {
 	NavAlertBadge,
 	navAlertAriaSuffix,
+	PortalNavPathsContext,
 	useNavAlerts,
 } from "@agency-portal/components/portal/NavAlertBadge";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
@@ -14,6 +15,7 @@ import {
 	type PortalNavSections,
 	portalNavSection,
 	portalPageLabel,
+	portalSectionLabel,
 	usePortalNavSections,
 } from "@agency-portal/components/portal/PortalDesignChrome";
 import { PortalNavAlerts } from "@agency-portal/components/portal/PortalNavAlerts";
@@ -22,8 +24,10 @@ import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { agencySubRoleLabel } from "@agency-portal/lib/agency-rbac";
 import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
+import { listenForPicks } from "@agency-portal/lib/motion-pick";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { outletSubRoleLabel } from "@agency-portal/lib/outlet-rbac";
+import { sectionNavAlert } from "@agency-portal/lib/portal-nav-alerts";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
 import {
@@ -43,6 +47,7 @@ import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
@@ -275,6 +280,7 @@ function PortalSidebarLink({
 		<Link
 			to={item.to}
 			className={`iz-portal-nav-link${active ? " on" : ""}`}
+			aria-current={active ? "page" : undefined}
 			onClick={onNavigate}
 			/*
 			 * The count is announced HERE, on the link, and hidden on the pill
@@ -285,7 +291,9 @@ function PortalSidebarLink({
 		>
 			<item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
 			<span>{item.label}</span>
-			{alert && <NavAlertBadge count={alert.count} tone={alert.tone} />}
+			{/* Mounted at 0 too (it draws nothing there), so it remembers it was
+			    0 and a first arrival pops — see `useNavAlertPop`. */}
+			<NavAlertBadge count={alert?.count ?? 0} tone={alert?.tone ?? "amber"} />
 		</Link>
 	);
 }
@@ -307,7 +315,11 @@ function PortalSidebar({
 	onToggleSection?: (section: PortalNavSection) => void;
 }) {
 	const { pathname } = useLocation();
+	const currentSection = portalNavSection(
+		pathname.replace(/^\/[a-z]{2}(?=\/)/, ""),
+	);
 	const { t, locale } = usePortalLocale();
+	const navAlerts = useNavAlerts();
 	const portalKindLabel =
 		portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal;
 
@@ -362,28 +374,56 @@ function PortalSidebar({
 									(item) => portalNavSection(item.to) === section,
 								);
 								if (!links.length) return null;
-								const labels =
-									locale === "zh"
-										? {
-												workspace: "工作区",
-												management: "管理",
-												organization: "组织",
-											}
-										: {
-												workspace: "Workspace",
-												management: "Management",
-												organization: "Organization",
-											};
+								// One dictionary, shared with the header breadcrumb.
+								const labels = {
+									workspace: portalSectionLabel("workspace", locale),
+									management: portalSectionLabel("management", locale),
+									organization: portalSectionLabel("organization", locale),
+								};
+								// A folded group still says something inside it is waiting
+								// — summed over the rows THIS role can see (see
+								// `sectionNavAlert`). Open, the rows carry their own pills.
+								const closedAlert = sections[section]
+									? null
+									: sectionNavAlert(
+											links.map((item) => item.to),
+											navAlerts,
+										);
 								return (
-									<div className="iz-outlet-nav-group" key={section}>
+									<div
+										className="iz-outlet-nav-group"
+										key={section}
+										/*
+										  The SECTION you are in, marked — not only the page. The
+										  three headings looked identical whether or not they held
+										  the page on screen, so the rail answered "which page" but
+										  never "which part of the portal".
+										*/
+										data-current={
+											section === currentSection ? "true" : undefined
+										}
+									>
 										<button
 											type="button"
 											className="iz-outlet-nav-heading"
 											aria-expanded={sections[section]}
+											aria-label={`${labels[section]}${navAlertAriaSuffix(closedAlert?.count, t.shell.navAlertWaiting)}`}
 											onClick={() => onToggleSection?.(section)}
 										>
 											<span>{labels[section]}</span>
-											<ChevronDown aria-hidden className="h-4 w-4" />
+											<span className="iz-outlet-nav-heading__end">
+												{/* Mounted for as long as the group is CLOSED, at
+												    0 too: folding a group shows its total without a
+												    pop (nothing changed), and a count that changes
+												    while it stays folded pops. */}
+												{!sections[section] && (
+													<NavAlertBadge
+														count={closedAlert?.count ?? 0}
+														tone={closedAlert?.tone ?? "amber"}
+													/>
+												)}
+												<ChevronDown aria-hidden className="h-4 w-4" />
+											</span>
 										</button>
 										<div
 											className="iz-outlet-nav-items"
@@ -472,6 +512,7 @@ function PortalHeader({
 	subLabel,
 	demoData,
 	pageLabel,
+	sectionLabel,
 	onOpenMenu,
 	menuOpen,
 }: {
@@ -482,6 +523,8 @@ function PortalHeader({
 	subLabel: string;
 	demoData: boolean;
 	pageLabel?: string;
+	/** The sidebar group the page sits in — "Workspace", "Management", … */
+	sectionLabel?: string;
 	onOpenMenu?: () => void;
 	menuOpen?: boolean;
 }) {
@@ -510,7 +553,26 @@ function PortalHeader({
 						{portalLabel}
 						<span aria-hidden> / </span>
 					</span>
-					{pageLabel || portalLabel}
+					{/*
+					  WHICH SECTION, not only which page. The header said "Agency
+					  portal / Today" — the page, never the group it sits in — so a
+					  reader who had folded the rail away had nothing on screen to
+					  say they were in Workspace rather than Management. Dropped on a
+					  phone with the portal label, so the leaf (the page) always fits.
+					*/}
+					{sectionLabel ? (
+						<span className="iz-outlet-header-kind">
+							{sectionLabel}
+							<span aria-hidden> / </span>
+						</span>
+					) : null}
+					<span
+						key={pageLabel || portalLabel}
+						className="iz-portal-crumb-leaf"
+						aria-current="page"
+					>
+						{pageLabel || portalLabel}
+					</span>
 				</p>
 			</div>
 			<div className="iz-portal-header-tools flex shrink-0 items-center gap-2">
@@ -561,7 +623,7 @@ export function PortalShell({
 	const outletOwner = useStore((s) => s.outletOwner);
 	const owner = portal === "agency" ? agencyOwner : outletOwner;
 	const orgName = owner.orgName;
-	const { t } = usePortalLocale();
+	const { t, locale } = usePortalLocale();
 	const { data: me } = useProfile();
 	// Header chip is the signed-in person's photo (`user.profile_image`), not
 	// the organisation logo kept on outletOwner/agencyOwner.avatarPhoto.
@@ -592,8 +654,16 @@ export function PortalShell({
 		owner.ownerName.trim() ||
 		"";
 	const identity = portalIdentityParts(orgName, ownerName, subLabel);
-	const { sections, toggleSection } = usePortalNavSections(portal);
 	const { pathname } = useLocation();
+	/*
+	 * The group holding the page you are on opens itself, the way the admin
+	 * rail has always done — so the entry that is currently lit is never
+	 * folded out of sight behind a closed heading.
+	 */
+	const { sections, toggleSection } = usePortalNavSections(
+		portal,
+		portalNavSection(pathname.replace(/^\/[a-z]{2}(?=\/)/, "")),
+	);
 	useEffect(() => {
 		const attribute = portal === "agency" ? "agencyDesign" : "outletDesign";
 		document.body.dataset[attribute] = "true";
@@ -601,6 +671,10 @@ export function PortalShell({
 			delete document.body.dataset[attribute];
 		};
 	}, [portal]);
+	// Marks a tab strip or rail heading for a moment after a click, so the
+	// "what did I pick" motion (portal-motion.css M2/M5) follows a pick and never
+	// a return to the window. Presentation only — see lib/motion-pick.ts.
+	useEffect(() => listenForPicks(), []);
 
 	const orgProfileOnly =
 		getPortalSessionKind() === "real" &&
@@ -616,6 +690,12 @@ export function PortalShell({
 		canAgency as (permission: string) => boolean,
 		canOutlet as (permission: string) => boolean,
 		orgProfileOnly,
+	);
+	// The paths this role's menu offers — what a page's To do panel may point at.
+	const navPathKey = sidebarItems.map((item) => item.to).join("|");
+	const navPaths = useMemo(
+		() => new Set(navPathKey.split("|").filter(Boolean)),
+		[navPathKey],
 	);
 
 	// A session that did not authenticate against the backend renders fixtures,
@@ -744,11 +824,19 @@ export function PortalShell({
 							pathname,
 							t,
 						)}
+						sectionLabel={portalSectionLabel(
+							portalNavSection(pathname.replace(/^\/[a-z]{2}(?=\/)/, "")),
+							locale,
+						)}
 						onOpenMenu={() => setMenuOpen(true)}
 						menuOpen={menuOpen}
 					/>
 
-					<div className="iz-portal-viewport">{children}</div>
+					<div className="iz-portal-viewport">
+						<PortalNavPathsContext.Provider value={navPaths}>
+							{children}
+						</PortalNavPathsContext.Provider>
+					</div>
 				</div>
 
 				{menuOpen && (

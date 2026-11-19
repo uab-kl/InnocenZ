@@ -181,6 +181,11 @@ function ProfilePage() {
 										type="file"
 										accept={ACCEPTED_TYPES}
 										className="sr-only"
+										/* Opened only by the labelled camera button above: out of the
+										   Tab order so a keyboard never lands on an unnamed field
+										   (ui-ux-pro-max priority 1 sweep, 19 Nov 2026). */
+										tabIndex={-1}
+										aria-hidden="true"
 										onChange={(e) => {
 											onPickFile(e.target.files?.[0]);
 											e.target.value = "";

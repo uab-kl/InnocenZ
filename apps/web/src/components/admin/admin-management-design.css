@@ -28,7 +28,7 @@ body[data-admin-design] .iz-admin-management-scroll {
 	max-width: 100%;
 	overflow-x: auto;
 	overscroll-behavior-x: contain;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 body[data-admin-design] .iz-admin-management-table {
 	width: 100%;
@@ -118,7 +118,7 @@ body[data-admin-design] .iz-admin-detail-hero {
 	text-align: left;
 	gap: 20px;
 	padding: 22px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--card);
 }
 body[data-admin-design] .iz-admin-detail-hero > :first-child {
@@ -148,7 +148,7 @@ body[data-admin-design] .iz-admin-detail-hero :is(h1, h2, h3) {
 }
 body[data-admin-design] .iz-admin-detail-section {
 	min-width: 0;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--card);
 }
 body[data-admin-design]

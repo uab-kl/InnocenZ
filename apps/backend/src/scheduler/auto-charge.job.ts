@@ -1,6 +1,9 @@
 import { runAutoCharge } from '@/features/subscription-payment/auto-charge.js';
+import { writeSystemAudit } from '@/features/audit-log/audit-log.system.js';
 import { logger } from '@/util/logger.js';
 import type { JobDefinition } from './scheduler.js';
+
+const JOB_NAME = 'auto-charge';
 
 /**
  * Charges each newly opened bill to the org's saved card or linked e-wallet —
@@ -27,10 +30,33 @@ async function runAutoChargeJob(): Promise<void> {
       `charged=${result.charged} succeeded=${result.succeeded} pending=${result.pending} failed=${result.failed} ` +
       `recordErrors=${result.recordErrors} stranded=${result.stranded.length} skipped=${JSON.stringify(result.skipped)}`,
   );
+
+  // The run's audit row, once every charge above has been claimed and recorded.
+  // Only a run that claimed a charge writes one (switched off, or nothing due,
+  // writes none); it never throws, so it cannot turn a finished run into a
+  // failed one.
+  await writeSystemAudit({
+    job: JOB_NAME,
+    entity: 'subscription-payment',
+    action: 'BULK_CREATE',
+    changed: result.charged,
+    summary: {
+      gateway: result.gateway,
+      scanned: result.scanned,
+      charged: result.charged,
+      succeeded: result.succeeded,
+      pending: result.pending,
+      failed: result.failed,
+      recordErrors: result.recordErrors,
+      // Invoice NUMBERS of automatic claims still unresolved after two days.
+      strandedInvoiceNos: result.stranded,
+      skipped: result.skipped,
+    },
+  });
 }
 
 export const AUTO_CHARGE_JOB: JobDefinition = {
-  name: 'auto-charge',
+  name: JOB_NAME,
   schedule: SCHEDULE,
   run: runAutoChargeJob,
 };

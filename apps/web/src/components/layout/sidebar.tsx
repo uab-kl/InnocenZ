@@ -261,8 +261,13 @@ function SidebarSectionGroup({
 								to={item.href}
 								onClick={onNavigate}
 								aria-current={isActive(item.href) ? "page" : undefined}
+								// Collapsed to icons, the label and its pill are gone: the
+								// tooltip names the count and a corner dot says "work here"
+								// (16 Nov 2026), as the agency/outlet rail already does.
 								title={
-									collapsed ? adminNavLabel(item.key, item.title, t) : undefined
+									collapsed
+										? `${adminNavLabel(item.key, item.title, t)}${badge != null && badge > 0 ? ` (${badge})` : ""}`
+										: undefined
 								}
 								className={cn(
 									"admin-sidebar-nav-item",
@@ -271,6 +276,9 @@ function SidebarSectionGroup({
 								)}
 							>
 								<item.icon className="h-[22px] w-[22px] shrink-0" />
+								{collapsed && badge != null && badge > 0 && (
+									<span className="admin-sidebar-dot" aria-hidden="true" />
+								)}
 								{!collapsed && (
 									<>
 										<span className="min-w-0 flex-1 whitespace-normal leading-snug">

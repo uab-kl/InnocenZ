@@ -6,7 +6,14 @@ import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
+import {
+	OutletTodoRows,
+	TodoPanel,
+} from "@agency-portal/components/portal/TodoPanel";
 import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
+import { useOutletCollections } from "@agency-portal/hooks/use-outlet-collections";
+import { useOutletPriceSetup } from "@agency-portal/hooks/use-outlet-price-setup";
+import { useOutletSalesReport } from "@agency-portal/hooks/use-outlet-sales-report";
 import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
 import { nowAgencyDateTime } from "@agency-portal/lib/portal-clock";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
@@ -49,6 +56,32 @@ function OutletHome() {
 	// Same hook Post Job gates on, so Today and Post Job cannot disagree about
 	// whether this venue has an agency.
 	const agencyLinks = useOutletAgencyLinks();
+	/*
+	 * THE TO DO PANEL WAITS FOR ITS BANNERS TOO (owner, 18 Nov 2026 — "yes fix
+	 * the to do panel"). The provider's flag covers tonight's shifts, billing and
+	 * join requests — the counts it computes — but three strips in this panel read
+	 * more, and could land after it had already said "All clear".
+	 *
+	 * Asked HERE, not in the provider: the provider is mounted on every outlet
+	 * page, so its reads would fire everywhere. These are the banners' OWN hooks,
+	 * so their query keys are the banners' and this asks the server nothing more
+	 * (OutletTodayPage.test.tsx counts the requests). Each flag is TanStack's
+	 * `isLoading` — false for a query that is switched off — under the SAME
+	 * condition the strip renders on, so a strip that can never show never holds:
+	 * - "No agency yet" shows only on a real session (`backend.backed`);
+	 * - the price reminder is `backed && isLoading` inside its hook;
+	 * - the statement check returns nothing without `viewBilling`
+	 *   (OutletReconciliationBanner → BilledVsRecordsBanner).
+	 */
+	const priceSetup = useOutletPriceSetup();
+	const collections = useOutletCollections();
+	const sales = useOutletSalesReport();
+	const bannersLoading =
+		(backend.backed && agencyLinks.isLoading) ||
+		priceSetup.isLoading ||
+		(collections.backed &&
+			can("viewBilling") &&
+			(collections.isLoading || sales.isLoading));
 	const { t } = usePortalLocale();
 
 	return (
@@ -88,11 +121,6 @@ function OutletHome() {
 				hint={`${date} · ${time} · ${t.outletHome.liveShiftHint}`}
 			/>
 
-			{/* Money the venue owes InnocenZ, above the staffing banners: a shift it
-			    cannot post is today's problem, but an unpaid subscription is the one
-			    that ends the account. Hidden entirely at zero. */}
-			<UnpaidBillingBanner portal="outlet" />
-
 			{/*
 			  ⚠️ SAID OUT LOUD, because an empty board is this screen's normal state.
 
@@ -117,48 +145,57 @@ function OutletHome() {
 				</div>
 			)}
 
-			{/* A venue with no APPROVED agency cannot post a shift, and Today is the
+			{/* THE TO DO PANEL (owner, 16 Nov 2026): every "act on this" strip
+			    Today used to scatter down the page now sits in one list under the
+			    title, most urgent first — money owed first (an unpaid subscription
+			    is the one that ends the account), then linking an agency, prices,
+			    the daily statement, and the venue's own queues. Each strip still
+			    hides itself when it has nothing to say. */}
+			<TodoPanel loading={bannersLoading}>
+				<UnpaidBillingBanner portal="outlet" />
+				{/* A venue with no APPROVED agency cannot post a shift, and Today is the
 			    screen it lands on. Without this it sees an empty board with no
 			    explanation and no idea the next step is in Settings. Split in two
 			    because the action differs: link one, or wait for the one already
 			    asked. */}
-			{backend.backed && !agencyLinks.isLoading && !agencyLinks.canPost && (
-				<div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
-					<p className="text-sm font-semibold text-amber-300">
-						{agencyLinks.awaitingApproval
-							? t.postJob.waitingForAgency
-							: t.today.noAgencyYet}
-					</p>
-					<p className="iz-tiny iz-muted mt-1">
-						{agencyLinks.awaitingApproval
-							? t.today.requestWithAgency
-							: t.today.agenciesFillShifts}
-					</p>
-					{!agencyLinks.awaitingApproval && (
-						<Link
-							to="/outlet/settings"
-							className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
-						>
-							{t.postJob.goToSettingsAgencies}
-						</Link>
-					)}
-				</div>
-			)}
+				{backend.backed && !agencyLinks.isLoading && !agencyLinks.canPost && (
+					<div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
+						<p className="text-sm font-semibold text-amber-300">
+							{agencyLinks.awaitingApproval
+								? t.postJob.waitingForAgency
+								: t.today.noAgencyYet}
+						</p>
+						<p className="iz-tiny iz-muted mt-1">
+							{agencyLinks.awaitingApproval
+								? t.today.requestWithAgency
+								: t.today.agenciesFillShifts}
+						</p>
+						{!agencyLinks.awaitingApproval && (
+							<Link
+								to="/outlet/settings"
+								className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
+							>
+								{t.postJob.goToSettingsAgencies}
+							</Link>
+						)}
+					</div>
+				)}
 
-			{/* Prices before people: a venue can be staffed with empty price lists,
+				{/* Prices before people: a venue can be staffed with empty price lists,
 			    and the gap only surfaces when somebody tries to log what was sold —
 			    mid-shift, with PRs already on the floor. Sits under the agency
 			    banner because linking an agency is the step that must come first;
 			    hidden entirely once each list carries a price. */}
-			<OutletPriceSetupBanner />
+				<OutletPriceSetupBanner />
+				<OutletReconciliationBanner />
+				<OutletTodoRows />
+			</TodoPanel>
 
 			<OutletBookings
 				shifts={backend.backed ? backend.shifts : undefined}
 				roster={backend.backed ? backend.roster : undefined}
 				agencyPrs={backend.backed ? backend.prs : undefined}
 			/>
-
-			<OutletReconciliationBanner />
 		</OutletPage>
 	);
 }

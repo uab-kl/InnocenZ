@@ -642,7 +642,7 @@ function PasswordField({
 					onClick={() => setVisible((v) => !v)}
 					aria-label={visible ? hide : show}
 					title={visible ? hide : show}
-					className="grid h-8 w-8 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
+					className="grid h-8 w-8 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground pointer-coarse:h-11 pointer-coarse:w-11"
 				>
 					{visible ? (
 						<EyeOff className="h-4 w-4" />

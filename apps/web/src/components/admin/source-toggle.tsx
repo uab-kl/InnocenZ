@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
@@ -7,8 +8,8 @@ export type SourceValue = "all" | SourceKey;
 /*
  * `label` is a RESOLVER, not a string: a dictionary key is itself a `string`,
  * so storing one on this module-scope record type-checks and then ships the key
- * NAME to screen. `key` and `activeClass` are untouched — `key` is the value
- * this filter sends up to the caller and on into the query.
+ * NAME to screen. `key` is the value this filter sends up to the caller and on
+ * into the query.
  *
  * "PR" stays "PR" in both locales: it is the product's own term for the role
  * and what the database stores.
@@ -16,30 +17,30 @@ export type SourceValue = "all" | SourceKey;
 const ALL_OPTIONS: {
 	key: SourceKey;
 	label: (t: PortalTranslations) => string;
-	activeClass: string;
 }[] = [
-	{
-		key: "outlet",
-		label: (t) => t.table.outlet,
-		activeClass: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-	},
-	{
-		key: "agency",
-		label: (t) => t.adminService.agency,
-		activeClass: "bg-(--lavender-soft)/25 text-lavender",
-	},
-	{
-		key: "pr",
-		label: (t) => t.table.pr,
-		activeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-	},
+	{ key: "outlet", label: (t) => t.table.outlet },
+	{ key: "agency", label: (t) => t.adminService.agency },
+	{ key: "pr", label: (t) => t.table.pr },
 ];
 
-// Segmented source filter. Clicking the active button clears back to "all", so
-// the buttons cover every state without a separate "All" control. `sources`
-// selects which buttons appear (default Outlet/Agency); pass ["outlet",
-// "agency", "pr"] to include PR-initiated postings. Generic over the caller's
-// own value union so pages that only allow outlet/agency stay type-safe.
+/**
+ * Segmented source filter: All · Outlet · Agency (· PR).
+ *
+ * WHY IT LOOKS LIKE THIS (owner, 17 Nov 2026 — "user dont know this can
+ * click"). It used to render only Outlet and Agency, stretched across the full
+ * width, in muted text with NOTHING selected while the filter sat on "all" —
+ * which is the default, so on every first visit it read as a table heading,
+ * not a control. Now:
+ *   - "All" is a real segment, selected by default, so a choice is always
+ *     visibly made and visibly undoable;
+ *   - every segment is drawn as a button (border, pointer, hover answer);
+ *   - the selected one wears the portal accent AND a tick, so it does not rely
+ *     on colour alone (`DESIGN.md` §3 — lavender means "selected"; the old
+ *     amber "PR" highlight said "waiting", which it is not).
+ *
+ * Behaviour is unchanged: the same values reach `onChange`, and clicking the
+ * selected source still clears back to "all".
+ */
 export function SourceToggle<T extends SourceValue>({
 	value,
 	onChange,
@@ -52,11 +53,17 @@ export function SourceToggle<T extends SourceValue>({
 	sources?: SourceKey[];
 }) {
 	const { t } = usePortalLocale();
-	const options = ALL_OPTIONS.filter((option) => sources.includes(option.key));
+	const options = [
+		{
+			key: "all" as const,
+			label: (tt: PortalTranslations) => tt.admin.sourceAll,
+		},
+		...ALL_OPTIONS.filter((option) => sources.includes(option.key)),
+	];
 	return (
-		<div
-			className={`iz-admin-source-tabs inline-flex items-center gap-1 rounded-lg border border-(--lavender-soft)/30 bg-muted/30 p-1 ${className ?? ""}`}
-		>
+		<fieldset className={`iz-admin-source-tabs ${className ?? ""}`}>
+			{/* Names the group for a screen reader; the segments say it on screen. */}
+			<legend className="sr-only">{t.admin.sourceFilter}</legend>
 			{options.map((option) => {
 				const isActive = value === option.key;
 				return (
@@ -64,17 +71,19 @@ export function SourceToggle<T extends SourceValue>({
 						key={option.key}
 						type="button"
 						aria-pressed={isActive}
-						onClick={() => onChange((isActive ? "all" : option.key) as T)}
-						className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-							isActive
-								? `${option.activeClass} shadow-sm`
-								: "text-muted-foreground hover:text-foreground"
-						}`}
+						data-active={isActive ? "true" : undefined}
+						onClick={() =>
+							onChange(
+								(isActive && option.key !== "all" ? "all" : option.key) as T,
+							)
+						}
+						className="iz-admin-source-tab"
 					>
+						{isActive && <Check aria-hidden className="size-4 shrink-0" />}
 						{option.label(t)}
 					</button>
 				);
 			})}
-		</div>
+		</fieldset>
 	);
 }

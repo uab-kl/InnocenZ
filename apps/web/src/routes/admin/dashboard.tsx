@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { AGENCY_SERVICES_ENABLED } from "@/agency-portal/lib/phase-flags";
+import { AdminTodoPanel } from "@/components/admin/admin-todo-panel";
 import "@/components/admin/admin-overview-design.css";
 import { Button } from "@/components/ui/button";
 import { DonutChart, type DonutSlice } from "@/components/ui/donut-chart";
@@ -722,7 +723,10 @@ function DashboardComponent() {
 			(o: Outlet): RegRow => ({
 				id: `outlet-${o.id}`,
 				name: o.name,
-				code: o.ssmNo ? `SSM ${o.ssmNo}` : t.admin.navOutlet,
+				// The venue's InnocenZ id, like the agency row above (owner, 19 Nov
+				// 2026: "why show SSM ? where is the outlet id ?"). The SSM number
+				// is the company's registration — it stays on the venue's sheet.
+				code: orgMemberIdStem("outlet", o.memberCodePrefix) ?? "—",
 				kind: "outlet",
 				typeLabel: t.admin.navOutlet,
 				typeTone: "live",
@@ -788,6 +792,13 @@ function DashboardComponent() {
 					</Button>
 				</div>
 			</div>
+
+			{/*
+			  WHAT NEEDS YOU, before how much there is. The tiles below count;
+			  this says what to do and takes you there — the same To do the
+			  agency and outlet Today pages open with.
+			*/}
+			<AdminTodoPanel />
 
 			{/* KPI cards */}
 			<div className="admin-dashboard-kpis">

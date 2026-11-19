@@ -5,6 +5,28 @@ import {
   memberSubscriptionStatusValues,
 } from '@/features/member-subscription/member-subscription.model.js';
 
+/**
+ * THE PLATFORM BILLS IN RINGGIT, AND ONLY RINGGIT (12 Nov 2026).
+ *
+ * `currency` is a free `varchar(8)` defaulting to 'MYR', and this field used to
+ * be `z.string().min(1).max(8)` — so 'myr', 'RM' or 'USD' would have been
+ * stored. It does not stay on one row: a lane's currency is copied onto every
+ * invoice that lane raises, a mismatched code makes "pay several bills
+ * together" refuse with "Mixed currencies", and the revenue summary adds every
+ * amount without grouping by currency while the screens print RM. Every row
+ * today is 'MYR' and every system writer defaults to it, so the input is held
+ * to the one value: case and spaces are forgiven ('myr ' → 'MYR'), anything
+ * else is a 400 that says why.
+ *
+ * Shared with outlet-transaction.schema.ts — one rule, one place.
+ */
+const MYR_ONLY = 'Currency must be MYR — InnocenZ bills in Malaysian ringgit only.';
+export const MyrCurrencySchema = z
+  .string({ error: MYR_ONLY })
+  .trim()
+  .toUpperCase()
+  .pipe(z.literal('MYR', { error: MYR_ONLY }));
+
 export const CreateMemberSubscriptionSchema = z.object({
   subscriberType: z.enum(subscriberTypeValues),
   subscriberId: z.uuid(),
@@ -13,7 +35,7 @@ export const CreateMemberSubscriptionSchema = z.object({
   planName: z.string().min(1).max(255),
   amount: z.coerce.number().nonnegative(),
   billingCycle: z.enum(billingCycleValues).default('monthly'),
-  currency: z.string().min(1).max(8).default('MYR'),
+  currency: MyrCurrencySchema.default('MYR'),
   status: z.enum(memberSubscriptionStatusValues).default('active'),
   startedAt: z.coerce.date().optional(),
 });
@@ -22,7 +44,9 @@ export const UpdateMemberSubscriptionSchema = z.object({
   planName: z.string().min(1).max(255).optional(),
   amount: z.coerce.number().nonnegative().optional(),
   billingCycle: z.enum(billingCycleValues).optional(),
-  currency: z.string().min(1).max(8).optional(),
+  // `.optional()`, never `.default()`: an edit that does not mention currency
+  // must not rewrite it.
+  currency: MyrCurrencySchema.optional(),
   status: z.enum(memberSubscriptionStatusValues).optional(),
   endedAt: z.coerce.date().optional().nullable(),
   /**

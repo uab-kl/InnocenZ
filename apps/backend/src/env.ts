@@ -72,6 +72,10 @@ export const env = createEnv({
     // from a project WITHOUT billing (AI Studio "Free tier") — the Maps project
     // is billed, and a chat key there would land on the Maps bill.
     GEMINI_API_KEY: z.string().optional(),
+    // Seals each admin's authenticator secret at rest (features/admin-mfa/
+    // mfa-secret-crypto.ts). Optional: unset, secrets are stored as before.
+    // ⚠️ Changing or losing it locks enrolled admins out until re-enrolled.
+    MFA_SECRET_KEY: z.string().min(16).optional(),
     /** Comma-separated model names to try in order; default in landing-chat.service.ts. */
     GEMINI_MODEL: z.string().optional(),
     /**

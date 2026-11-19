@@ -15,7 +15,7 @@
 	max-width: 100%;
 	padding: 6px;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel2);
 }
 .iz-agency-finance .iz-payroll-tab {
@@ -33,7 +33,7 @@
 	margin-block: 16px 20px;
 	padding: 20px;
 	border: 1px solid var(--iz-line);
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .iz-agency-finance .iz-outlet-hist-grid {
@@ -83,7 +83,7 @@
 	min-width: 0;
 	padding: 12px 16px;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 }
 .iz-agency-finance .iz-agency-paid-archive > div:first-child > div {
@@ -111,7 +111,7 @@
 	min-width: 0;
 	padding: 20px;
 	border: 1px solid var(--iz-line);
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	text-align: left;
 }
@@ -147,6 +147,25 @@
 .iz-agency-finance .iz-pv-detail-id {
 	white-space: normal;
 	word-break: break-word;
+}
+/* The voucher detail's bar (status, PV number, Close) stays in view while a
+   long voucher scrolls, on Payroll & PV. CSS only: `.iz-portal-viewport` is the
+   scroller, and nothing between it and the bar sets overflow, transform, filter
+   or contain (measured 18 Nov 2026), so `top: 0` pins the bar right under the
+   portal top bar, which sits OUTSIDE the scroller. Desktop only: at phone width
+   the bar wraps, and a two-line sticky strip would take a large share of the
+   screen. z-index 10 sits under every overlay: back-to-top 35, rail toggle 40,
+   Radix 50, drawer 60, menus and popovers 70, sheets 80+, toasts 90. If sticky
+   ever fails, the bar simply scrolls away as it did before. */
+@media (min-width: 768px) {
+	.iz-agency-payroll .iz-pv-detail-bar {
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		padding-block: 8px;
+		background: var(--iz-panel);
+		border-bottom: 1px solid var(--iz-line);
+	}
 }
 .iz-agency-finance .iz-pv-doc-shell,
 .iz-agency-finance .iz-pv-doc {
@@ -274,7 +293,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	overflow-x: auto;
 	max-width: 100%;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 .iz-approved-voucher-table {
@@ -294,6 +313,22 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	padding: 20px 16px;
 	border-top: 1px solid var(--iz-line);
 	vertical-align: middle;
+}
+/* Money columns (Wages … Net payable): right-aligned, tabular figures, the
+   header aligned with its column — DESIGN.md §6. A class, not nth-child, so a
+   reordered column never breaks. Net payable is the strong figure; a
+   Deductions cell turns red only when it is non-zero (the JSX decides that from
+   the same number it prints). */
+.iz-approved-voucher-table .iz-money {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.iz-approved-voucher-table .iz-money--net {
+	font-weight: 600;
+	color: var(--iz-txt);
+}
+.iz-approved-voucher-table .iz-money--deduction {
+	color: var(--iz-red);
 }
 .iz-approved-voucher-table td:first-child {
 	min-width: 260px;
@@ -361,9 +396,9 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 .iz-portal .iz-receipt-search input {
 	height: 46px;
 	padding-left: 38px;
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	background: var(--iz-panel);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-receipt-search svg {
 	left: 14px;
@@ -393,7 +428,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	background: transparent;
 	color: var(--iz-muted);
 	font: inherit;
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	white-space: nowrap;
 	cursor: pointer;
 }
@@ -411,7 +446,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 }
 .iz-receipt-status-count {
 	color: var(--iz-muted2);
-	font-size: 12px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 12px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	font-variant-numeric: tabular-nums;
 }
 @media (max-width: 600px) {
@@ -442,7 +477,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	align-items: center;
 	gap: 8px;
 	color: var(--iz-muted);
-	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 13px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 }
 .iz-portal .iz-agency-payroll .iz-agency-payroll-filters .iz-filter-groups {
 	display: contents;
@@ -451,7 +486,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	.iz-agency-payroll-filters
 	:is(.iz-payroll-filter-label, .iz-filter-group-label) {
 	display: block;
-	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 13px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	line-height: 20px;
 	font-weight: 400;
 	margin: 0 0 6px;
@@ -466,10 +501,10 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	min-height: 46px;
 	padding: 0 12px;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 	color: var(--iz-txt);
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	font-weight: 400;
 	box-sizing: border-box;
 }
@@ -494,7 +529,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 }
 .iz-payroll-facet-label {
 	min-width: 42px;
-	font-size: 13px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 13px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	color: var(--iz-muted);
 }
 .iz-payroll-facets-selects {
@@ -525,11 +560,11 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	min-height: 44px;
 	padding: 8px 10px;
 	border: 1px solid transparent;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: transparent;
 	color: var(--iz-muted);
 	font: inherit;
-	font-size: 14px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 14px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	white-space: normal;
 	cursor: pointer;
 }
@@ -551,7 +586,7 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	cursor: default;
 }
 .iz-payroll-facet-chip .iz-filter-chip__count {
-	font-size: 12px; /* iz-dense-filter: approved compact filter control */
+	font-size: var(--iz-fs-label); /* was 12px (iz-dense-filter) — lifted onto the ladder with the rest of the filter, owner 17 Nov: "no too much suddenly big and small" */
 	color: var(--iz-muted2);
 }
 .iz-payroll-queue-filters {
@@ -591,5 +626,51 @@ body[data-agency-design] .iz-hist-inline-breakdown .iz-hist-money-breakdown {
 	}
 	.iz-portal .iz-payroll-facets-selects > * {
 		flex-basis: 100%;
+	}
+}
+
+/*
+ * WHERE THE WEEK'S MONEY IS — three figures beside each other (16 Nov 2026).
+ *
+ * The card showed one total, of the SIGNED vouchers alone. Correct, and
+ * unreadable in context: a RM 150.00 voucher awaiting review sat directly
+ * under "RM 0.00". The figures now say which stage the money is at, and the
+ * payable one keeps the gold so the eye still lands on the figure that goes
+ * to the bank.
+ *
+ * Each item is `text-align: right` and tabular, so the ringgit line up down
+ * the column rather than drifting with their digit counts. No font-size is
+ * set here — the sizes come from the ladder on the elements themselves, which
+ * is what `pnpm check:type` enforces.
+ */
+.iz-payout-split {
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-end;
+	gap: 18px;
+	flex-wrap: wrap;
+}
+.iz-payout-split__item {
+	text-align: right;
+	min-width: 0;
+}
+/* A quiet divider between stages, never before the first. */
+.iz-payout-split__item + .iz-payout-split__item {
+	padding-inline-start: 18px;
+	border-inline-start: 1px solid var(--iz-line);
+}
+
+/* Phone: the figures stack and sit left, under the heading they explain. */
+@media (max-width: 640px) {
+	.iz-payout-split {
+		width: 100%;
+		justify-content: flex-start;
+		gap: 14px;
+	}
+	.iz-payout-split__item {
+		text-align: left;
+	}
+	.iz-payout-split__item + .iz-payout-split__item {
+		padding-inline-start: 14px;
 	}
 }

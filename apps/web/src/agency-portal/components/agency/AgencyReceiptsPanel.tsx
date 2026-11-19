@@ -12,6 +12,7 @@ import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyMemberName } from "@agency-portal/hooks/use-agency-member-name";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import {
 	formatPayrollStampDay,
 	olderStripDays,
@@ -662,7 +663,7 @@ export function AgencyReceiptsPanel({
 	useEffect(() => {
 		if (!focusReceiptId) return;
 		const el = document.getElementById(`receipt-${focusReceiptId}`);
-		el?.scrollIntoView({ behavior: "smooth", block: "center" });
+		el?.scrollIntoView({ behavior: portalScrollBehavior(), block: "center" });
 	}, [focusReceiptId, receipts]);
 
 	const [status, setStatus] = useState<StatusFilter>("all");

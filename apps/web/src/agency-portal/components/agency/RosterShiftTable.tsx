@@ -712,7 +712,9 @@ function RosterTableRow({
 					formatRosterSlotTips(floor)
 				)}
 			</td>
-			<td className="text-[var(--iz-gold-l)] font-semibold">
+			{/* Ink, as it renders: `.iz-roster-table td` (un-layered) outranks any colour
+			    utility here, and the clickable branch paints its own `--gold` colour. */}
+			<td className="text-[var(--iz-txt)] font-semibold">
 				{onOpenEarningsSheet ? (
 					<RosterAmountButton
 						label={t.rosterGrid.estimatedPayout}
@@ -881,7 +883,10 @@ function RosterShiftCard({
 						{formatRosterSlotPayout(slot, estPayout)}
 					</RosterAmountButton>
 				) : (
-					<span className="text-[var(--iz-gold-l)]">
+					// Opens nothing here (no earnings sheet to open), so ink, not the
+					// lavender that marks a link — the same 600 ink the desktop cell
+					// prints in this branch.
+					<span className="font-semibold text-[var(--iz-txt)]">
 						{formatRosterSlotPayout(slot, estPayout)}
 					</span>
 				)}

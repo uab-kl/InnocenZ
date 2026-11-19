@@ -529,6 +529,24 @@ export class AuthRepositoryClass {
             eq(ModuleTable.status, 'active'),
             eq(ModuleTable.moduleKey, moduleKey),
             eq(PermissionTable.permissionType, permissionType),
+            /*
+             * The module must sit on the ROLE'S OWN portal — the rule
+             * `permissionsForRoleNames` already applies, so the guard and
+             * `/auth/me` answer from the same rows.
+             *
+             * ⚠️ Without it a grant on another portal's twin row answered
+             * here: `settings`, `dashboard`, `history`, `billing` and
+             * `special_service` are a separate module per portal, and the key
+             * filter alone matched any of them. `/auth/me` hid that grant's
+             * button while this guard admitted the request.
+             *
+             * Costs no live grant (re-measured 12 Nov 2026): every caller
+             * passes an agency or outlet portal, and all 146 agency/outlet
+             * role grants are same-portal. The admin role's cross-portal rows
+             * never reach this query (`requirePermission` admits admin before
+             * it), and the portal-less PR role is excluded by the portal join.
+             */
+            eq(ModuleTable.portalId, RoleTable.portalId),
           ),
         )
         .limit(1);

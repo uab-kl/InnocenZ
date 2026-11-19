@@ -19,6 +19,7 @@ import {
 	snapTierWage,
 	tierHappyHourDrinkPct,
 } from "@agency-portal/lib/agency-demo";
+import { portalScrollBehavior } from "@agency-portal/lib/motion-scroll";
 import {
 	DEFAULT_PER_DRINK_RM,
 	DEFAULT_PER_TABLE_RM,
@@ -623,7 +624,7 @@ export function scrollToOutletLiveSales() {
 		requestAnimationFrame(() => {
 			document
 				.getElementById(OUTLET_LIVE_SALES_SECTION_ID)
-				?.scrollIntoView({ behavior: "smooth", block: "start" });
+				?.scrollIntoView({ behavior: portalScrollBehavior(), block: "start" });
 		});
 	});
 }
@@ -632,7 +633,7 @@ export function scrollToOutletLaborCostReport() {
 	window.dispatchEvent(new Event(OUTLET_OPEN_LABOR_COST_EVENT));
 	document
 		.getElementById(OUTLET_LABOR_COST_SECTION_ID)
-		?.scrollIntoView({ behavior: "smooth", block: "start" });
+		?.scrollIntoView({ behavior: portalScrollBehavior(), block: "start" });
 }
 
 const LEGACY_DEFAULT_DRINK_IDS = new Set([

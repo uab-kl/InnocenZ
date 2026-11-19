@@ -1,15 +1,13 @@
 import {
 	AlertCircle,
-	CheckCircle2,
 	Loader2,
 	MoreHorizontal,
 	Plus,
 	RefreshCw,
 	Shield,
-	XCircle,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -42,7 +40,7 @@ import {
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
-import { formatDate, getErrorMessage, statusColors } from "@/lib/utils";
+import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { AdminPagination, AdminUser } from "@/services/admin";
 
 export type AdminStatusFilter = "all" | "active" | "inactive";
@@ -202,17 +200,10 @@ export function AdminsTable({
 											</div>
 										</TableCell>
 										<TableCell data-label={t.admin.colStatus}>
-											<Badge
-												variant="outline"
-												className={`${statusColors[admin.status] ?? statusColors.inactive} flex w-fit items-center gap-1 capitalize`}
-											>
-												{admin.status === "active" ? (
-													<CheckCircle2 className="h-3 w-3" />
-												) : (
-													<XCircle className="h-3 w-3" />
-												)}
-												{recordStatusLabel(admin.status, t)}
-											</Badge>
+											<StatusPill
+												status={admin.status}
+												label={recordStatusLabel(admin.status, t)}
+											/>
 										</TableCell>
 										<TableCell data-label={t.admin.colCreated}>
 											{formatDate(admin.createdAt)}

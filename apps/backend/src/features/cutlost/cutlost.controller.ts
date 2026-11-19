@@ -17,6 +17,7 @@ import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/paymen
 import { sealWageLine } from '@/features/payment-voucher/wage-line';
 import { CreateCutlostRequestSchema, DecideCutlostRequestSchema } from '@/schema/cutlost.schema';
 import { CutlostRepositoryClass } from './cutlost.repository';
+import { PENDING_ON_SHIFT_MESSAGE, createCutlostUnlessPending } from './cutlost-create-guard';
 import { CutlostRequestWithContext } from './cutlost.model';
 
 /**
@@ -132,7 +133,11 @@ export class CutlostControllerClass {
       }
 
       const actor = getActor(req);
-      const created = await this.cutlostRepository.create(
+      // One open request per shift, checked under a lock on the shift in the
+      // same transaction as the insert — see cutlost-create-guard.ts. The
+      // venue's screen already locks its buttons while one is pending, so this
+      // is what a second tab, a double-submit or a direct call now meets.
+      const outcome = await createCutlostUnlessPending(
         {
           shiftId: input.shiftId,
           kind: input.kind,
@@ -145,6 +150,17 @@ export class CutlostControllerClass {
         },
         assignmentIds,
       );
+      if (outcome.kind === 'shift_missing') {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (outcome.kind === 'pending_on_shift') {
+        return res.status(409).json({
+          success: false,
+          message: PENDING_ON_SHIFT_MESSAGE,
+          data: { pendingRequestId: outcome.pendingRequestId },
+        });
+      }
+      const created = outcome.request;
 
       const request = await this.cutlostRepository.getById(created.id);
       res.status(201).json({ success: true, message: 'Cut-loss request raised', data: request });

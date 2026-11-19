@@ -26,7 +26,7 @@ function OutletSpecialServiceRedirect() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.postJob.notAvailableYet}</IzPageTitle>
+					<IzPageTitle level={1}>{t.postJob.notAvailableYet}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
@@ -41,7 +41,7 @@ function OutletSpecialServiceRedirect() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>{t.postJob.accessRestricted}</IzPageTitle>
+					<IzPageTitle level={1}>{t.postJob.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">

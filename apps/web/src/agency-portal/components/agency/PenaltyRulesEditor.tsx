@@ -1,7 +1,77 @@
+import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import type { AgencyPenaltyRules } from "@agency-portal/lib/pr-penalties";
 import { cn } from "@agency-portal/lib/utils";
+import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+
+/** Postgres `integer` — the server refuses anything past it. */
+const INPUT_MAX = 2_147_483_647;
+
+/**
+ * The server's ranges (apps/backend agency-penalty-rule.schema.ts), applied to
+ * the rules the server checks: the ENABLED ones. A disabled rule keeps whatever
+ * it holds, exactly as the server lets it, so switching lateness off with 0 in
+ * it still saves the other three. Switching it back ON clamps it here, before
+ * the save, instead of earning a refusal.
+ */
+export function clampEnabledPenaltyRules(
+	rules: AgencyPenaltyRules,
+): AgencyPenaltyRules {
+	// No rounding: an RM fine may carry sen (the column is numeric(12,2)), and a
+	// clamp that truncated would quietly cut RM 50.50 to RM 50.00 on any save.
+	const clamp = (n: number, min: number, max = INPUT_MAX) =>
+		Math.min(max, Math.max(min, Number.isFinite(n) ? n : min));
+	const { minShiftsPerWeek: ms, maxMcPerMonth: mc, latePerWeek: lt } = rules;
+	const cx = rules.cancellation;
+	return {
+		minShiftsPerWeek: ms.enabled
+			? {
+					...ms,
+					fineRm: clamp(ms.fineRm, 0),
+					minShiftsPerWeek: clamp(ms.minShiftsPerWeek, 0),
+				}
+			: ms,
+		maxMcPerMonth: mc.enabled
+			? {
+					...mc,
+					fineRm: clamp(mc.fineRm, 0),
+					maxMcPerMonth: clamp(mc.maxMcPerMonth, 0),
+					finePerExcessRm: clamp(mc.finePerExcessRm, 0),
+				}
+			: mc,
+		// At least 1: lateness fires at `>=` the limit, so 0 fines every PR.
+		latePerWeek: lt.enabled
+			? {
+					...lt,
+					fineRm: clamp(lt.fineRm, 0),
+					maxLatePerWeek: clamp(lt.maxLatePerWeek, 1),
+					graceMinutes: clamp(lt.graceMinutes, 0),
+				}
+			: lt,
+		cancellation: cx.enabled
+			? {
+					...cx,
+					fineRm: clamp(cx.fineRm, 0),
+					freeCancelHours: clamp(cx.freeCancelHours, 0),
+					shortNoticeHours: clamp(cx.shortNoticeHours, 0),
+					shortNoticePct: clamp(cx.shortNoticePct, 0, 100),
+					lateCancelPct: clamp(cx.lateCancelPct, 0, 100),
+				}
+			: cx,
+	};
+}
+
+/**
+ * The one refusal no clamp can settle: an ENABLED cancellation rule whose short
+ * notice is LONGER than its free window (the server refuses it; equal is
+ * allowed and only warned). Which number to move is the owner's choice, so the
+ * change is held back and the reason shown instead of sent.
+ */
+export function cancellationBandsInverted(rules: AgencyPenaltyRules): boolean {
+	const c = rules.cancellation;
+	return c.enabled && c.shortNoticeHours > c.freeCancelHours;
+}
 
 function NumInput({
 	value,
@@ -10,6 +80,8 @@ function NumInput({
 	prefix,
 	readOnly,
 	width = "w-14",
+	min = 0,
+	max = INPUT_MAX,
 }: {
 	value: number;
 	onChange: (n: number) => void;
@@ -17,7 +89,15 @@ function NumInput({
 	prefix?: string;
 	readOnly?: boolean;
 	width?: string;
+	/** The same bounds the server holds an enabled rule to. */
+	min?: number;
+	max?: number;
 }) {
+	// What is being typed. An emptied box used to become 0 on the spot — and
+	// with every change saved, that SAVED 0 mid-edit (a 0 late limit fines every
+	// PR). Now an empty box stays empty while focused and settles to `min` only
+	// if left empty; anything typed is clamped to [min, max] before it leaves.
+	const [draft, setDraft] = useState<string | null>(null);
 	return (
 		<div className="flex items-center gap-1.5 rounded-lg border border-[var(--iz-line2)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5">
 			{prefix && (
@@ -28,12 +108,22 @@ function NumInput({
 			<input
 				type="text"
 				inputMode="numeric"
-				value={String(value)}
+				value={draft ?? String(value)}
 				readOnly={readOnly}
 				onChange={(e) => {
 					if (readOnly) return;
-					const n = parseInt(e.target.value.replace(/[^\d]/g, ""), 10);
-					onChange(Number.isNaN(n) ? 0 : n);
+					const digits = e.target.value.replace(/[^\d]/g, "");
+					if (digits === "") {
+						setDraft("");
+						return;
+					}
+					const n = Math.min(max, Math.max(min, Number.parseInt(digits, 10)));
+					setDraft(String(n));
+					onChange(n);
+				}}
+				onBlur={() => {
+					if (!readOnly && draft === "" && value !== min) onChange(min);
+					setDraft(null);
 				}}
 				className={cn(
 					width,
@@ -111,7 +201,7 @@ function RuleRow({
 				>
 					<span
 						className={cn(
-							"absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all",
+							"absolute top-0.5 h-5 w-5 rounded-full bg-white",
 							enabled ? "right-0.5" : "left-0.5",
 						)}
 					/>
@@ -130,15 +220,40 @@ export function PenaltyRulesEditor({
 	readOnly,
 }: {
 	rules: AgencyPenaltyRules;
-	onChange: (next: AgencyPenaltyRules) => void;
+	/**
+	 * Every change is a save of ALL FOUR rules. Return the save's promise and a
+	 * refusal is shown here in the server's own words — the save replaces the
+	 * whole set, so a refused one changed nothing and must not look like it did.
+	 */
+	onChange: (next: AgencyPenaltyRules) => void | Promise<unknown>;
 	readOnly?: boolean;
 }) {
 	const { t } = usePortalLocale();
+	const [refusal, setRefusal] = useState<string | null>(null);
 	const patch = <K extends keyof AgencyPenaltyRules>(
 		key: K,
 		partial: Partial<AgencyPenaltyRules[K]>,
 	) => {
-		onChange({ ...rules, [key]: { ...rules[key], ...partial } });
+		const next = clampEnabledPenaltyRules({
+			...rules,
+			[key]: { ...rules[key], ...partial },
+		});
+		if (cancellationBandsInverted(next)) {
+			setRefusal(
+				`${t.managePr.couldNotSavePenaltyRules} — ${fill(
+					t.penalties.shortNoticeOrderWarning,
+					{ pct: next.cancellation.shortNoticePct },
+				)}`,
+			);
+			return;
+		}
+		setRefusal(null);
+		const pending = onChange(next);
+		if (pending && typeof pending.then === "function") {
+			pending.then(undefined, (error: unknown) =>
+				setRefusal(serverMessage(error, t.managePr.couldNotSavePenaltyRules)),
+			);
+		}
 	};
 
 	return (
@@ -215,6 +330,7 @@ export function PenaltyRulesEditor({
 					<NumInput
 						value={rules.latePerWeek.maxLatePerWeek}
 						onChange={(n) => patch("latePerWeek", { maxLatePerWeek: n })}
+						min={1}
 						suffix={t.penalties.timesUnit}
 						readOnly={readOnly}
 					/>
@@ -271,6 +387,7 @@ export function PenaltyRulesEditor({
 					<NumInput
 						value={rules.cancellation.shortNoticePct}
 						onChange={(n) => patch("cancellation", { shortNoticePct: n })}
+						max={100}
 						suffix={t.penalties.pctWages}
 						width="w-10"
 						readOnly={readOnly}
@@ -280,6 +397,7 @@ export function PenaltyRulesEditor({
 					<NumInput
 						value={rules.cancellation.lateCancelPct}
 						onChange={(n) => patch("cancellation", { lateCancelPct: n })}
+						max={100}
 						suffix={t.penalties.pctWages}
 						width="w-10"
 						readOnly={readOnly}
@@ -298,13 +416,20 @@ export function PenaltyRulesEditor({
 					latePct: rules.cancellation.lateCancelPct,
 				})}
 			</p>
-			{rules.cancellation.shortNoticeHours >=
-				rules.cancellation.freeCancelHours && (
-				<p className="iz-tiny text-[var(--iz-red,#e5484d)]">
-					{fill(t.penalties.shortNoticeOrderWarning, {
-						pct: rules.cancellation.shortNoticePct,
-					})}
+			{/* A change NOT saved says so, in place of the standing warning. */}
+			{refusal ? (
+				<p role="alert" className="iz-tiny text-[var(--iz-red,#e5484d)]">
+					{refusal}
 				</p>
+			) : (
+				rules.cancellation.shortNoticeHours >=
+					rules.cancellation.freeCancelHours && (
+					<p className="iz-tiny text-[var(--iz-red,#e5484d)]">
+						{fill(t.penalties.shortNoticeOrderWarning, {
+							pct: rules.cancellation.shortNoticePct,
+						})}
+					</p>
+				)
 			)}
 
 			<p className="iz-tiny text-[var(--iz-muted)]">{t.penalties.footer}</p>

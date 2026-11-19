@@ -369,7 +369,10 @@ export function AgencyHomeHubTabs({
 						</div>
 						{approvals.total === 0 ? (
 							<p className="iz-tiny iz-muted px-4 py-6 text-center">
-								{approvals.isLoading
+								{/* Every read behind `total`, as the To do panel above waits
+								    on — `isLoading` left out sign-ups, venue links and team
+								    members, so this said "Nothing" while To do was checking. */}
+								{approvals.totalIsLoading
 									? t.agencyHub.loadingApprovals
 									: t.agencyHub.nothingAwaitingApproval}
 							</p>

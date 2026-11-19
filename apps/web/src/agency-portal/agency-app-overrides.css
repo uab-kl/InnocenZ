@@ -38,10 +38,16 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 	max-width: none !important;
 }
 
-/* "Full roster" hub link — match the section title's font size (the portal's
- * scoped text-base computes to 22.5px, which 1rem does not). */
+/* "Full roster" hub link — match the section title's font size.
+ *
+ * ⚠️ It said `22px` because the section title it sits beside used to compute to
+ * 22.5px. The approved redesign (22 Oct) put section titles on the ladder at
+ * `--iz-fs-title` (20px), so a hard 22px matched NOTHING any more and made this
+ * one link the largest text in its section — measured 17 Nov, the only 22px on
+ * agency Today. Same intent, said as the token, so it follows the title if the
+ * ladder moves again. */
 [data-portal="agency"] .iz-portal-hub-link {
-	font-size: 22px !important;
+	font-size: var(--iz-fs-title) !important;
 }
 
 /* ── Collapse-to-icons sidebar ─────────────────────────────────────────────
@@ -90,8 +96,8 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 		background: var(--iz-panel, #211c30);
 		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 		transition:
-			color 0.15s ease,
-			background 0.15s ease;
+			color var(--iz-motion-fast, 160ms) ease,
+			background var(--iz-motion-fast, 160ms) ease;
 	}
 }
 .iz-portal-collapse-toggle:hover {
@@ -218,15 +224,44 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 }
 
 .iz-nav-alert[data-tone="amber"] {
-	color: #12100c;
+	color: var(--iz-ink-on-light);
 	background: var(--iz-amber, #e8c27a);
 	border-color: color-mix(in oklab, var(--iz-amber, #e8c27a) 70%, #000);
 }
 
+/*
+ * DARK INK, like amber (18 Nov 2026). White on the approved design's soft red
+ * (`--iz-red` #e5a1a6) measured 2.1:1 — a red count such as Payroll's "12" was
+ * the hardest number in the rail to read. #12100c on it is 9.0:1, and 7.8:1 /
+ * 6.8:1 on the older #f08a8a / #ff6b6b reds. The pill stays red: only the
+ * digit changed.
+ */
+/* The top bar's bell count is the same soft red pill (19 Nov 2026): white on
+   #e5a1a6 measured 2.1:1 in the signed-in sweep; the rail's dark ink is 9.0:1. */
+.iz-bell-count {
+	color: var(--iz-ink-on-light);
+}
 .iz-nav-alert[data-tone="red"] {
-	color: #fff;
+	color: var(--iz-ink-on-light);
 	background: var(--iz-red, #ff6b6b);
 	border-color: color-mix(in oklab, var(--iz-red, #ff6b6b) 70%, #000);
+}
+
+/*
+ * A CLOSED section heading carries the total of its rows (16 Nov 2026), so a
+ * folded Workspace / Management / Organization still says where work waits.
+ * The pill sits beside the chevron; the pill's own `margin-left: auto` is for a
+ * nav ROW and would push it away from the chevron here.
+ */
+.iz-outlet-nav-heading__end {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+	flex-shrink: 0;
+}
+.iz-outlet-nav-heading__end .iz-nav-alert {
+	margin-left: 0;
 }
 
 /* `.iz-portal-nav-link` in the middle is load-bearing: the mobile tab bar lives

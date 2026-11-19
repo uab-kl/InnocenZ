@@ -10,10 +10,26 @@ import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { Error } from '@/error/index';
 
-function filterModules(modules: ModuleType[], moduleName?: string, status?: string): ModuleType[] {
+/**
+ * ⚠️ `portalId` is filtered HERE, beside name and status, and deliberately not
+ * in the browser. The list is paginated by the server, so a console that
+ * filtered the ten rows it had been handed would print "Showing 1-10 of 48"
+ * above three rows — a filter that lies about how much it found. One narrowing
+ * happens in one place, before `paginate` counts.
+ *
+ * An unknown id is not an error: it simply matches nothing, which is the
+ * honest answer to "show me the modules of a portal that does not exist".
+ */
+function filterModules(
+  modules: ModuleType[],
+  moduleName?: string,
+  status?: string,
+  portalId?: string,
+): ModuleType[] {
   return modules.filter((module) => {
     if (moduleName && !module.moduleName.toLowerCase().includes(moduleName.toLowerCase())) return false;
     if (status && module.status !== status) return false;
+    if (portalId && module.portalId !== portalId) return false;
     return true;
   });
 }
@@ -32,6 +48,7 @@ export class ModuleControllerClass {
         await this.moduleRepository.getAllModules(),
         req.query.moduleName as string | undefined,
         req.query.status as string | undefined,
+        req.query.portalId as string | undefined,
       );
       res.status(200).json({ success: true, message: 'Successfully fetched modules data', ...paginate(modules, page, pageSize) });
     } catch {

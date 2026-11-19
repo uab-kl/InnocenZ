@@ -1,0 +1,232 @@
+/*
+ * The Today page's To do panel (owner, 16 Nov 2026). Its rows ARE the approved
+ * design's alert strip (`.iz-alert`, prototype-theme.css): tone wash, tone label,
+ * full-strength figure, muted reason, pill button. Reusing it is the point — the
+ * subscription and price banners already in that look sit in the same list, so
+ * every "you need to act" row on Today reads as one family.
+ *
+ * Sizes come from the ladder only (`--iz-fs-*`); the family is inherited.
+ */
+.iz-todo {
+	display: grid;
+	gap: 12px;
+	margin: 12px 0 20px;
+	padding: 16px;
+	border: 1px solid var(--iz-line);
+	border-radius: var(--iz-radius-l, 14px);
+	background: var(--iz-panel);
+}
+
+.iz-todo__head {
+	display: grid;
+	gap: 2px;
+}
+
+.iz-todo__title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font-size: var(--iz-fs-title);
+	font-weight: 700;
+	line-height: 1.25;
+	color: var(--iz-title, var(--iz-txt));
+}
+
+.iz-todo__title-icon {
+	width: 20px;
+	height: 20px;
+	flex: none;
+	color: var(--iz-gold);
+}
+
+.iz-todo__sub {
+	margin: 0;
+	font-size: var(--iz-fs-caption);
+	line-height: 1.45;
+	color: var(--iz-muted);
+}
+
+/* Nothing to say about an empty list but the all-clear below it. */
+.iz-todo:has(.iz-todo__list:empty) .iz-todo__sub {
+	display: none;
+}
+
+.iz-todo__list {
+	display: grid;
+	gap: 8px;
+}
+.iz-todo__list:empty {
+	display: none;
+}
+/* The strip carries its own bottom margin for when it stands alone. */
+.iz-todo__list > * {
+	margin-bottom: 0;
+}
+
+/* Every row answers the pointer: the 2px lift and the press are M7
+   (portal-motion.css), for a real pointer only. */
+.iz-todo__list > a.iz-alert {
+	min-height: 48px;
+	transition:
+		transform var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
+}
+.iz-todo__list > a.iz-alert:focus-visible {
+	outline: 2px solid var(--iz-gold);
+	outline-offset: 2px;
+}
+
+.iz-todo__clear,
+.iz-todo__checking {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	padding: 12px 16px;
+	border-radius: var(--iz-radius-l, 14px);
+	font-size: var(--iz-fs-label);
+	line-height: 1.4;
+}
+
+/* Green = settled (owner's colour code). Shown only when the list is empty,
+   and only after a beat, so a row that lands a moment later never follows an
+   all-clear that was never true. */
+.iz-todo__clear {
+	border: 1px solid rgba(141, 201, 169, 0.4);
+	background: rgba(141, 201, 169, 0.08);
+	color: var(--iz-txt);
+	animation: iz-todo-settle var(--iz-motion-fast, 160ms) ease 0.6s both;
+}
+.iz-todo__clear strong {
+	color: var(--iz-green);
+}
+.iz-todo__clear-icon {
+	width: 20px;
+	height: 20px;
+	flex: none;
+	color: var(--iz-green);
+}
+.iz-todo__list:not(:empty) ~ .iz-todo__clear {
+	display: none;
+}
+
+.iz-todo__checking {
+	border: 1px dashed var(--iz-line);
+	color: var(--iz-muted);
+}
+
+@keyframes iz-todo-settle {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.iz-todo__list > a.iz-alert,
+	.iz-todo__clear {
+		transition: none;
+		animation: none;
+	}
+	.iz-todo__list > a.iz-alert:hover {
+		transform: none;
+	}
+}
+
+/* Phone: the button takes the full row, so the one action is a full-width tap. */
+@media (max-width: 640px) {
+	.iz-todo {
+		padding: 12px;
+	}
+	.iz-todo__list .iz-alert__cta {
+		width: 100%;
+		justify-content: center;
+		min-height: 44px;
+	}
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * THE LIST READS AS A RANKING (16 Nov 2026)
+ *
+ * The panel said "most urgent first" and then drew every row the same: four
+ * gold titles, four outline buttons, four identical weights. A claim the eye
+ * cannot verify is decoration. Three changes, all scoped under `.iz-todo` so
+ * the shared `.iz-alert` used by banners elsewhere keeps its own look:
+ *
+ *  1. TITLES COME OFF GOLD. The house rule is that champagne gold is reserved
+ *     for ACT on buttons (CLAUDE.md, 7 Sep) — with gold titles, gold figures
+ *     AND gold buttons, nothing in the row was emphasised because everything
+ *     was. Titles take `--iz-title`; the gold is spent on the one control.
+ *  2. THE COUNT BECOMES A COLUMN. A bordered, fixed-width, tabular chip, so
+ *     "2", "1", "1" line up under each other and can be compared at a glance
+ *     instead of being read out of the middle of a sentence.
+ *  3. THE FIRST ROW IS THE LOUD ONE. It gets the filled button and a brighter
+ *     leading edge; the rest step back. Rank is then visible, not asserted.
+ *
+ * No font-size or font-family is set here: sizes stay on the `--iz-fs-*`
+ * ladder inherited from the row, which is what `pnpm check:type` enforces.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* 1 · Titles stop competing with the button. */
+.iz-todo__list .iz-alert__title {
+	color: var(--iz-title, var(--iz-txt));
+}
+
+/* 2 · The figure is a column, not a word in a sentence. */
+.iz-todo__list .iz-alert__figure {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 2.25rem;
+	padding: 0.1rem 0.5rem;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+	/* The chip's ring reads as a container, not as text — at full strength it
+	   would draw harder than the title it belongs to. */
+	border-color: color-mix(in srgb, currentColor 38%, transparent);
+	background: color-mix(in srgb, currentColor 10%, transparent);
+	font-variant-numeric: tabular-nums;
+	line-height: 1.3;
+}
+
+/* 3 · Rank: a leading edge that fades down the list. */
+.iz-todo__list > a.iz-alert {
+	position: relative;
+	overflow: hidden;
+}
+.iz-todo__list > a.iz-alert::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	width: 3px;
+	background: currentColor;
+	opacity: 0.55;
+}
+.iz-todo__list > a.iz-alert:nth-child(n + 2)::before {
+	opacity: 0.3;
+}
+.iz-todo__list > a.iz-alert:nth-child(n + 4)::before {
+	opacity: 0.18;
+}
+
+/* The top row owns the one filled button on the page. */
+.iz-todo__list > a.iz-alert:first-child .iz-alert__cta {
+	background: color-mix(in srgb, var(--iz-gold) 22%, transparent);
+	border-color: var(--iz-gold);
+	font-weight: 700;
+}
+.iz-todo__list > a.iz-alert:first-child:hover .iz-alert__cta {
+	background: color-mix(in srgb, var(--iz-gold) 32%, transparent);
+}
+
+/* A hovered row lights its own edge, so the pointer confirms the target
+   before the click rather than after it. */
+.iz-todo__list > a.iz-alert:hover::before,
+.iz-todo__list > a.iz-alert:focus-visible::before {
+	opacity: 0.9;
+}

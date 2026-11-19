@@ -7,11 +7,39 @@ import {
 } from "@agency-portal/components/ui/dialog";
 import { ArrowUp, CircleHelp } from "lucide-react";
 import { useEffect, useState } from "react";
+import { navSectionsKey } from "@/lib/nav-sections-storage";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export type PortalNavSection = "workspace" | "management" | "organization";
 export type PortalNavSections = Record<PortalNavSection, boolean>;
 type DesignPortal = "agency" | "outlet";
+
+/**
+ * A sidebar group's name, in the reader's language.
+ *
+ * ONE copy, read by both the sidebar heading and the header breadcrumb. The
+ * names were written inline inside the sidebar, which is why the breadcrumb
+ * could not say "Workspace" at all: the only place that knew the word was the
+ * rail, and the header said "Agency portal / Today" — which page, but never
+ * which section. Admin got that answer earlier the same day; this gives it to
+ * the two portals without a second dictionary that could disagree with the
+ * first.
+ */
+export function portalSectionLabel(
+	section: PortalNavSection,
+	locale: string,
+): string {
+	if (locale === "zh") {
+		return { workspace: "工作区", management: "管理", organization: "组织" }[
+			section
+		];
+	}
+	return {
+		workspace: "Workspace",
+		management: "Management",
+		organization: "Organization",
+	}[section];
+}
 
 export function portalNavSection(path: string): PortalNavSection {
 	if (
@@ -32,26 +60,62 @@ export function portalNavSection(path: string): PortalNavSection {
 	return "workspace";
 }
 
-export function usePortalNavSections(portal: DesignPortal = "outlet") {
-	const storageKey = `iz-${portal}-navigation-sections`;
-	const [sections, setSections] = useState<PortalNavSections>({
-		workspace: false,
-		management: false,
-		organization: false,
-	});
+/**
+ * A fresh session shows ONE open group: the one holding the current page.
+ *
+ * Owner, 19 Nov 2026: "in default when the user log in to the agency and the
+ * outlet, their side panel all close it, just opened the today page". This
+ * REVERSES the 16 Nov "a first visit opens the whole map" — the worry then was
+ * three shut headings with nothing to say what lay behind them, and that is
+ * still answered: the current page's group opens (the effect below), and a
+ * closed group carries its alert count on the heading. Every sign-in clears
+ * the saved choice (`resetAllNavSections` in `saveAuthTokens` /
+ * `clearAuthTokens`), so each session starts here; inside a session a SAVED
+ * choice still wins in full, closed groups included.
+ */
+const ALL_CLOSED: PortalNavSections = {
+	workspace: false,
+	management: false,
+	organization: false,
+};
+
+export function usePortalNavSections(
+	portal: DesignPortal = "outlet",
+	/** The group holding the current page, opened on top of whatever is stored. */
+	activeSection?: PortalNavSection,
+) {
+	const storageKey = navSectionsKey(portal);
+	const [sections, setSections] = useState<PortalNavSections>(ALL_CLOSED);
 	useEffect(() => {
 		try {
 			const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
-			setSections({
-				workspace: saved?.workspace === true,
-				management: saved?.management === true,
-				organization: saved?.organization === true,
-			});
+			// `null` is "never chosen", NOT "chose closed" — the distinction the
+			// old `=== true` reading threw away.
+			setSections(
+				saved && typeof saved === "object"
+					? {
+							workspace: saved.workspace === true,
+							management: saved.management === true,
+							organization: saved.organization === true,
+						}
+					: ALL_CLOSED,
+			);
 		} catch {
 			/* Private browsing may make storage unavailable. */
-			setSections({ workspace: false, management: false, organization: false });
+			setSections(ALL_CLOSED);
 		}
 	}, [storageKey]);
+	// Declared AFTER the restore, like the admin rail: on mount both updates
+	// queue in this order, so the active group opens on top of the stored
+	// state rather than under it.
+	useEffect(() => {
+		if (!activeSection) return;
+		setSections((previous) =>
+			previous[activeSection]
+				? previous
+				: { ...previous, [activeSection]: true },
+		);
+	}, [activeSection]);
 	return {
 		sections,
 		toggleSection: (section: PortalNavSection) => {

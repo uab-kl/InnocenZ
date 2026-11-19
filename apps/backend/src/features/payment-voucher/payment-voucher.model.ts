@@ -623,6 +623,18 @@ export type PaymentVoucherFilter = {
   prId?: string;
   status?: PaymentVoucherStatus;
   prName?: string;
+  /**
+   * One box that matches the voucher NUMBER or the PR's name.
+   *
+   * `prName` searched the name alone, so an admin holding "PV-000004" — the
+   * reference every escalation and every bank line quotes — had no way to look
+   * it up and had to page through the list reading the Voucher column.
+   *
+   * ⚠️ A number is not unique on its own: numbering runs per agency, so two
+   * companies each hold a PV-000001 and a search for it rightly returns both.
+   */
+  search?: string;
+  /** Both bound `issued_date`, the day the voucher was issued. */
   fromDate?: string;
   toDate?: string;
 };

@@ -93,6 +93,36 @@ export function agencyNavAlerts(input: AgencyNavAlertInput): NavAlertMap {
 	]);
 }
 
+/**
+ * A CLOSED section heading's badge (owner, 16 Nov 2026 — "let user know where
+ * can click or need todo").
+ *
+ * The rail groups its rows under Workspace / Management / Organization, and a
+ * folded group hid its rows' badges with it: an owner opening the portal saw
+ * three bare headings while Payroll and Subscription both had work waiting. The
+ * admin console already rolls its counts up onto a closed heading
+ * (`sectionBadgeTotal`); this is the same promise for the venue and agency rail.
+ *
+ * `paths` are the rows THIS ROLE can see in the section, so a total never counts
+ * a queue behind a door the role does not have. Red wins: if any row inside is
+ * red (money), the heading is red too — a heading must never be quieter than
+ * the loudest row it folds away.
+ */
+export function sectionNavAlert(
+	paths: readonly string[],
+	alerts: NavAlertMap,
+): NavAlert | null {
+	let count = 0;
+	let red = false;
+	for (const path of paths) {
+		const row = alerts[path];
+		if (!row) continue;
+		count += row.count;
+		if (row.tone === "red") red = true;
+	}
+	return alert(count, red ? "red" : "amber");
+}
+
 export interface OutletNavAlertInput {
 	/** Upcoming shifts still short of people — see `countShiftsNeedingStaff`. */
 	shiftsNeedingStaff: number;

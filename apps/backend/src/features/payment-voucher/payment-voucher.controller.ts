@@ -20,6 +20,7 @@ import {
   buildVoucherWorkbook,
   voucherRef,
 } from './payment-voucher-excel.js';
+import { parseVoucherSort } from './voucher-sort';
 import {
   issueExportTicket,
   redeemExportTicket,
@@ -32,6 +33,7 @@ import {
   voucherStatusNotice,
 } from './payment-voucher-issue.js';
 import { addedLineDate, planLineRewrite } from './payment-voucher-line-edit.js';
+import { formatCents, toCents } from './payment-voucher-balance.js';
 
 /**
  * The line rows as the printed PV document shows them. Shared by the
@@ -250,29 +252,72 @@ function toLineRows(lines: PaymentVoucherLineInput[]) {
 }
 
 /**
- * Resolves subtotal/deduction/net. Anything the client omitted is derived:
- * subtotal from the line amounts, net from subtotal - deduction.
+ * The totals a NEW voucher is inserted with: subtotal = Σ line amounts,
+ * net = subtotal − deduction, in integer cents.
+ *
+ * ⚠️ A client-sent subtotal or net is NOT an input. This used to keep both as
+ * sent, so POST /payment-voucher could store a net no line added up to — and
+ * the payout bank file pays the stored net. They are still accepted on the
+ * schema (an older caller sending them must not start failing); they are just
+ * not believed. The repository recomputes from the lines that actually landed
+ * either way — this only makes the inserted row agree with itself from the
+ * first statement.
  */
 function resolveTotals(params: {
   lines?: PaymentVoucherLineInput[];
-  subtotal?: string;
   deduction?: string;
-  net?: string;
 }): { subtotal: string; deduction: string; net: string } {
-  const subtotalNum =
-    params.subtotal !== undefined
-      ? Number(params.subtotal)
-      : (params.lines ?? []).reduce((sum, line) => sum + line.amount, 0);
-  const deductionNum =
-    params.deduction !== undefined ? Number(params.deduction) : 0;
-  const netNum =
-    params.net !== undefined ? Number(params.net) : subtotalNum - deductionNum;
+  const subtotalCents = (params.lines ?? []).reduce(
+    (sum, line) => sum + toCents(line.amount),
+    0,
+  );
+  const deductionCents = toCents(params.deduction ?? '0');
   return {
-    subtotal: subtotalNum.toFixed(2),
-    deduction: deductionNum.toFixed(2),
-    net: netNum.toFixed(2),
+    subtotal: formatCents(subtotalCents),
+    deduction: formatCents(deductionCents),
+    net: formatCents(subtotalCents - deductionCents),
   };
 }
+
+/**
+ * The sentence that tells an API caller its subtotal / net were not used.
+ *
+ * Derived totals are not a refusal — a screen that round-trips the figures it
+ * read must keep working — but silently answering "updated" over a net the
+ * caller typed would be a confirmation of something that did not happen.
+ * Null when nothing was sent, or what was sent matches what is stored.
+ */
+function ignoredTotalsNote(
+  sent: { subtotal?: string; net?: string },
+  stored: { subtotal: string; net: string },
+): string | null {
+  const differs = (value: string | undefined, actual: string) => {
+    if (value === undefined) return false;
+    try {
+      return toCents(value) !== toCents(actual);
+    } catch {
+      return true;
+    }
+  };
+  if (!differs(sent.subtotal, stored.subtotal) && !differs(sent.net, stored.net))
+    return null;
+  return (
+    `Subtotal and net are worked out from the lines and the deduction, so the figures sent were not used — ` +
+    `the voucher's subtotal is RM ${stored.subtotal} and its net is RM ${stored.net}.`
+  );
+}
+
+/** The payee `payeeOnRoster` resolved — the four facts a voucher names them by. */
+type RosterPayee = {
+  prId: string;
+  userId: string;
+  prName: string | null;
+  prIc: string | null;
+};
+
+/** One sentence for both doors, so "not on the roster" never reads two ways. */
+const PAYEE_NOT_ON_ROSTER =
+  "That PR is not on this agency's roster — a payment voucher can only be raised for one of the agency's own PRs.";
 
 /**
  * Today's calendar date in Kuala Lumpur.
@@ -1096,6 +1141,9 @@ export class PaymentVoucherControllerClass {
         prId: req.query.prId as string | undefined,
         status: req.query.status as PaymentVoucherStatus | undefined,
         prName: req.query.prName as string | undefined,
+        // One box matching the voucher number OR the PR's name; `prName` stays
+        // for the callers that search the name alone.
+        search: req.query.search as string | undefined,
         fromDate: req.query.fromDate as string | undefined,
         toDate: req.query.toDate as string | undefined,
         agencyId: scope.isAdmin
@@ -1108,6 +1156,14 @@ export class PaymentVoucherControllerClass {
           filter,
           page,
           pageSize,
+          /*
+           * ⚠️ Whitelisted here, never cast. The list is paginated, so the
+           * order has to be chosen before `limit`/`offset` pick the rows — a
+           * console sorting its own page would reorder ten rows of many while
+           * its header claimed to have sorted the table. An unknown field
+           * comes back null and the default order stands.
+           */
+          sort: parseVoucherSort(req.query.sortBy, req.query.sortDir),
         });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
@@ -1134,13 +1190,51 @@ export class PaymentVoucherControllerClass {
   }
 
   /**
+   * WHO A VOUCHER MAY BE RAISED FOR — a PR on THIS agency's roster, with the
+   * identity read from their account rather than the request body.
+   *
+   * `POST /payment-voucher` took any `prId` and never set `user_id`, and a PUT
+   * could rewrite `pr_id` while `user_id` kept naming the old PR. The payout
+   * pays `coalesce(user_id, pr_id)`, so an agency could raise a voucher for
+   * another agency's PR, or re-point one so the screen named one person while
+   * the bank file paid another. The PR self-log door never had this gap: it
+   * writes `prId`, `userId`, `prName` and `prIc` from the signed-in PR's own
+   * record (`getOrCreateCurrentWeekDraft`), and this is the same four.
+   *
+   * An `agency_pr` row in ANY status counts, matching `payeeProfileIcForVoucher`
+   * below: a PR who has since left is still owed for the weeks they worked.
+   * Null = not on the roster, which the caller answers with ONE sentence
+   * whether the id is a stranger or nobody at all — never an existence oracle.
+   * A failed roster read throws (a 500), never a guess.
+   */
+  private async payeeOnRoster(
+    prId: string,
+    agencyId: string,
+  ): Promise<RosterPayee | null> {
+    const rosterAgencyIds =
+      await this.prRepository.listMembershipAgencyIds(prId);
+    if (!rosterAgencyIds.includes(agencyId)) return null;
+    // Post-cutover a PR's id IS their user id (there is no `pr` table), so the
+    // id itself is the payee even if the profile read comes back empty.
+    const pr = await this.prRepository.getById(prId, agencyId);
+    return {
+      prId: pr?.id ?? prId,
+      userId: pr?.userId ?? prId,
+      prName: pr?.name ?? null,
+      prIc: pr?.icNo ?? null,
+    };
+  }
+
+  /**
    * The payee's CURRENT profile IC, read only to compare against the voucher's
    * own `prIc` — and only for a payee on THIS voucher's agency's roster.
    *
-   * `prId` is client-supplied on create/update and `prIc` is free text, so
-   * without the roster check an agency could point a voucher at another
-   * agency's PR, type a guess into `prIc`, and read `prIcMatchesProfile` back
-   * as a yes/no oracle on a stranger's identity number. An `agency_pr` row in
+   * `prIc` is free text on a PUT, and before `payeeOnRoster` the `prId` was
+   * client-supplied too, so without the roster check an agency could point a
+   * voucher at another agency's PR, type a guess into `prIc`, and read
+   * `prIcMatchesProfile` back as a yes/no oracle on a stranger's identity
+   * number. Kept as the second line of defence for vouchers written before
+   * that guard. An `agency_pr` row in
    * ANY status counts: a PR who has since left is still paid for past weeks.
    *
    * Null = "cannot tell". A failed roster read is logged by the repository and
@@ -1614,6 +1708,19 @@ export class PaymentVoucherControllerClass {
 
       const { lines, ...header } = parsed.data;
 
+      // The payee must be on THIS agency's roster, and who they are is read
+      // from their account — see `payeeOnRoster`. Before the week clash below,
+      // so a stranger's id is refused before anything is asked about them.
+      let payee: RosterPayee | null = null;
+      if (header.prId) {
+        payee = await this.payeeOnRoster(header.prId, agencyId);
+        if (!payee) {
+          return res
+            .status(400)
+            .json({ success: false, message: PAYEE_NOT_ON_ROSTER, data: null });
+        }
+      }
+
       // The SAME two money rules the PR self-log path enforces, on the agency
       // door. Closing only the PR side left this one wide open, and this is the
       // likelier origin of the live duplicate: PV-000002 was created and set
@@ -1661,17 +1768,23 @@ export class PaymentVoucherControllerClass {
         }
       }
 
-      const totals = resolveTotals({
-        lines,
-        subtotal: header.subtotal,
-        deduction: header.deduction,
-        net: header.net,
-      });
+      // Derived, never taken as sent — see `resolveTotals`.
+      const totals = resolveTotals({ lines, deduction: header.deduction });
       const actor = getActor(req);
       const voucher = await this.paymentVoucherRepository.create(
         {
           ...header,
           ...totals,
+          // The payee's identity from their account, never the body: `user_id`
+          // is what the payout pays, and it was never set on this door.
+          ...(payee
+            ? {
+                prId: payee.prId,
+                userId: payee.userId,
+                prName: payee.prName ?? header.prName,
+                prIc: payee.prIc,
+              }
+            : {}),
           agencyId, // authoritative — overrides any client-supplied value
           status: 'pending_review',
           // The finance head signs off before a voucher is sent to the PR.
@@ -1681,9 +1794,12 @@ export class PaymentVoucherControllerClass {
         },
         toLineRows(lines ?? []),
       );
+      const note = ignoredTotalsNote(header, voucher);
       res.status(201).json({
         success: true,
-        message: 'Payment voucher created',
+        message: note
+          ? `Payment voucher created. ${note}`
+          : 'Payment voucher created',
         data: voucher,
       });
     } catch (error) {
@@ -1745,6 +1861,84 @@ export class PaymentVoucherControllerClass {
           .json({ success: false, message: lockRefusal, data: null });
       }
 
+      /*
+       * THE PAYEE STAYS ON THE VOUCHER'S AGENCY'S ROSTER, AND `user_id` MOVES
+       * WITH `pr_id` — the same rule `create` enforces (`payeeOnRoster`).
+       *
+       * A PUT carrying `prId` used to rewrite `pr_id` alone: the screen then
+       * named the new PR while the payout, which pays `coalesce(user_id,
+       * pr_id)`, still paid the old one. Re-pointing is allowed only on a
+       * voucher with NO lines — once a line is on it, that is somebody's
+       * money, and moving it to another person is a new voucher, not an edit.
+       * A `prId` equal to the stored one is a faithful round trip: nothing to
+       * check, nothing to write. An admin moving a voucher to another agency
+       * is held to the same roster, so the pair never ends up off-roster.
+       */
+      const targetAgencyId = data.agencyId ?? existing.agencyId;
+      const payeeChanges =
+        data.prId !== undefined && data.prId !== existing.prId;
+      const agencyChanges =
+        data.agencyId !== undefined && data.agencyId !== existing.agencyId;
+      if (data.prId !== undefined && !payeeChanges) delete data.prId;
+      let payeeFields: Partial<PaymentVoucherType> = {};
+      if (payeeChanges && existing.lines.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message:
+            `This voucher already carries ${existing.lines.length} line(s) for ${existing.prName}, ` +
+            "so its PR cannot be changed — that would move their money onto someone else's voucher. " +
+            'Raise a new voucher for the right PR instead.',
+          data: null,
+        });
+      }
+      if (payeeChanges || agencyChanges) {
+        const payeeId = payeeChanges
+          ? data.prId
+          : (existing.userId ?? existing.prId);
+        if (payeeId) {
+          const payee = await this.payeeOnRoster(payeeId, targetAgencyId);
+          if (!payee) {
+            return res.status(400).json({
+              success: false,
+              message: PAYEE_NOT_ON_ROSTER,
+              data: null,
+            });
+          }
+          if (payeeChanges) {
+            // The new PR must not already hold a voucher for this week — the
+            // double-payment rule `create` applies, judged on the week the
+            // voucher will HAVE after this update.
+            const weekStart = data.weekStart ?? existing.weekStart;
+            const weekEnd = data.weekEnd ?? existing.weekEnd ?? weekStart;
+            if (
+              weekStart &&
+              (await this.paymentVoucherRepository.existsForPrWeek(
+                targetAgencyId,
+                payee.prId,
+                weekStart,
+                weekEnd ?? weekStart,
+              ))
+            ) {
+              return res.status(409).json({
+                success: false,
+                message:
+                  `That PR already has a payment voucher for the week of ${weekStart}. ` +
+                  'Edit that one rather than moving this one onto them — two vouchers for one week is a double payment.',
+                data: null,
+              });
+            }
+            // All four together, from the account — a stale `pr_ic` naming the
+            // previous PR is cleared, not kept.
+            payeeFields = {
+              prId: payee.prId,
+              userId: payee.userId,
+              prName: payee.prName ?? data.prName ?? existing.prName,
+              prIc: payee.prIc,
+            };
+          }
+        }
+      }
+
       // Sending the voucher to the PR is the moment the day-by-day review is
       // for. Gated ONLY on the pending_review -> sent transition: the dispute
       // paths also write 'sent', but that is a voucher coming BACK from a
@@ -1787,6 +1981,21 @@ export class PaymentVoucherControllerClass {
             success: false,
             message:
               'Change the lines and send in two steps — rewriting a voucher re-opens every day for review.',
+            data: null,
+          });
+        }
+        // The same split for a new deduction: it moves the net, and in one call
+        // the gate would judge the figures the agency signed while the write
+        // sends a different net to the PR. No screen sends both at once.
+        if (
+          data.deduction !== undefined &&
+          toCents(data.deduction) !== toCents(existing.deduction)
+        ) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'Change the deduction and send in two steps — a new deduction changes the net, ' +
+              'so check the new total before the voucher goes to the PR.',
             data: null,
           });
         }
@@ -1997,15 +2206,11 @@ export class PaymentVoucherControllerClass {
         rewrittenLines = checked.lines;
       }
 
-      // Replacing the lines invalidates client-omitted totals — recompute them.
-      const totals = rewrittenLines
-        ? resolveTotals({
-            lines: rewrittenLines,
-            subtotal: data.subtotal,
-            deduction: data.deduction,
-            net: data.net,
-          })
-        : {};
+      // Subtotal and net are never written as sent: the repository derives both
+      // from the stored lines whenever the lines or the deduction change. A
+      // deduction the body omits is KEPT — this used to default it to 0, so a
+      // line edit that did not repeat the deduction silently wiped it.
+      const { subtotal: sentSubtotal, net: sentNet, ...header } = data;
 
       // Status transitions stamp their timestamp once (never overwritten).
       const stamps: { prSignedAt?: Date; paidAt?: Date; disputedAt?: Date } =
@@ -2034,8 +2239,8 @@ export class PaymentVoucherControllerClass {
         id,
         {
           ...issued,
-          ...data,
-          ...totals,
+          ...header,
+          ...payeeFields,
           ...stamps,
           ...cleared,
           updatedBy: getActor(req),
@@ -2045,11 +2250,23 @@ export class PaymentVoucherControllerClass {
         // Every rule above judged THIS status. Re-checked under the row lock,
         // so a PR signing in the same instant cannot slip a rewrite past it.
         existing.status,
+        // ⚠️ No `voidFinanceSignatureOnMoneyChange` here (review, 12 Nov 2026):
+        // voiding on a disputed edit let "Resend to PR" (disputed -> sent, which
+        // skips the send gate's signature check) deliver an UNSIGNED voucher.
+        // Whether a money edit should take the agency's signature off is an
+        // owner decision (TEST_SCRIPT §9); the repository option stays for it.
       );
       if (!voucher)
         return res
           .status(404)
           .json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // What the caller should know happened beyond "updated". Not a refusal —
+      // the write went through — but a script that assumed its net was stored
+      // as sent would otherwise be wrong.
+      const notes = [
+        ignoredTotalsNote({ subtotal: sentSubtotal, net: sentNet }, voucher),
+      ].filter((n): n is string => n !== null);
 
       // Tell the PR — the Sunday job always did, this door never had. After the
       // write, and judged on the status the gates above judged: a notice for a
@@ -2062,7 +2279,10 @@ export class PaymentVoucherControllerClass {
 
       res.status(200).json({
         success: true,
-        message: 'Payment voucher updated',
+        message:
+          notes.length > 0
+            ? ['Payment voucher updated.', ...notes].join(' ')
+            : 'Payment voucher updated',
         data: voucher,
       });
     } catch (error) {

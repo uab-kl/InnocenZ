@@ -123,7 +123,7 @@
 .iz-card-sect {
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-label);
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-title);
@@ -205,7 +205,7 @@
 	width: 120px;
 	height: 30px;
 	background: #06030c;
-	border-radius: 0 0 18px 18px;
+	border-radius: 0 0 var(--iz-radius-xl, 20px) var(--iz-radius-xl, 20px);
 	z-index: 60;
 	pointer-events: none;
 }
@@ -251,7 +251,7 @@
 
 .iz-screen {
 	padding: 6px 18px 26px;
-	animation: iz-fade 0.34s ease;
+	animation: iz-fade var(--iz-motion-enter, 360ms) ease;
 }
 
 /* Horizontal swipe carousel — hidden scrollbar, touch swipe + mouse drag */
@@ -354,7 +354,7 @@
 	text-transform: uppercase;
 	color: var(--iz-accent-l);
 	margin: 26px 2px 12px;
-	font-weight: 800;
+	font-weight: 700;
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -423,7 +423,7 @@
 }
 .iz-icon-guide {
 	border: 1px solid var(--iz-line2);
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: linear-gradient(
 		158deg,
 		rgba(43, 36, 62, 0.55),
@@ -462,7 +462,7 @@
 	width: 20px;
 	height: 20px;
 	color: var(--iz-muted);
-	transition: transform 0.2s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-icon-guide[open] .iz-icon-guide__chevron {
 	transform: rotate(180deg);
@@ -486,7 +486,7 @@
 	align-items: center;
 	gap: 13px;
 	padding: 9px 8px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-icon-guide__row:hover {
 	background: rgba(255, 255, 255, 0.04);
@@ -498,7 +498,7 @@
 	width: 44px;
 	height: 44px;
 	flex-shrink: 0;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 }
@@ -540,7 +540,7 @@
 .iz-card {
 	background: var(--iz-grad-card);
 	border: 1px solid var(--iz-line);
-	border-radius: 20px;
+	border-radius: var(--iz-radius-xl, 20px);
 	padding: 19px;
 	margin-bottom: 16px;
 	position: relative;
@@ -562,7 +562,7 @@
 .iz-feature-card {
 	background: var(--iz-grad-feature);
 	border: 1px solid rgba(183, 156, 232, 0.2);
-	border-radius: 22px;
+	border-radius: var(--iz-radius-xl, 20px);
 	padding: 20px;
 	margin-bottom: 13px;
 	position: relative;
@@ -577,7 +577,7 @@
 .iz-btn {
 	width: 100%;
 	border: none;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 14px;
 	font-size: 18px;
 	font-weight: 700;
@@ -587,7 +587,7 @@
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
-	transition: 0.18s;
+	transition: var(--iz-motion-fast, 160ms);
 	color: #fff;
 	letter-spacing: 0.2px;
 	/* Chinese has no word boundaries, so a label may break between ANY two
@@ -675,7 +675,7 @@
 .iz-btn-sm {
 	padding: 10px 14px;
 	font-size: 16px;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	width: auto;
 }
 .iz-btn-danger {
@@ -741,7 +741,7 @@
 }
 .iz-gps-map {
 	height: 140px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	background:
 		radial-gradient(
 			circle at 50% 50%,
@@ -804,7 +804,7 @@
 	pointer-events: none;
 }
 .iz-pr-gps-distance-card {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 12px 13px;
@@ -824,7 +824,7 @@
 		rgba(57, 217, 138, 0.5),
 		rgba(244, 183, 64, 0.85)
 	);
-	transition: width 0.35s ease;
+	transition: width var(--iz-motion-enter, 360ms) ease;
 }
 .iz-pr-gps-range-fence {
 	position: absolute;
@@ -891,7 +891,7 @@
 	transform: translateX(-50%);
 	white-space: nowrap;
 	padding: 4px 8px;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: #fff;
 	color: #202124;
 	font-size: 12px;
@@ -961,7 +961,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	overflow: hidden;
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
@@ -991,7 +991,7 @@
 	align-items: center;
 	gap: 4px;
 	padding: 5px 10px;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: #fff;
 	color: #5f6368;
 	font-size: 12px;
@@ -1006,7 +1006,7 @@
 	min-width: 140px;
 	max-width: 88%;
 	padding: 8px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: #fff;
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 	pointer-events: none;
@@ -1092,7 +1092,7 @@
 }
 .iz-scanbox {
 	height: 200px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	border: 1px solid var(--iz-line);
 	display: flex;
@@ -1110,7 +1110,7 @@
 	background: var(--iz-grad-gold);
 	color: #1a1726;
 	font-family: var(--iz-font);
-	font-weight: 800;
+	font-weight: 700;
 	font-size: 12px;
 }
 
@@ -1124,7 +1124,7 @@
 	padding: 3px 8px 3px 6px;
 	border-radius: 999px;
 	font-family: var(--iz-font);
-	font-weight: 800;
+	font-weight: 700;
 	font-size: 11px;
 	letter-spacing: 0.02em;
 	line-height: 1.4;
@@ -1169,13 +1169,13 @@
 
 .iz-bar-track {
 	height: 6px;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(255, 255, 255, 0.06);
 	overflow: hidden;
 }
 .iz-bar-fill {
 	height: 100%;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-pgrid {
 	display: grid;
@@ -1187,7 +1187,7 @@
 }
 .iz-pcell {
 	aspect-ratio: 1;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: linear-gradient(
 		135deg,
 		rgba(183, 156, 232, 0.12),
@@ -1204,8 +1204,8 @@
 .iz-pcell.editable {
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-pcell.editable:hover {
 	border-color: var(--iz-gold-d);
@@ -1249,7 +1249,7 @@
 	width: 100%;
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid var(--iz-line2);
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	padding: 10px 8px;
 	color: var(--iz-gold-l);
 	font-family: var(--iz-font);
@@ -1312,7 +1312,7 @@
 	aspect-ratio: 3 / 4;
 	max-width: 360px;
 	margin-inline: auto;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: linear-gradient(
 		145deg,
 		var(--iz-violet-bg) 0%,
@@ -1329,7 +1329,7 @@
 	z-index: 2;
 	font-family: var(--iz-font);
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.14em;
 	color: rgba(255, 255, 255, 0.72);
 	text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
@@ -1430,7 +1430,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(0, 0, 0, 0.22);
 	border: 1px solid rgba(167, 139, 250, 0.14);
 	overflow: hidden;
@@ -1455,7 +1455,7 @@
 	aspect-ratio: unset;
 	object-fit: contain;
 	object-position: center;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	box-shadow: none;
 }
 .iz-comcard-3d-preview--sheet .iz-comcard-3d-preview-stage {
@@ -1465,7 +1465,7 @@
 	max-height: 88%;
 	margin-inline: auto;
 	aspect-ratio: 3 / 4;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-comcard-3d-preview--sheet .iz-comcard-3d-preview-badge {
 	display: none;
@@ -1530,7 +1530,7 @@
 	height: 58px;
 	max-width: none;
 	margin: 0;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	aspect-ratio: auto;
 }
 .iz-comcard-3d-preview--thumb .iz-comcard-3d-preview-figure {
@@ -1545,7 +1545,7 @@
 	width: 44px;
 	height: 58px;
 	flex-shrink: 0;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(0, 0, 0, 0.35);
 }
 .iz-comcard-3d-preview--thumb-photo__img {
@@ -1563,7 +1563,7 @@
 	max-width: none;
 	margin: 0;
 	aspect-ratio: 3 / 4;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-comcard-3d-preview--card .iz-comcard-3d-preview-plate {
 	top: 6px;
@@ -1583,7 +1583,7 @@
 }
 .iz-comcard-3d-preview--card-compact .iz-comcard-3d-preview-stage {
 	aspect-ratio: 5 / 6;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-comcard-3d-preview--card-compact .iz-comcard-3d-preview-plate {
 	font-size: 11px;
@@ -1603,13 +1603,13 @@
 	border: none;
 	background: transparent;
 	cursor: pointer;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	transition:
-		box-shadow 0.15s,
-		transform 0.15s;
+		box-shadow var(--iz-motion-fast, 160ms),
+		transform var(--iz-motion-fast, 160ms);
 }
 .iz-comcard-3d-preview-btn.w-full {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-comcard-3d-preview-btn:hover {
 	box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.45);
@@ -1622,10 +1622,10 @@
 	border: none;
 	background: transparent;
 	cursor: pointer;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	transition:
-		transform 0.15s ease,
-		box-shadow 0.15s ease;
+		transform var(--iz-motion-fast, 160ms) ease,
+		box-shadow var(--iz-motion-fast, 160ms) ease;
 	line-height: 0;
 }
 .iz-pr-comcard-thumb-btn:hover {
@@ -1641,12 +1641,12 @@
 	.iz-comcard-3d-preview-stage {
 	width: 36px;
 	height: 48px;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 .iz-pr-comcard-thumb-btn--week .iz-comcard-3d-preview--thumb-photo {
 	width: 36px;
 	height: 48px;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 
 .iz-lang-pick {
@@ -1659,7 +1659,7 @@
 	font-weight: 600;
 	font-family: var(--iz-font);
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-lang-pick.on {
 	background: var(--iz-violet-ink);
@@ -1743,7 +1743,7 @@
 	width: 80px !important;
 	height: 80px !important;
 	font-size: var(--iz-fs-display);
-	border-radius: 22px !important;
+	border-radius: var(--iz-radius-xl, 20px) !important;
 	box-shadow:
 		0 10px 28px rgba(0, 0, 0, 0.32),
 		inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -1756,7 +1756,7 @@
 .iz-pr-account-hero__name {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.15;
 	letter-spacing: -0.3px;
 	color: var(--iz-txt);
@@ -1764,7 +1764,7 @@
 .iz-pr-account-hero__email {
 	margin-top: 4px;
 	font-size: 14px;
-	font-weight: 500;
+	font-weight: 600;
 	color: var(--iz-muted);
 	word-break: break-all;
 }
@@ -1808,7 +1808,7 @@
 	align-items: center;
 	padding: 14px 12px 12px;
 	margin-bottom: 14px;
-	border-radius: 18px;
+	border-radius: var(--iz-radius-xl, 20px);
 	background: rgba(0, 0, 0, 0.24);
 	border: 1px solid rgba(167, 139, 250, 0.16);
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -1837,7 +1837,7 @@
 	margin: 0;
 	min-height: 280px;
 	aspect-ratio: 3 / 4;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	box-shadow:
 		0 20px 40px rgba(0, 0, 0, 0.35),
 		inset 0 0 0 1px rgba(255, 255, 255, 0.06);
@@ -1885,7 +1885,7 @@
 .iz-static-comcard.iz-static-comcard--picker {
 	width: 100%;
 	overflow: hidden;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-violet-ink);
 }
 .iz-static-comcard--picker .iz-static-comcard__img {
@@ -1893,7 +1893,7 @@
 	aspect-ratio: 3 / 4;
 	object-fit: contain;
 	object-position: center top;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 .iz-static-comcard__img {
@@ -1901,22 +1901,21 @@
 	width: 100%;
 	aspect-ratio: 3 / 4;
 	object-fit: cover;
-	border-radius: 14px;
-	box-shadow:
-		0 12px 28px rgba(0, 0, 0, 0.32),
-		inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+	border-radius: var(--iz-radius-l, 14px);
+	/* Elevation is tonal (DESIGN.md §10, owner 19 Nov 2026 "do all"): the
+	   hairline keeps the photo's edge; the 0 12px 28px drop shadow — the last
+	   heavy shadow in either portal — is gone. */
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 .iz-portfolio-comcard__frame {
 	position: relative;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	overflow: hidden;
 	aspect-ratio: 3 / 4;
 	/* The name plate below sizes itself in `cqw` against this frame, so it holds
 	   the generated PNG's proportions at every card size. */
 	container-type: inline-size;
-	box-shadow:
-		0 12px 28px rgba(0, 0, 0, 0.32),
-		inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 	background: #111;
 }
 .iz-portfolio-comcard__grid {
@@ -1963,7 +1962,7 @@
 	min-width: 25cqw;
 	max-width: 76%;
 	padding: 0.56cqw 2.67cqw;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	/*
 	 * The name plate is frosted glass, not a white sticker. At 0.62 the photos
 	 * read through it; the backdrop blur is what keeps the words legible over a
@@ -1984,7 +1983,7 @@
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: 5.33cqw;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	letter-spacing: 0.02em;
 	/* One line — but never truncated. The plate widens to fit the nickname
@@ -2051,7 +2050,7 @@
 	align-items: center;
 	gap: 2px;
 	padding: 0 8px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid var(--iz-line);
 }
@@ -2093,7 +2092,7 @@
 	justify-content: center;
 	gap: 4px;
 	padding: 10px 6px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.025);
 	border: 1px solid var(--iz-line);
 }
@@ -2108,7 +2107,7 @@
 .iz-pr-account-hero__kpi-cell .n {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.1;
 	color: var(--iz-txt);
 }
@@ -2118,7 +2117,7 @@
 .iz-pr-account-hero__lifecycle {
 	margin-top: 14px;
 	padding: 12px 12px 10px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(183, 156, 232, 0.05);
 	border: 1px solid rgba(183, 156, 232, 0.12);
 }
@@ -2179,19 +2178,19 @@
 }
 .iz-pr-account-hero__section-hint {
 	font-size: 11px;
-	font-weight: 500;
+	font-weight: 600;
 	letter-spacing: 0;
 	text-transform: none;
 	color: var(--iz-muted2);
 }
 .iz-pr-account-hero__portfolio {
 	padding: 10px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(0, 0, 0, 0.2);
 	border: 1px solid rgba(255, 255, 255, 0.05);
 }
 .iz-pr-account-hero__portfolio .iz-pcell {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.02);
 	border-color: rgba(255, 255, 255, 0.07);
 }
@@ -2208,7 +2207,7 @@
 .iz-pr-account-hero__languages-view,
 .iz-pr-account-hero__languages-edit {
 	padding: 10px 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(0, 0, 0, 0.16);
 	border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -2249,7 +2248,7 @@
 	margin-top: 6px;
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-title);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.12;
 	letter-spacing: -0.45px;
 	color: var(--iz-title);
@@ -2271,7 +2270,7 @@
 	width: 100%;
 	padding: 3px;
 	gap: 3px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 }
@@ -2284,7 +2283,7 @@
 	min-height: 38px;
 	padding: 8px 10px;
 	border: none;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: none;
 	font-family: var(--iz-font);
 	font-size: 12px;
@@ -2292,7 +2291,7 @@
 	line-height: 1.2;
 	color: var(--iz-muted);
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-pr-hub-toggle button.on.shifts {
 	background: rgba(232, 194, 122, 0.14);
@@ -2313,7 +2312,7 @@
 	padding: 0 4px;
 	border-radius: 999px;
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1;
 	color: #fff;
 	background: var(--iz-red);
@@ -2324,7 +2323,7 @@
 	align-items: center;
 	gap: 10px;
 	padding: 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.02);
 	border: 1px solid var(--iz-line);
 }
@@ -2335,7 +2334,7 @@
 	width: 36px;
 	height: 36px;
 	flex-shrink: 0;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	color: var(--iz-gold-l);
 	background: rgba(232, 194, 122, 0.1);
 	border: 1px solid rgba(232, 194, 122, 0.18);
@@ -2535,7 +2534,7 @@
 }
 .iz-pr-shift-status__time-cell {
 	padding: 10px 8px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.02);
 	border: 1px solid var(--iz-line);
 	text-align: center;
@@ -2560,7 +2559,7 @@
 }
 .iz-pr-shift-status__targets {
 	padding: 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(183, 156, 232, 0.05);
 	border: 1px solid rgba(183, 156, 232, 0.14);
 }
@@ -2582,7 +2581,7 @@
 .iz-pr-shift-status__target-price .v {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 	line-height: 1.1;
 }
@@ -2636,7 +2635,7 @@
 	margin-top: 2px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-pr-shift-status__table-wrap {
@@ -2764,7 +2763,7 @@
 	gap: 4px;
 	max-width: 100%;
 	padding: 4px 8px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(167, 139, 250, 0.35);
 	background: rgba(167, 139, 250, 0.1);
 	color: var(--iz-violet-l);
@@ -2792,11 +2791,11 @@
 /* PR check-in — outlet assignment brief */
 .iz-pr-outlet-brief {
 	overflow: hidden;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(167, 139, 250, 0.2);
 	background: var(--iz-bg2);
 	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
-	transition: border-color 0.2s ease;
+	transition: border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-pr-outlet-brief.is-open {
 	border-color: rgba(167, 139, 250, 0.38);
@@ -2817,8 +2816,8 @@
 	border: none;
 	color: inherit;
 	transition:
-		min-height 0.2s ease,
-		background 0.15s ease;
+		min-height var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-pr-outlet-brief__hero:hover {
 	filter: brightness(1.03);
@@ -2839,7 +2838,7 @@
 	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.22);
 	background: rgba(0, 0, 0, 0.25);
 	color: rgba(255, 255, 255, 0.85);
@@ -2893,7 +2892,7 @@
 	margin-top: 2px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 .iz-pr-outlet-brief__hero-main {
@@ -2938,13 +2937,13 @@
 	flex-shrink: 0;
 	width: 56px;
 	height: 56px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-display);
-	font-weight: 800;
+	font-weight: 700;
 	color: rgba(255, 255, 255, 0.9);
 	background: rgba(255, 255, 255, 0.12);
 	border: 1px solid rgba(255, 255, 255, 0.2);
@@ -2959,7 +2958,7 @@
 .iz-pr-outlet-brief__name {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.15;
 	color: #fff;
 }
@@ -3022,7 +3021,7 @@
 .iz-pr-outlet-brief__note {
 	margin-top: 10px;
 	padding: 8px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	font-size: 12px;
 	line-height: 1.45;
 	color: var(--iz-violet-l);
@@ -3091,7 +3090,7 @@
 	display: block;
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-pr-week-pay__day.today .n {
@@ -3125,7 +3124,7 @@
 }
 .iz-pr-week-pay__cell--empty {
 	color: var(--iz-muted2);
-	font-weight: 500;
+	font-weight: 600;
 }
 .iz-pr-week-pay__status-pill {
 	font-size: 11px;
@@ -3138,7 +3137,7 @@
 	text-align: right;
 	padding: 8px 0 8px 6px;
 	font-family: var(--iz-font);
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 	white-space: nowrap;
 }
@@ -3201,7 +3200,7 @@
 .iz-pr-week-pay-card__title {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 	letter-spacing: -0.02em;
 }
@@ -3253,7 +3252,7 @@
 	color: inherit;
 	font: inherit;
 	cursor: pointer;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	touch-action: manipulation;
 	-webkit-tap-highlight-color: transparent;
 }
@@ -3300,7 +3299,7 @@
 /* Payment history (signed / paid PVs) */
 .iz-pay-hist-hero {
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(183, 156, 232, 0.22);
 	background: linear-gradient(
 		180deg,
@@ -3311,7 +3310,7 @@
 .iz-pay-hist-hero__title {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-pay-hist-list {
@@ -3339,7 +3338,7 @@
 	width: 16px;
 	height: 16px;
 	color: var(--iz-muted2);
-	transition: transform 0.2s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-pay-hist-card__chev.open {
 	transform: rotate(180deg);
@@ -3363,7 +3362,7 @@
 	display: block;
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	margin-top: 2px;
 }
 .iz-pay-hist-card__metrics .v.wages {
@@ -3400,7 +3399,7 @@
 .iz-pr-shift-status__bar-fill {
 	height: 100%;
 	border-radius: inherit;
-	transition: width 0.2s ease;
+	transition: width var(--iz-motion-fast, 160ms) ease;
 }
 .iz-pr-shift-status__bar-fill.drinks {
 	background: linear-gradient(90deg, #a78bfa, #7c3aed);
@@ -3425,7 +3424,7 @@
 	align-items: stretch;
 	gap: 8px;
 	padding: 10px 8px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: linear-gradient(
 		180deg,
@@ -3452,7 +3451,7 @@
 }
 .iz-pr-shift-status__line {
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.02);
 	border: 1px solid var(--iz-line);
 }
@@ -3493,7 +3492,7 @@
 	gap: 12px;
 	margin-top: 4px;
 	padding: 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(183, 156, 232, 0.08);
 	border: 1px solid rgba(183, 156, 232, 0.2);
 }
@@ -3549,7 +3548,7 @@
 	justify-content: center;
 	width: 28px;
 	height: 28px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.04);
 	color: var(--iz-muted);
@@ -3577,7 +3576,7 @@
 	gap: 10px;
 	align-items: flex-start;
 	padding: 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(232, 194, 122, 0.38);
 	background: linear-gradient(
 		180deg,
@@ -3587,7 +3586,7 @@
 }
 .iz-self-log-form {
 	padding: 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 2px solid rgba(232, 194, 122, 0.45);
 	background: linear-gradient(
 		180deg,
@@ -3599,7 +3598,7 @@
 .iz-self-log-form__label {
 	display: block;
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-gold-l);
@@ -3610,14 +3609,14 @@
 	gap: 8px;
 	margin-top: 8px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 2px solid rgba(232, 194, 122, 0.5);
 	background: rgba(0, 0, 0, 0.25);
 }
 .iz-self-log-form__prefix {
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 .iz-self-log-form__input {
@@ -3627,7 +3626,7 @@
 	background: transparent;
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	outline: none;
 }
@@ -3635,7 +3634,7 @@
 	width: 100%;
 	margin-top: 6px;
 	padding: 8px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.2);
 	color: var(--iz-txt);
@@ -3656,7 +3655,7 @@
 .iz-self-log-outlet-head__title {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
@@ -3676,12 +3675,12 @@
 	align-items: center;
 	gap: 10px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 	transition:
-		border-color 0.15s ease,
-		background 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-self-log-drink-row--active {
 	border-color: rgba(232, 194, 122, 0.5);
@@ -3722,13 +3721,13 @@
 	text-align: center;
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 .iz-self-log-summary {
 	margin-top: 12px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(232, 194, 122, 0.35);
 	background: rgba(232, 194, 122, 0.06);
 }
@@ -3745,7 +3744,7 @@
 .iz-self-log-summary__total {
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 .iz-receipt-selflog-pending {
@@ -3775,7 +3774,7 @@
 .iz-security-card__title {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: -0.35px;
 	color: var(--iz-title);
 	line-height: 1.2;
@@ -3813,7 +3812,7 @@
 	gap: 12px;
 	width: 100%;
 	padding: 14px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 117, 117, 0.28);
 	background: var(--iz-red-bg);
 	color: var(--iz-red);
@@ -3821,7 +3820,7 @@
 	font-weight: 700;
 	font-family: var(--iz-font);
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 	text-align: left;
 }
 .iz-security-delete:hover {
@@ -3874,7 +3873,7 @@
 }
 .iz-account-security__input {
 	width: 100%;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg2);
 	padding: 10px 12px;
@@ -3903,15 +3902,15 @@
 	gap: 12px;
 	width: 100%;
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	color: inherit;
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-security-menu-row:hover {
@@ -3925,7 +3924,7 @@
 	justify-content: center;
 	width: 36px;
 	height: 36px;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(255, 255, 255, 0.05);
 	color: var(--iz-gold-l);
 	flex-shrink: 0;
@@ -3969,7 +3968,7 @@
 	height: 32px;
 	margin: -4px 0;
 	border: none;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: transparent;
 	color: var(--iz-muted);
 	cursor: pointer;
@@ -4018,7 +4017,7 @@
 	opacity: 0.85;
 }
 .iz-pv-sig-preview {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px dashed rgba(183, 156, 232, 0.35);
 	background: rgba(0, 0, 0, 0.2);
 	padding: 6px 10px;
@@ -4061,7 +4060,7 @@
 }
 .iz-pv-sign-canvas-wrap {
 	position: relative;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(183, 156, 232, 0.35);
 	background: rgba(0, 0, 0, 0.25);
 	overflow: hidden;
@@ -4144,7 +4143,7 @@
 
 /* PV in-app summary (payroll detail — not the print template) */
 .iz-pv-summary {
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: linear-gradient(
 		180deg,
@@ -4157,26 +4156,29 @@
 .iz-pv-summary-hero {
 	padding: 16px 16px 14px;
 	border-bottom: 1px solid var(--iz-line);
-	background: linear-gradient(
-		135deg,
-		rgba(232, 194, 122, 0.12),
-		rgba(232, 194, 122, 0.02)
-	);
+	/* Flat panel-2 step, not a gold gradient (DESIGN.md §2 bans gradients in
+	   the consoles; §3: surfaces step up). Same size, same padding. */
+	background: var(--iz-panel2);
 }
 .iz-pv-summary-hero-lbl {
 	font-size: var(--iz-fs-label);
-	font-weight: 800;
+	font-weight: 600;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-title);
 }
+/* The Net payable hero opens nothing, so it is ink, not the link lavender
+   (DESIGN.md §3), at 600 on the page-title step (§4: no 800, sizes from the
+   ladder) with tabular figures, the same as the footer Net payable below it. */
 .iz-pv-summary-hero-amt {
 	margin-top: 4px;
 	font-family: var(--iz-font);
-	font-size: 28px;
-	font-weight: 800;
+	font-size: var(--iz-fs-head);
+	font-weight: 600;
 	line-height: 1.1;
-	color: var(--iz-gold);
+	color: var(--iz-txt);
+	font-variant-numeric: tabular-nums;
+	font-feature-settings: "tnum";
 }
 .iz-pv-summary-details {
 	border: none;
@@ -4207,10 +4209,12 @@
 .iz-pv-summary-hero-amt--compact {
 	margin-top: 0;
 	font-size: 22px;
+	/* Sits inside the <summary> that opens the details, so it keeps lavender. */
+	color: var(--iz-gold);
 }
 .iz-pv-summary-details-chevron {
 	color: var(--iz-muted);
-	transition: transform 0.18s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-pv-summary-details[open] .iz-pv-summary-details-chevron {
 	transform: rotate(180deg);
@@ -4255,7 +4259,7 @@
 }
 .iz-pv-summary-bank-lbl {
 	font-size: var(--iz-fs-label);
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-title);
@@ -4267,16 +4271,26 @@
 	color: var(--iz-muted);
 }
 .iz-pv-summary-table-card {
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.15);
 	overflow: hidden;
 	margin-bottom: 12px;
 }
+/* The breakdown table's Amount column (PvSummaryView, in Payroll & PV and in
+   History's paid voucher): right-aligned, tabular figures, the header with its
+   column — the same money-column rule as `.iz-approved-voucher-table .iz-money`.
+   `text-right` alone never applied here: `.iz-data-table th, .iz-data-table td
+   { text-align: left }` is un-layered and beats Tailwind's layered utility.
+   (0,2,0) outranks that (0,1,1); scoped to this card so no other table moves. */
+.iz-pv-summary-table-card .iz-money {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
 .iz-pv-summary-table-h {
 	padding: 12px 16px 10px;
 	font-size: var(--iz-fs-label);
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-title);
@@ -4607,7 +4621,7 @@
 .iz-stat-tile .n {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.1;
 }
 .iz-stat-tile .l {
@@ -4624,7 +4638,7 @@
 }
 .iz-feature-card .big-num {
 	font-family: var(--iz-font);
-	font-weight: 800;
+	font-weight: 700;
 	font-size: 28px;
 	color: var(--iz-gold-l);
 	margin: 6px 0;
@@ -4722,7 +4736,7 @@
 
 /* Job posting composer — date / budget / time chip row */
 .iz-job-composer-bar {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.15);
 	padding: 8px;
@@ -4751,7 +4765,7 @@
 	height: 38px;
 	min-height: 38px;
 	padding: 0 13px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	font-family: var(--iz-font);
@@ -4760,8 +4774,8 @@
 	color: var(--iz-txt);
 	outline: none;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-job-composer-bar .iz-job-composer-slot:not(.iz-time-picker)::placeholder {
 	font-size: 14px;
@@ -4775,7 +4789,7 @@
 	height: 38px;
 	min-height: 38px;
 	padding: 0 34px 0 13px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	font-family: var(--iz-font);
@@ -4821,7 +4835,7 @@
 	color: var(--iz-muted2);
 }
 .iz-job-posting-form-card {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(28, 24, 38, 0.92);
 	padding: 16px 14px;
@@ -4850,7 +4864,7 @@
 	width: 100%;
 	min-width: 0;
 	align-items: center;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	padding: 0 10px;
@@ -4923,7 +4937,7 @@
 	min-width: 0;
 	min-height: 68px;
 	padding: 10px 12px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	font-family: var(--iz-font);
@@ -4972,9 +4986,9 @@
 	line-height: 1.3;
 	color: var(--iz-muted);
 	transition:
-		border-color 0.15s,
-		background 0.15s,
-		color 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms);
 }
 .iz-job-posting-type-pill:hover {
 	border-color: rgba(183, 156, 232, 0.35);
@@ -5041,7 +5055,7 @@
 }
 .iz-job-postings-table-wrap {
 	overflow-x: auto;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.015);
 }
@@ -5126,7 +5140,7 @@
 	min-width: 0;
 }
 .iz-post-job-action-panel {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.08);
 	background: rgba(22, 18, 32, 0.95);
 	padding: 14px 14px 12px;
@@ -5221,7 +5235,7 @@
 .iz-post-job-dock-stats__value {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
@@ -5248,7 +5262,7 @@
 	width: 44px;
 	height: 44px;
 	flex-shrink: 0;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.04);
 	color: var(--iz-txt);
@@ -5258,7 +5272,7 @@
 	font-size: 14px !important;
 }
 .iz-post-job-legend {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 10px 12px;
@@ -5318,7 +5332,7 @@
 	margin-top: 20px;
 	font-family: var(--iz-font);
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
 	color: var(--iz-gold-l);
@@ -5360,13 +5374,13 @@
 	width: 250px;
 	max-width: 72vw;
 	padding: 8px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-panel, #17121f);
 	color: var(--iz-txt);
 	font-size: 11px;
 	line-height: 1.5;
-	font-weight: 500;
+	font-weight: 600;
 	letter-spacing: normal;
 	text-transform: none;
 	white-space: normal;
@@ -5379,7 +5393,7 @@
 	flex-direction: column;
 	gap: 7px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -5443,14 +5457,14 @@
 .iz-post-job-help-panel {
 	margin-top: 10px;
 	padding: 12px 14px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 }
 .iz-post-job-help-panel__title {
 	font-family: var(--iz-font);
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
 	color: var(--iz-gold-l);
@@ -5485,7 +5499,7 @@
 .iz-event-picker__title {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-event-picker__tabs {
@@ -5506,7 +5520,7 @@
 	gap: 10px;
 	font-family: var(--iz-font);
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
 	color: var(--iz-gold-l);
@@ -5530,7 +5544,7 @@
 }
 .iz-event-card {
 	position: relative;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	overflow: hidden;
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
@@ -5639,7 +5653,7 @@
 .iz-event-editor__title {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-event-editor__body {
@@ -5665,7 +5679,7 @@
 }
 .iz-event-editor__hint {
 	font-size: 11px;
-	font-weight: 500;
+	font-weight: 600;
 	letter-spacing: normal;
 	text-transform: none;
 	color: var(--iz-muted2);
@@ -5721,14 +5735,14 @@
 	gap: 10px;
 	margin-bottom: 10px;
 	padding: 8px 10px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 }
 .iz-chosen-event-bar__thumb {
 	width: 44px;
 	height: 30px;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	object-fit: cover;
 	flex-shrink: 0;
 }
@@ -5769,7 +5783,7 @@
 	font-size: 11px;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
-	font-weight: 800;
+	font-weight: 700;
 	padding: 3px 9px;
 	border-radius: 999px;
 	border: 1px solid transparent;
@@ -5789,7 +5803,7 @@
 	width: 100%;
 	max-height: 160px;
 	object-fit: cover;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	margin-bottom: 8px;
 }
 .iz-outlet-detail-head__addr {
@@ -5814,7 +5828,7 @@
 	padding: 0;
 	border: 0;
 	background: none;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	overflow: hidden;
 	cursor: zoom-in;
 	text-align: inherit;
@@ -5842,7 +5856,7 @@
 	border: 1px solid rgba(255, 255, 255, 0.28);
 	background: rgba(0, 0, 0, 0.62);
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--iz-violet-l);
@@ -5853,7 +5867,7 @@
 .iz-shift-event-thumb {
 	width: 52px;
 	height: 34px;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	object-fit: cover;
 	flex-shrink: 0;
 }
@@ -5906,7 +5920,7 @@
 	justify-content: center;
 	width: 28px;
 	height: 28px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(183, 156, 232, 0.12);
 	color: var(--iz-violet-l);
 }
@@ -5962,7 +5976,7 @@
 	align-items: center;
 	justify-content: center;
 	min-height: 34px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	padding: 6px 10px;
@@ -5971,9 +5985,9 @@
 	font-weight: 700;
 	color: var(--iz-muted);
 	transition:
-		border-color 0.15s,
-		background 0.15s,
-		color 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms);
 }
 .iz-post-job-event-type-pill.is-active {
 	border-color: rgba(183, 156, 232, 0.45);
@@ -5995,7 +6009,7 @@
 	justify-content: center;
 	width: 28px;
 	height: 28px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(232, 194, 122, 0.12);
 	color: var(--iz-gold-l);
 	flex-shrink: 0;
@@ -6079,7 +6093,7 @@
 	justify-content: center;
 	width: 18px;
 	height: 18px;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	color: var(--iz-muted2);
 	background: transparent;
 	border: none;
@@ -6125,7 +6139,7 @@
 .iz-post-job-tier-col__name {
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-muted);
 	white-space: nowrap;
 }
@@ -6141,7 +6155,7 @@
 	gap: 3px;
 	min-height: 2.75rem;
 	padding: 6px 4px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(244, 183, 64, 0.45);
 	background: rgba(244, 183, 64, 0.08);
 	cursor: text;
@@ -6159,7 +6173,7 @@
 	text-align: center;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 .iz-post-job-tier-col__no-base {
@@ -6189,7 +6203,7 @@
 	justify-content: center;
 	min-height: 2.75rem;
 	padding: 6px 8px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(0, 0, 0, 0.28);
 }
@@ -6198,7 +6212,7 @@
 	text-align: center;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-post-job-tier-add {
@@ -6208,7 +6222,7 @@
 	gap: 6px;
 	width: 100%;
 	min-height: 36px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px dashed rgba(255, 255, 255, 0.12);
 	background: rgba(255, 255, 255, 0.02);
 	color: var(--iz-muted);
@@ -6225,7 +6239,7 @@
 	display: grid;
 	gap: 1px;
 	overflow: hidden;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-line);
 }
@@ -6314,7 +6328,7 @@
 	justify-content: center;
 	width: 18px;
 	height: 18px;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	color: var(--iz-muted2);
 }
 .iz-post-job-tier-col-head__remove:hover {
@@ -6358,8 +6372,8 @@
 	border: 0;
 	cursor: pointer;
 	transition:
-		background 0.15s ease,
-		color 0.15s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-post-job-tier-comm-cell--btn:hover {
 	background: rgba(183, 156, 232, 0.08);
@@ -6399,13 +6413,13 @@
 	height: 20px;
 	flex-shrink: 0;
 	border: 1px solid var(--iz-line2);
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: rgba(255, 255, 255, 0.04);
 	color: var(--iz-muted);
 	transition:
-		background 0.15s ease,
-		color 0.15s ease,
-		border-color 0.15s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-tier-table-stepper__btn:hover:not(:disabled) {
 	border-color: rgba(183, 156, 232, 0.35);
@@ -6442,7 +6456,7 @@
 	margin-top: 4px;
 }
 .iz-post-job-summary-card {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.2);
 	padding: 12px;
@@ -6450,7 +6464,7 @@
 .iz-post-job-summary-card__title {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 	margin-bottom: 10px;
 }
@@ -6466,7 +6480,7 @@
 	justify-content: space-between;
 	gap: 10px;
 	margin-top: 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.28);
 	padding: 10px 12px;
@@ -6480,7 +6494,7 @@
 .iz-post-job-summary-card__value {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
@@ -6499,7 +6513,7 @@
 	justify-content: center;
 	gap: 6px;
 	min-height: 42px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(183, 156, 232, 0.38);
 	background: transparent;
 	color: var(--iz-txt);
@@ -6507,8 +6521,8 @@
 	font-weight: 700;
 	cursor: pointer;
 	transition:
-		background 0.12s ease,
-		border-color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-post-job-aside-btn:hover {
 	background: rgba(183, 156, 232, 0.08);
@@ -6520,21 +6534,21 @@
 	justify-content: center;
 	gap: 6px;
 	min-height: 46px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: none;
 	background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
 	color: #0a1a10;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	cursor: pointer;
 	box-shadow:
 		0 0 0 1px rgba(74, 222, 128, 0.25),
 		0 0 20px rgba(74, 222, 128, 0.35),
 		0 8px 24px -8px rgba(34, 197, 94, 0.55);
 	transition:
-		filter 0.12s ease,
-		opacity 0.12s ease;
+		filter var(--iz-motion-fast, 160ms) ease,
+		opacity var(--iz-motion-fast, 160ms) ease;
 }
 .iz-post-job-submit-btn:hover:not(:disabled) {
 	filter: brightness(1.05);
@@ -6560,7 +6574,7 @@
 	letter-spacing: 0.12em;
 }
 .iz-post-job-pr-section {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(0, 0, 0, 0.18);
 	padding: 12px 12px 10px;
@@ -6672,15 +6686,15 @@
 	min-width: 0;
 	flex-shrink: 0;
 	scroll-snap-align: start;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 10px;
 	text-align: left;
 	transition:
-		border-color 0.15s,
-		background 0.15s,
-		opacity 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms),
+		opacity var(--iz-motion-fast, 160ms);
 }
 @media (max-width: 640px) {
 	.iz-post-job-pr-card {
@@ -7024,7 +7038,7 @@
 	color: #f0e4ff;
 }
 .iz-outlet-ta-card {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 10px 12px;
@@ -7066,7 +7080,7 @@
 .iz-outlet-ta-card__value {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	font-variant-numeric: tabular-nums;
 }
@@ -7102,7 +7116,7 @@
 	flex-direction: column;
 	align-items: flex-start;
 	justify-content: flex-start;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 8px 10px;
@@ -7121,7 +7135,7 @@
 	margin-top: 2px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-outlet-stat-chip--violet {
@@ -7155,8 +7169,8 @@
 	color: inherit;
 	appearance: none;
 	transition:
-		border-color 0.15s ease,
-		background 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-stat-chip--interactive:hover {
 	border-color: rgba(245, 200, 66, 0.55);
@@ -7259,7 +7273,7 @@
 	min-width: 0;
 	height: 100%;
 	padding: 14px 18px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-outlet-shift-stat-hero .iz-outlet-stat-chip__label {
 	font-size: 12px;
@@ -7353,7 +7367,7 @@
 .iz-outlet-tonight-summary-table tbody td {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	color: var(--iz-txt);
 	font-variant-numeric: tabular-nums;
@@ -7367,7 +7381,7 @@
 	color: inherit;
 	cursor: pointer;
 	text-decoration: none;
-	transition: color 0.15s ease;
+	transition: color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-tonight-summary-table__link:hover,
 .iz-outlet-tonight-summary-table__hint-link:hover {
@@ -7383,7 +7397,7 @@
 }
 .iz-outlet-tonight-summary-table__drinks-hint {
 	font-size: 11px;
-	font-weight: 500;
+	font-weight: 600;
 	color: var(--iz-muted2);
 }
 .iz-outlet-tonight-summary-table__hint {
@@ -7404,7 +7418,7 @@
 .iz-outlet-live-earnings-table-wrap {
 	overflow-x: auto;
 	-webkit-overflow-scrolling: touch;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -7436,7 +7450,7 @@
 }
 .iz-outlet-live-earnings-table__row--interactive {
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-live-earnings-table__row--interactive:hover {
 	background: rgba(255, 255, 255, 0.04);
@@ -7501,7 +7515,7 @@
 .iz-outlet-live-earnings-table__total {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #f87171;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
@@ -7530,7 +7544,7 @@
 
 /* Live sales PR sheet — stacked earnings breakdown (fits phone width) */
 .iz-outlet-pr-earnings-sheet {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
@@ -7630,7 +7644,7 @@
 .iz-outlet-pr-earnings-sheet__total span:last-child {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	color: #f87171;
 }
@@ -7674,8 +7688,8 @@
 	text-align: inherit;
 	appearance: none;
 	transition:
-		border-color 0.15s ease,
-		background 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-ta-card--interactive:hover {
 	border-color: rgba(245, 200, 66, 0.55);
@@ -7701,7 +7715,7 @@
 	scroll-margin-top: 12px;
 	margin-top: 12px;
 	padding: 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -7716,7 +7730,7 @@
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-outlet-labor-report__period {
@@ -7726,7 +7740,7 @@
 	text-transform: uppercase;
 	color: var(--iz-muted2);
 	padding: 4px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 }
@@ -7738,7 +7752,7 @@
 	margin-bottom: 14px;
 }
 .iz-outlet-labor-report__kpi {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	overflow: hidden;
 	background: rgba(255, 255, 255, 0.02);
@@ -7768,7 +7782,7 @@
 	text-align: center;
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-display);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.1;
 	color: var(--iz-txt);
 	font-variant-numeric: tabular-nums;
@@ -7785,7 +7799,7 @@
 .iz-outlet-labor-report__table-wrap {
 	overflow-x: auto;
 	-webkit-overflow-scrolling: touch;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 }
 .iz-outlet-labor-report__table {
@@ -7821,7 +7835,7 @@
 .iz-outlet-labor-report__row--child .iz-outlet-labor-report__item-label {
 	display: block;
 	padding-left: 22px;
-	font-weight: 500;
+	font-weight: 600;
 	color: var(--iz-muted);
 }
 .iz-outlet-labor-report__item {
@@ -7883,14 +7897,14 @@
 	width: 100%;
 	align-items: flex-start;
 	gap: 10px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 10px 12px;
 	text-align: left;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-outlet-action-btn:disabled {
 	opacity: 0.45;
@@ -7902,7 +7916,7 @@
 	justify-content: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	flex-shrink: 0;
 	background: rgba(255, 255, 255, 0.04);
 	color: var(--iz-muted);
@@ -7955,7 +7969,7 @@
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 8px 10px;
@@ -7971,7 +7985,7 @@
 	justify-content: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 }
@@ -7995,12 +8009,12 @@
 	justify-content: center;
 	width: 28px;
 	height: 28px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(183, 156, 232, 0.12);
 	color: var(--iz-violet-l);
 }
 .iz-outlet-section-card {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	padding: 12px 14px;
@@ -8058,7 +8072,7 @@
 .iz-iconbox {
 	width: 40px;
 	height: 40px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -8075,12 +8089,12 @@
 .iz-avatar {
 	width: 48px;
 	height: 48px;
-	border-radius: 15px;
+	border-radius: var(--iz-radius-l, 14px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-family: var(--iz-font);
-	font-weight: 800;
+	font-weight: 700;
 	color: #fff;
 	font-size: 18px;
 	flex-shrink: 0;
@@ -8104,7 +8118,7 @@
 .iz-avatar--md {
 	width: 52px;
 	height: 52px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	font-size: 18px;
 }
 .iz-avatar--md.iz-avatar-photo--logo img {
@@ -8114,13 +8128,13 @@
 .iz-avatar--lg {
 	width: 72px;
 	height: 72px;
-	border-radius: 20px;
+	border-radius: var(--iz-radius-xl, 20px);
 	font-size: 28px;
 }
 .iz-avatar--xl {
 	width: 96px;
 	height: 96px;
-	border-radius: 24px;
+	border-radius: var(--iz-radius-xl, 20px);
 	font-size: 34px;
 }
 .iz-avatar--xl.iz-avatar-photo--logo img {
@@ -8220,7 +8234,7 @@
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-body);
-	font-weight: 650;
+	font-weight: 600;
 	line-height: 1.35;
 	color: var(--iz-txt);
 	word-break: break-word;
@@ -8234,17 +8248,17 @@
 .iz-profile-field__input {
 	width: 100%;
 	padding: 11px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(217, 185, 122, 0.45);
 	background: rgba(8, 5, 15, 0.45);
 	color: var(--iz-txt);
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-sm);
-	font-weight: 650;
+	font-weight: 600;
 	outline: none;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-profile-field__input:focus {
 	border-color: rgba(217, 185, 122, 0.85);
@@ -8260,7 +8274,7 @@
 }
 
 .iz-profile-section {
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	padding: 4px 14px 6px;
@@ -8279,7 +8293,7 @@
 	gap: 10px;
 	margin: 0 0 14px;
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(232, 198, 106, 0.35);
 	background: linear-gradient(
 		135deg,
@@ -8312,7 +8326,7 @@
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 750;
+	font-weight: 700;
 	color: var(--iz-amber);
 }
 .iz-profile-edit-banner__body {
@@ -8345,7 +8359,7 @@
 	background: transparent;
 	color: var(--iz-red);
 	font-size: 12px;
-	font-weight: 650;
+	font-weight: 600;
 	cursor: pointer;
 	padding: 4px 6px;
 	text-decoration: underline;
@@ -8368,7 +8382,7 @@
 	gap: 10px;
 	margin-top: 18px;
 	padding: 12px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(217, 185, 122, 0.35);
 	background: color-mix(in srgb, var(--iz-panel) 92%, transparent);
 	backdrop-filter: blur(12px);
@@ -8386,7 +8400,7 @@
 	font-size: 14px;
 }
 .iz-profile-edit-dock__save {
-	font-weight: 750;
+	font-weight: 700;
 }
 
 .iz-profile-actions {
@@ -8396,7 +8410,7 @@
 .iz-stat-tile {
 	background: var(--iz-grad-card);
 	border: 1px solid var(--iz-line);
-	border-radius: 17px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 14px;
 	position: relative;
 	overflow: hidden;
@@ -8423,7 +8437,7 @@
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 1px;
 	overflow: hidden;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-line);
 }
@@ -8447,7 +8461,7 @@
 	margin-top: 4px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	color: var(--iz-txt);
 }
@@ -8475,8 +8489,8 @@
 	cursor: pointer;
 	color: inherit;
 	transition:
-		border-color 0.15s ease,
-		color 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-agency-home-tab:hover {
 	background: rgba(255, 255, 255, 0.02);
@@ -8500,7 +8514,7 @@
 	margin-top: 6px;
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	color: var(--iz-txt);
 }
@@ -8515,7 +8529,7 @@
 	color: var(--iz-violet);
 	text-decoration: none;
 	white-space: nowrap;
-	transition: opacity 0.15s ease;
+	transition: opacity var(--iz-motion-fast, 160ms) ease;
 }
 .iz-portal-hub-link svg {
 	width: 14px;
@@ -8541,7 +8555,7 @@
 }
 .iz-pr-shift-card {
 	padding: 14px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(183, 156, 232, 0.22);
 	background: linear-gradient(
 		180deg,
@@ -8581,7 +8595,7 @@
 	margin-top: 2px;
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	color: var(--iz-txt);
 }
@@ -8614,7 +8628,7 @@
 .iz-pr-shift-card__event {
 	margin-top: 12px;
 	padding: 9px 11px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(183, 156, 232, 0.18);
 	background: rgba(255, 255, 255, 0.03);
 	font-size: 12px;
@@ -8638,14 +8652,14 @@
 	font-size: 14px;
 	font-weight: 600;
 	color: var(--iz-txt);
-	transition: opacity 0.15s ease;
+	transition: opacity var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-quick-chip:hover {
 	opacity: 0.88;
 }
 .iz-outlet-booking-card {
 	border: 1px solid var(--iz-line2);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
 }
@@ -8674,7 +8688,7 @@
 	align-items: stretch;
 	gap: 4px;
 	padding: 8px 8px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	min-width: 0;
 }
 .iz-outlet-shift-metric--demand {
@@ -8723,7 +8737,7 @@
 .iz-outlet-shift-metric__value {
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-title);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.15;
 	font-variant-numeric: tabular-nums;
 	word-break: break-word;
@@ -8750,7 +8764,7 @@
 	gap: 2px;
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-title);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1;
 	font-variant-numeric: tabular-nums;
 }
@@ -8775,7 +8789,7 @@
 /* Outlet subscription — POS integration add-on */
 .iz-outlet-pos-addon {
 	position: relative;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 1px;
 	background: linear-gradient(
 		135deg,
@@ -8799,7 +8813,7 @@
 }
 .iz-outlet-pos-addon__inner {
 	position: relative;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: linear-gradient(
 		160deg,
 		rgba(22, 18, 36, 0.98) 0%,
@@ -8818,7 +8832,7 @@
 	justify-content: center;
 	width: 2.75rem;
 	height: 2.75rem;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	flex-shrink: 0;
 	color: var(--iz-violet-l);
 	background: rgba(167, 139, 250, 0.14);
@@ -8828,7 +8842,7 @@
 .iz-outlet-pos-addon__title {
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-title);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.25;
 	color: var(--iz-title);
 }
@@ -8867,7 +8881,7 @@
 .iz-outlet-pos-addon__sent {
 	margin-top: 14px;
 	padding: 12px 14px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(57, 217, 138, 0.28);
 	background: rgba(57, 217, 138, 0.06);
 }
@@ -8948,7 +8962,7 @@
 	gap: 12px;
 	padding: 12px 14px;
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-grad-card);
 }
 
@@ -8964,18 +8978,18 @@
 	gap: 10px;
 	padding: 12px 14px;
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-grad-card);
 	transition:
-		border-color 0.15s ease,
-		opacity 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		opacity var(--iz-motion-fast, 160ms) ease;
 }
 button.iz-pr-offer-row:hover {
 	border-color: rgba(183, 156, 232, 0.35);
 }
 .iz-pr-inbox-card {
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-grad-card);
 	overflow: hidden;
 	padding: 12px 14px;
@@ -8995,7 +9009,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-pr-hero {
 	padding: 14px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(183, 156, 232, 0.22);
 	background: linear-gradient(180deg, rgba(232, 194, 122, 0.08), transparent);
 }
@@ -9003,7 +9017,7 @@ button.iz-pr-offer-row:hover {
 	font-size: 12px;
 	color: var(--iz-muted);
 	border: 1px dashed var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	padding: 8px 10px;
 	line-height: 1.4;
 }
@@ -9011,7 +9025,7 @@ button.iz-pr-offer-row:hover {
 /* Welcome / role select */
 .iz-welcome {
 	padding: 8px 22px 24px;
-	animation: iz-fade 0.4s ease;
+	animation: iz-fade var(--iz-motion-slow, 400ms) ease;
 }
 .iz-signin-password-toggle {
 	display: flex;
@@ -9020,7 +9034,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	width: 32px;
 	height: 32px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.04);
 	color: var(--iz-muted);
@@ -9033,7 +9047,7 @@ button.iz-pr-offer-row:hover {
 .iz-logo-tile {
 	width: 88px;
 	height: 88px;
-	border-radius: 22px;
+	border-radius: var(--iz-radius-xl, 20px);
 	background: linear-gradient(
 		158deg,
 		rgba(43, 36, 62, 0.92),
@@ -9100,7 +9114,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-logo-tile span {
 	font-family: var(--iz-font);
-	font-weight: 900;
+	font-weight: 700;
 	font-size: 34px;
 	color: #1a1726;
 	text-shadow: 0 1px 1px rgba(255, 255, 255, 0.4);
@@ -9127,10 +9141,10 @@ button.iz-pr-offer-row:hover {
 .iz-role-card {
 	background: var(--iz-grad-card);
 	border: 1px solid var(--iz-line);
-	border-radius: 20px;
+	border-radius: var(--iz-radius-xl, 20px);
 	padding: 16px;
 	cursor: pointer;
-	transition: 0.22s;
+	transition: var(--iz-motion-base, 240ms);
 	position: relative;
 	text-align: left;
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -9169,7 +9183,7 @@ button.iz-pr-offer-row:hover {
 .iz-role-icon {
 	width: 42px;
 	height: 42px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: linear-gradient(
 		135deg,
 		rgba(159, 122, 234, 0.16),
@@ -9206,7 +9220,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 5px;
 	padding: 7px 12px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-glass2);
 	border: 1px solid var(--iz-line);
 	font-size: 14px;
@@ -9214,7 +9228,7 @@ button.iz-pr-offer-row:hover {
 	font-weight: 600;
 	font-family: var(--iz-font);
 	letter-spacing: 0.2px;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 	white-space: nowrap;
 	cursor: pointer;
 }
@@ -9232,7 +9246,7 @@ button.iz-pr-offer-row:hover {
 	display: inline-block;
 	max-width: 100%;
 	padding: 7px 30px 7px 11px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background-color: var(--iz-panel2);
 	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23928699' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 	background-repeat: no-repeat;
@@ -9246,8 +9260,8 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 	line-height: 1.3;
 }
 .iz-select:hover {
@@ -9277,7 +9291,7 @@ button.iz-pr-offer-row:hover {
 	width: 100%;
 	min-height: 48px;
 	padding: 12px 36px 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background-color: var(--iz-bg2);
 	font-size: 16px;
@@ -9296,13 +9310,13 @@ button.iz-pr-offer-row:hover {
 	align-items: stretch;
 	width: 100%;
 	min-height: 48px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg2);
 	overflow: hidden;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-phone-field:focus-within {
 	border-color: rgba(183, 156, 232, 0.5);
@@ -9428,14 +9442,14 @@ button.iz-pr-offer-row:hover {
 .iz-venue-hist-card__name {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.2;
 }
 .iz-txn-metric {
 	background: var(--iz-bg2);
 	border: 1px solid var(--iz-line);
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 10px 6px;
 	text-align: center;
 }
@@ -9453,7 +9467,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 6px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-txn-metric.earned .value,
@@ -9510,7 +9524,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-section-label {
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
 	color: rgba(183, 156, 232, 0.95);
@@ -9554,13 +9568,13 @@ button.iz-pr-offer-row:hover {
 	cursor: pointer;
 }
 .iz-outlet-hist-card {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(30, 28, 38, 0.92);
 	padding: 14px 14px 12px;
 	transition:
-		border-color 0.12s ease,
-		background 0.12s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-hist-card-btn:hover .iz-outlet-hist-card,
 .iz-outlet-hist-card-btn:focus-visible .iz-outlet-hist-card {
@@ -9613,7 +9627,7 @@ button.iz-pr-offer-row:hover {
 	background: rgba(255, 255, 255, 0.12);
 	color: var(--iz-muted2);
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	box-shadow: 0 0 0 2px rgba(30, 28, 38, 0.95);
 }
 .iz-outlet-hist-rank {
@@ -9632,7 +9646,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	border-radius: 999px;
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	overflow: hidden;
 	border: 1px solid rgba(255, 255, 255, 0.1);
 	box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.55);
@@ -9712,7 +9726,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-card__name {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	white-space: nowrap;
 	overflow: hidden;
@@ -9734,7 +9748,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-card__shift-count {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-outlet-hist-card__latest {
@@ -9754,7 +9768,7 @@ button.iz-pr-offer-row:hover {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .iz-outlet-hist-metric {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 8px 6px 7px;
@@ -9770,7 +9784,7 @@ button.iz-pr-offer-row:hover {
 	gap: 6px;
 }
 .iz-outlet-hist-metric__label .iz-shift-metric-label__text {
-	font-size: 11px;
+	font-size: var(--iz-fs-micro); /* was 11px — one size for this label everywhere (17 Nov) */
 	font-weight: 700;
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
@@ -9778,7 +9792,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-metric__label
 	.iz-shift-metric-label--lg
 	.iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 }
 .iz-outlet-hist-metric__label .iz-shift-metric-label__icon {
 	width: 16px;
@@ -9795,7 +9809,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 6px;
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.1;
 }
 .iz-outlet-hist-metric--earned .iz-outlet-hist-metric__label,
@@ -9834,7 +9848,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 }
 .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 	font-weight: 700;
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
@@ -9848,7 +9862,7 @@ button.iz-pr-offer-row:hover {
 	height: 18px;
 }
 .iz-shift-metric-label--lg .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 	letter-spacing: 0.04em;
 }
 .iz-shift-metric-label--earned,
@@ -9873,7 +9887,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 8px;
 	padding: 10px 14px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(183, 156, 232, 0.35);
 	background: rgba(18, 15, 28, 0.88);
 	color: var(--iz-accent-l);
@@ -9882,8 +9896,8 @@ button.iz-pr-offer-row:hover {
 	font-weight: 700;
 	cursor: pointer;
 	transition:
-		border-color 0.15s ease,
-		background 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 	white-space: nowrap;
 }
 .iz-outlet-hist-metrics-guide__trigger:hover {
@@ -9904,7 +9918,7 @@ button.iz-pr-offer-row:hover {
 	height: 18px;
 	flex-shrink: 0;
 	color: var(--iz-muted);
-	transition: transform 0.2s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-hist-metrics-guide__chev.is-open {
 	transform: rotate(180deg);
@@ -9915,7 +9929,7 @@ button.iz-pr-offer-row:hover {
 	right: 0;
 	z-index: 40;
 	width: min(340px, calc(100vw - 32px));
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(183, 156, 232, 0.28);
 	background: rgba(14, 12, 22, 0.98);
 	padding: 16px 18px;
@@ -9926,7 +9940,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-metrics-guide__title {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 	color: var(--iz-accent-l);
@@ -9954,8 +9968,8 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-hist-metrics-guide__item
 	.iz-shift-metric-label--lg
 	.iz-shift-metric-label__text {
-	font-size: 16px;
-	font-weight: 800;
+	font-size: var(--iz-fs-micro); /* was 16px — one size for this label everywhere (17 Nov) */
+	font-weight: 700;
 	letter-spacing: 0.02em;
 	text-transform: none;
 }
@@ -9986,7 +10000,7 @@ button.iz-pr-offer-row:hover {
 	}
 }
 .iz-txn-metric .label .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 	letter-spacing: 0.04em;
 }
 .iz-txn-metric .label .iz-shift-metric-label__icon {
@@ -9994,7 +10008,7 @@ button.iz-pr-offer-row:hover {
 	height: 17px;
 }
 .iz-txn-metric .label .iz-shift-metric-label--lg .iz-shift-metric-label__text {
-	font-size: 12px;
+	font-size: var(--iz-fs-micro); /* was 12px — one size for this label everywhere (17 Nov) */
 }
 .iz-txn-metric .label .iz-shift-metric-label--lg .iz-shift-metric-label__icon {
 	width: 18px;
@@ -10028,7 +10042,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-hist-bar__label {
 	flex-shrink: 0;
-	font-size: 11px;
+	font-size: var(--iz-fs-micro); /* was 11px — one size for this label everywhere (17 Nov) */
 	font-weight: 600;
 	color: var(--iz-muted2);
 	white-space: nowrap;
@@ -10056,7 +10070,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 10px;
 }
 .iz-outlet-shift-log-summary {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(30, 28, 38, 0.92);
 	padding: 14px;
@@ -10079,7 +10093,7 @@ button.iz-pr-offer-row:hover {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .iz-outlet-shift-log-summary__metric {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 8px 6px 7px;
@@ -10098,7 +10112,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 5px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.1;
 }
@@ -10109,9 +10123,9 @@ button.iz-pr-offer-row:hover {
 	font: inherit;
 	color: inherit;
 	transition:
-		border-color 0.15s ease,
-		background 0.15s ease,
-		box-shadow 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease,
+		box-shadow var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-shift-log-summary__metric--btn:disabled {
 	cursor: default;
@@ -10144,7 +10158,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hist-money-breakdown {
 	margin-top: 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(30, 28, 38, 0.92);
 	padding: 14px;
@@ -10159,7 +10173,7 @@ button.iz-pr-offer-row:hover {
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-hist-money-breakdown__card-sub {
@@ -10176,7 +10190,7 @@ button.iz-pr-offer-row:hover {
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #4ade80;
 }
 .iz-hist-money-breakdown__card-total-hint {
@@ -10203,7 +10217,7 @@ button.iz-pr-offer-row:hover {
 	}
 }
 .iz-hist-money-breakdown__metric {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 8px 6px 7px;
@@ -10237,7 +10251,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 5px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.1;
 }
@@ -10246,7 +10260,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-red);
 }
 .iz-outlet-shift-log-rating {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(251, 146, 60, 0.28);
 	background: rgba(30, 28, 38, 0.92);
 	padding: 12px 14px;
@@ -10260,7 +10274,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-shift-log-rating__label {
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--iz-gold);
@@ -10282,12 +10296,12 @@ button.iz-pr-offer-row:hover {
 	margin: 6px 0 0;
 	font-size: 14px;
 	font-style: italic;
-	font-weight: 500;
+	font-weight: 600;
 	color: var(--iz-txt);
 	line-height: 1.45;
 }
 .iz-outlet-shift-log-card {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(30, 28, 38, 0.92);
 	padding: 14px;
@@ -10302,7 +10316,7 @@ button.iz-pr-offer-row:hover {
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-outlet-shift-log-card__sub {
@@ -10319,7 +10333,7 @@ button.iz-pr-offer-row:hover {
 	margin: 0;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #4ade80;
 }
 .iz-outlet-shift-log-card__hours {
@@ -10338,7 +10352,7 @@ button.iz-pr-offer-row:hover {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .iz-outlet-shift-log-card__metric {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 8px 6px 7px;
@@ -10357,7 +10371,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 5px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.1;
 }
@@ -10368,9 +10382,9 @@ button.iz-pr-offer-row:hover {
 	font: inherit;
 	color: inherit;
 	transition:
-		border-color 0.15s ease,
-		background 0.15s ease,
-		box-shadow 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease,
+		box-shadow var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-shift-log-card__metric--btn:hover {
 	border-color: rgba(255, 255, 255, 0.14);
@@ -10404,7 +10418,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-report-tabs {
 	display: flex;
 	gap: 4px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(12, 10, 18, 0.85);
 	padding: 4px;
@@ -10413,7 +10427,7 @@ button.iz-pr-offer-row:hover {
 	flex: 1;
 	min-width: 0;
 	border: none;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: transparent;
 	color: var(--iz-muted2);
 	font-size: 12px;
@@ -10421,8 +10435,8 @@ button.iz-pr-offer-row:hover {
 	padding: 8px 10px;
 	cursor: pointer;
 	transition:
-		background 0.12s ease,
-		color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-report-tabs__btn--active {
 	background: rgba(183, 156, 232, 0.18);
@@ -10448,7 +10462,7 @@ button.iz-pr-offer-row:hover {
 	min-width: 0;
 }
 .iz-outlet-report-hero {
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(30, 28, 38, 0.92);
 	padding: 18px 16px 16px;
@@ -10472,7 +10486,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 4px;
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-head);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.1;
 	color: var(--iz-gold-l);
 }
@@ -10520,7 +10534,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 14px;
 }
 .iz-outlet-report-metric {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	padding: 10px 10px 9px;
 	text-align: left;
@@ -10540,8 +10554,8 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-report-metric--clickable {
 	cursor: pointer;
 	transition:
-		border-color 0.12s ease,
-		background 0.12s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-report-metric--clickable:hover {
 	border-color: rgba(183, 156, 232, 0.35);
@@ -10577,7 +10591,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 6px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-outlet-report-metric__value--gold {
@@ -10585,13 +10599,13 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-report-expand {
 	margin-top: 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 12px;
 }
 .iz-outlet-report-expand__tile {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.2);
 	padding: 10px;
@@ -10607,7 +10621,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 4px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-outlet-report-pnl {
@@ -10670,7 +10684,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-report-chart__title {
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-outlet-report-chart__hint {
@@ -10682,13 +10696,13 @@ button.iz-pr-offer-row:hover {
 	fill: var(--iz-gold);
 }
 .iz-outlet-report-breakdown {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(24, 22, 32, 0.85);
 	padding: 12px 14px;
 }
 .iz-outlet-report-sidebar {
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.07);
 	background: rgba(30, 28, 38, 0.92);
 	padding: 14px 12px 12px;
@@ -10704,7 +10718,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-report-sidebar__title {
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 	margin: 0;
 }
@@ -10732,7 +10746,7 @@ button.iz-pr-offer-row:hover {
 	text-align: center;
 }
 .iz-outlet-report-pr-card {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 10px 10px 9px;
@@ -10761,12 +10775,12 @@ button.iz-pr-offer-row:hover {
 	background: rgba(244, 183, 64, 0.08);
 	color: var(--iz-gold-l);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 }
 .iz-outlet-report-pr-card__name {
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	white-space: nowrap;
 	overflow: hidden;
@@ -10785,7 +10799,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 	white-space: nowrap;
 }
@@ -10889,9 +10903,9 @@ button.iz-pr-offer-row:hover {
 	cursor: pointer;
 	text-decoration: none;
 	transition:
-		border-color 0.15s,
-		color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-topbar-back:hover {
 	color: var(--iz-txt);
@@ -10969,11 +10983,11 @@ button.iz-pr-offer-row:hover {
 .iz-topbar-identity--link {
 	flex: 1;
 	min-width: 0;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	text-decoration: none;
 	color: inherit;
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-topbar-center .iz-topbar-identity--link {
 	flex: 1;
@@ -11048,7 +11062,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-topbar-name {
 	font-family: var(--iz-font);
-	font-weight: 800;
+	font-weight: 700;
 	font-size: 16px;
 	line-height: 1.15;
 	white-space: nowrap;
@@ -11091,16 +11105,16 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 36px;
 	height: 36px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-glass2);
 	color: var(--iz-muted);
 	text-decoration: none;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-topbar-action:hover {
 	border-color: var(--iz-line2);
@@ -11127,7 +11141,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 2px;
 	padding: 10px 12px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 107, 107, 0.45);
 	background: linear-gradient(
 		180deg,
@@ -11136,14 +11150,14 @@ button.iz-pr-offer-row:hover {
 	);
 	color: #fff;
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.08em;
 	box-shadow: 0 6px 24px rgba(255, 60, 60, 0.35);
 	pointer-events: auto;
 	cursor: pointer;
 	transition:
-		transform 0.15s ease,
-		box-shadow 0.15s ease;
+		transform var(--iz-motion-fast, 160ms) ease,
+		box-shadow var(--iz-motion-fast, 160ms) ease;
 }
 .iz-sos-fab:active {
 	transform: scale(0.96);
@@ -11151,7 +11165,7 @@ button.iz-pr-offer-row:hover {
 .iz-avatar--sm {
 	width: 44px;
 	height: 44px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	font-size: 16px;
 }
 .iz-avatar--sm.iz-avatar-photo--logo img {
@@ -11163,7 +11177,7 @@ button.iz-pr-offer-row:hover {
 .iz-hub-hero {
 	margin-top: 6px;
 	padding: 18px 16px 16px;
-	border-radius: 22px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border: 1px solid rgba(183, 156, 232, 0.22);
 	background:
 		radial-gradient(
@@ -11182,7 +11196,7 @@ button.iz-pr-offer-row:hover {
 .iz-hub-hero h2 {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: -0.4px;
 	color: var(--iz-txt);
 	line-height: 1.1;
@@ -11201,7 +11215,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-hub-stat {
 	padding: 10px 8px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 	text-align: center;
@@ -11209,7 +11223,7 @@ button.iz-pr-offer-row:hover {
 .iz-hub-stat .n {
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1;
 }
@@ -11236,13 +11250,13 @@ button.iz-pr-offer-row:hover {
 	display: block;
 	height: 100%;
 	padding: 14px;
-	border-radius: 18px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	text-decoration: none;
 	transition:
-		border-color 0.15s,
-		transform 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		transform var(--iz-motion-fast, 160ms);
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .iz-hub-quick-card:hover {
@@ -11255,7 +11269,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 34px;
 	height: 34px;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(183, 156, 232, 0.12);
 	color: var(--iz-gold-l);
 }
@@ -11279,13 +11293,13 @@ button.iz-pr-offer-row:hover {
 	gap: 12px;
 	padding: 14px 16px;
 	margin-bottom: 10px;
-	border-radius: 18px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	text-decoration: none;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .iz-hub-nav-card:hover {
@@ -11309,7 +11323,7 @@ button.iz-pr-offer-row:hover {
 	width: 40px;
 	height: 40px;
 	flex-shrink: 0;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.04);
 	color: var(--iz-gold-l);
 	border: 1px solid var(--iz-line);
@@ -11404,7 +11418,7 @@ button.iz-pr-offer-row:hover {
 	font-family: var(--iz-font);
 	cursor: pointer;
 	padding: 6px 0;
-	transition: 0.18s;
+	transition: var(--iz-motion-fast, 160ms);
 	letter-spacing: 0.3px;
 	position: relative;
 	text-decoration: none;
@@ -11427,7 +11441,7 @@ button.iz-pr-offer-row:hover {
 	width: 24px;
 	height: 2px;
 	background: var(--iz-grad-gold);
-	border-radius: 0 0 4px 4px;
+	border-radius: 0 0 var(--iz-radius-s, 6px) var(--iz-radius-s, 6px);
 	box-shadow: 0 0 8px rgba(183, 156, 232, 0.6);
 }
 
@@ -11443,23 +11457,38 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	gap: 8px;
 }
+/* Below 768px the portal grows with the page and the WINDOW scrolls, so the
+   absolute stack was pinned to the top of the DOCUMENT: a confirmation fired
+   after scrolling down was drawn above the visible area and never seen. Fixed
+   keeps it in the viewport at the same 62px top and 18px gutters. From 768px the
+   portal is 100dvh with overflow hidden (approved-portal-design.css), so
+   absolute already stays in view there. Same cause as the rail toggle's fix in
+   agency-app-overrides.css. */
+@media (max-width: 767px) {
+	.iz-toast-stack {
+		position: fixed;
+	}
+}
+/* The confirmation bar is FLAT, on the tokens: one surface step above the
+   cards it floats over (panel-2 over panel, DESIGN.md §3), the strong hairline,
+   ONE floating shadow (the old stack's own drop layer), the 13px panel corner,
+   and ink on the 16px step at text weight. The near-black rgba fill, the
+   backdrop blur and the inset + lavender rings are gone: §2 bans glass in the
+   consoles. The 0.4s iz-pop below is legacy; portal-motion.css M8 replaces it
+   in both portals, and its G guard switches it off under reduced motion. */
 .iz-toast {
 	pointer-events: auto;
-	background: rgba(15, 9, 26, 0.97);
+	background: var(--iz-panel2);
 	border: 1px solid var(--iz-line2);
-	border-radius: 15px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 13px 15px;
 	display: flex;
 	gap: 10px;
 	align-items: center;
-	font-size: 14px;
-	font-weight: 600;
-	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.05),
-		0 20px 50px -10px rgba(0, 0, 0, 0.8),
-		0 0 0 1px rgba(183, 156, 232, 0.08);
-	backdrop-filter: blur(12px);
-	animation: iz-pop 0.4s cubic-bezier(0.2, 0.9, 0.2, 1);
+	font-size: var(--iz-fs-body);
+	font-weight: 400;
+	box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8);
+	animation: iz-pop var(--iz-motion-slow, 400ms) cubic-bezier(0.2, 0.9, 0.2, 1);
 }
 @keyframes iz-pop {
 	from {
@@ -11471,17 +11500,41 @@ button.iz-pr-offer-row:hover {
 		transform: none;
 	}
 }
+/* The icon tile is flat, in the status code (CLAUDE.md): info lavender, which
+   is also what an omitted tone shows (Toasts.tsx gives it the Info icon);
+   success the settled green; warn the DISPUTED red, never amber, because the
+   code sends 'warn' for failures (couldNotRecordDecision, approveAllFailed,
+   couldNotVoid, …) and amber would report a failure as "waiting".
+   Toasts.tsx puts the tone on [data-tone]. */
 .iz-toast-ic {
 	width: 32px;
 	height: 32px;
-	border-radius: 10px;
-	background: var(--iz-grad);
+	border-radius: var(--iz-radius-m, 10px);
+	background: var(--iz-violet-ink);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	flex-shrink: 0;
-	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
-	color: #fff;
+	color: var(--iz-violet);
+}
+.iz-toast[data-tone="success"] .iz-toast-ic {
+	background: var(--iz-green-bg);
+	color: var(--iz-green);
+}
+.iz-toast[data-tone="warn"] .iz-toast-ic {
+	background: var(--iz-red-bg);
+	color: var(--iz-red);
+}
+/* Dismiss: a 46px hit area (DESIGN.md §6). The negative margins pull it into
+   the bar's own padding, so the bar keeps the height its 32px tile gives it. */
+.iz-toast-x {
+	display: inline-grid;
+	place-items: center;
+	flex-shrink: 0;
+	min-width: 46px;
+	min-height: 46px;
+	margin: -7px -10px -7px 0;
+	border-radius: var(--iz-radius-m, 10px);
 }
 
 /* Field */
@@ -11499,12 +11552,12 @@ button.iz-pr-offer-row:hover {
 	width: 100%;
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 13px;
 	color: var(--iz-txt);
 	font-size: 14px;
 	font-family: var(--iz-font);
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-field input:focus {
 	outline: none;
@@ -11526,7 +11579,7 @@ button.iz-pr-offer-row:hover {
 	width: 100%;
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 13px;
 	color: var(--iz-txt);
 	font-size: 14px;
@@ -11537,7 +11590,7 @@ button.iz-pr-offer-row:hover {
 	min-height: 104px;
 	/* Named properties, never `transition: all`: only these two ever change. */
 	transition-property: border-color, box-shadow;
-	transition-duration: 0.15s;
+	transition-duration: var(--iz-motion-fast, 160ms);
 	transition-timing-function: ease-out;
 }
 .iz-textarea::placeholder {
@@ -11568,7 +11621,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-big-num {
 	font-family: var(--iz-font);
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: -1.2px;
 	color: var(--iz-txt);
 }
@@ -11601,7 +11654,7 @@ button.iz-pr-offer-row:hover {
 	backdrop-filter: blur(2px);
 	border: none;
 	cursor: pointer;
-	animation: iz-fade 0.25s ease;
+	animation: iz-fade var(--iz-motion-base, 240ms) ease;
 }
 .iz-sheet {
 	position: absolute;
@@ -11616,9 +11669,9 @@ button.iz-pr-offer-row:hover {
 	);
 	border: 1px solid var(--iz-line2);
 	border-bottom: none;
-	border-radius: 28px 28px 0 0;
+	border-radius: var(--iz-radius-xl, 20px) var(--iz-radius-xl, 20px) 0 0;
 	padding: 20px 18px 30px;
-	animation: iz-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+	animation: iz-up var(--iz-motion-enter, 360ms) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 	max-height: 84%;
 	overflow-y: auto;
 	scrollbar-width: none;
@@ -11645,8 +11698,8 @@ button.iz-pr-offer-row:hover {
 	top: auto;
 	width: 100%;
 	max-height: min(88vh, 760px);
-	border-radius: 28px 28px 0 0;
-	animation: iz-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+	border-radius: var(--iz-radius-xl, 20px) var(--iz-radius-xl, 20px) 0 0;
+	animation: iz-up var(--iz-motion-enter, 360ms) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 .iz-sheet-wrap--overlay .iz-sheet-grab {
@@ -11681,7 +11734,7 @@ button.iz-pr-offer-row:hover {
 	border-left: 1px solid var(--iz-line2);
 	padding: 24px 22px 32px;
 	transform: translate3d(0, 0, 0);
-	animation: iz-sheet-side-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+	animation: iz-sheet-side-in var(--iz-motion-enter, 360ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
 	box-shadow: -24px 0 60px -20px rgba(0, 0, 0, 0.75);
 }
 
@@ -11727,11 +11780,11 @@ button.iz-pr-offer-row:hover {
 		width: min(540px, calc(100vw - 48px));
 		min-height: 280px;
 		max-height: min(88vh, 760px);
-		border-radius: 24px;
+		border-radius: var(--iz-radius-xl, 20px);
 		border-bottom: 1px solid var(--iz-line2);
 		padding: 22px 22px 26px;
 		transform: translate(-50%, -50%);
-		animation: iz-modal-pop 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+		animation: iz-modal-pop var(--iz-motion-base, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 		box-shadow:
 			0 0 0 1px rgba(183, 156, 232, 0.08),
 			0 32px 80px -24px rgba(0, 0, 0, 0.85);
@@ -11762,11 +11815,11 @@ button.iz-pr-offer-row:hover {
 	width: min(580px, calc(100vw - 40px));
 	min-height: 320px;
 	max-height: min(88vh, 720px);
-	border-radius: 24px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border-bottom: 1px solid var(--iz-line2);
 	padding: 28px 28px 32px;
 	transform: translate(-50%, -50%);
-	animation: iz-modal-pop 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+	animation: iz-modal-pop var(--iz-motion-base, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 	box-shadow:
 		0 0 0 1px rgba(183, 156, 232, 0.08),
 		0 32px 80px -24px rgba(0, 0, 0, 0.85);
@@ -11789,7 +11842,7 @@ button.iz-pr-offer-row:hover {
 .iz-sheet-grab {
 	width: 42px;
 	height: 4px;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-line2);
 	margin: 0 auto 14px;
 }
@@ -11802,8 +11855,10 @@ button.iz-pr-offer-row:hover {
 }
 .iz-sheet-head h3 {
 	font-family: var(--iz-font);
-	font-size: 22px;
-	font-weight: 800;
+	/* A panel's title is a section title: the ladder's 20 (was a raw 22 —
+	   signed-in panel sweep, 19 Nov 2026, agency "Add PR"). */
+	font-size: var(--iz-fs-title);
+	font-weight: 700;
 	letter-spacing: -0.35px;
 	color: var(--iz-txt);
 	line-height: 1.2;
@@ -11812,7 +11867,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	width: 36px;
 	height: 36px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-glass2);
 	color: var(--iz-muted);
@@ -11820,7 +11875,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-sheet-close:hover {
 	border-color: var(--iz-line2);
@@ -11837,7 +11892,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 5px;
 	padding: 6px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(255, 255, 255, 0.04);
 	border: 1px solid var(--iz-line);
 	font-size: 11px;
@@ -11851,7 +11906,9 @@ button.iz-pr-offer-row:hover {
 .iz-field-label {
 	display: block;
 	font-family: var(--iz-font);
-	font-size: 12px;
+	/* 16 everywhere — panels render outside `.iz-portal > main`, where the
+	   caption override did not reach, so their labels stayed a raw 12. */
+	font-size: var(--iz-fs-label);
 	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
@@ -11861,7 +11918,7 @@ button.iz-pr-offer-row:hover {
 .iz-field-input {
 	width: 100%;
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg2);
 	color: var(--iz-txt);
@@ -11869,8 +11926,8 @@ button.iz-pr-offer-row:hover {
 	font-weight: 600;
 	font-family: var(--iz-font);
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-field-input:focus {
 	outline: none;
@@ -11890,7 +11947,7 @@ button.iz-pr-offer-row:hover {
 	gap: 10px;
 	min-height: 48px;
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg2);
 	color: var(--iz-muted2);
@@ -11900,8 +11957,8 @@ button.iz-pr-offer-row:hover {
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-combobox-trigger--filled {
 	color: var(--iz-txt);
@@ -11926,7 +11983,7 @@ button.iz-pr-offer-row:hover {
 	height: 16px;
 	flex-shrink: 0;
 	color: var(--iz-muted);
-	transition: transform 0.2s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-combobox-trigger__icon.is-open {
 	transform: rotate(180deg);
@@ -11938,7 +11995,7 @@ button.iz-pr-offer-row:hover {
 	margin-bottom: 12px;
 	min-height: 46px;
 	padding: 0 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg2);
 	color: var(--iz-muted);
@@ -11973,18 +12030,18 @@ button.iz-pr-offer-row:hover {
 	gap: 12px;
 	width: 100%;
 	padding: 12px 14px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid transparent;
 	background: transparent;
 	color: var(--iz-txt);
 	font-size: 16px;
 	font-family: var(--iz-font);
-	font-weight: 500;
+	font-weight: 600;
 	text-align: left;
 	cursor: pointer;
 	transition:
-		background 0.12s,
-		border-color 0.12s;
+		background var(--iz-motion-fast, 160ms),
+		border-color var(--iz-motion-fast, 160ms);
 }
 .iz-combobox-option:hover {
 	background: rgba(255, 255, 255, 0.04);
@@ -12014,7 +12071,7 @@ button.iz-pr-offer-row:hover {
 	gap: 8px;
 	min-height: 42px;
 	padding: 0 36px 0 11px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 	color: var(--iz-txt);
@@ -12024,8 +12081,8 @@ button.iz-pr-offer-row:hover {
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-time-picker-btn:hover:not(:disabled) {
 	border-color: rgba(183, 156, 232, 0.35);
@@ -12103,17 +12160,19 @@ button.iz-pr-offer-row:hover {
 	min-width: 46px;
 	padding: 7px 10px;
 	border: none;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: transparent;
 	color: var(--iz-muted);
 	font-family: var(--iz-font);
-	font-size: 14px;
+	/* 16 on the ladder (was 14 — 74 off-size digits per open time picker,
+	   signed-in pop-up sweep, 19 Nov 2026). */
+	font-size: var(--iz-fs-label);
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	cursor: pointer;
 	transition:
-		background 0.12s,
-		color 0.12s;
+		background var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms);
 }
 .iz-time-picker-col-btn:hover:not(.is-selected) {
 	background: rgba(255, 255, 255, 0.06);
@@ -12139,13 +12198,13 @@ button.iz-pr-offer-row:hover {
 	top: 50%;
 	transform: translateY(-50%);
 	pointer-events: none;
-	font-size: 14px;
+	font-size: var(--iz-fs-label);
 	font-weight: 600;
 	font-family: var(--iz-font);
 }
 .iz-time-input-ph {
 	color: var(--iz-muted2);
-	font-weight: 500;
+	font-weight: 600;
 }
 .iz-time-input-val {
 	color: var(--iz-txt);
@@ -12169,7 +12228,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-status-chip {
 	padding: 11px 10px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
 	font-family: var(--iz-font);
@@ -12178,7 +12237,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted);
 	text-align: center;
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-status-chip:hover {
 	border-color: var(--iz-line2);
@@ -12269,10 +12328,10 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted);
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		color 0.15s,
-		background 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 	white-space: nowrap;
 }
 .iz-filter-chip:hover {
@@ -12299,7 +12358,7 @@ button.iz-pr-offer-row:hover {
 .iz-sheet-preview {
 	margin-top: 14px;
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px dashed rgba(183, 156, 232, 0.25);
 	background: rgba(183, 156, 232, 0.05);
 	text-align: center;
@@ -12315,7 +12374,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 4px;
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 .iz-sheet-actions {
@@ -12383,7 +12442,7 @@ button.iz-pr-offer-row:hover {
 	gap: 8px;
 	margin-top: 12px;
 	padding: 8px 10px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 }
@@ -12468,12 +12527,15 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-stat b {
 	font-size: var(--iz-fs-label);
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	font-variant-numeric: tabular-nums;
 }
+/* Est. payout / labour cost: a figure that opens nothing, so it is ink like its
+   neighbours — champagne gold here read as a third gold beside the selected tab
+   and the link lavender. The clickable amounts (RosterAmountButton) keep theirs. */
 .iz-roster-stat b.money {
-	color: var(--iz-accent-l);
+	color: var(--iz-txt);
 }
 .iz-roster-stat b.warn {
 	color: var(--iz-amber);
@@ -12494,7 +12556,7 @@ button.iz-pr-offer-row:hover {
 	flex: none;
 	white-space: nowrap;
 	padding: 5px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(232, 198, 106, 0.3);
 	background: rgba(232, 198, 106, 0.09);
 	/* Matches the stat captions it sits beside — a flag rendered smaller than
@@ -12523,7 +12585,7 @@ button.iz-pr-offer-row:hover {
 	font-weight: 600;
 	color: #b8a8cc;
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-toggle button.on.live {
@@ -12604,14 +12666,14 @@ button.iz-pr-offer-row:hover {
 	min-height: 34px;
 	padding: 0 10px;
 	border: 1px solid var(--iz-line2);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(255, 255, 255, 0.03);
 	font-family: var(--iz-font);
 	font-size: 12px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-planning-date-trigger:hover,
@@ -12673,7 +12735,7 @@ button.iz-pr-offer-row:hover {
 /* Planning week picker — compact + equal columns + Mon–Sun week highlight */
 .iz-roster-planning-week-cal.iz-hist-cal {
 	padding: 8px 10px 10px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 
 .iz-roster-planning-week-cal-picker {
@@ -12748,12 +12810,12 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-planning-week-cal
 	.rdp-day.iz-roster-cal-in-week:first-child::before {
-	border-radius: 8px 0 0 8px;
+	border-radius: var(--iz-radius-m, 10px) 0 0 var(--iz-radius-m, 10px);
 	left: 2px;
 }
 
 .iz-roster-planning-week-cal .rdp-day.iz-roster-cal-in-week:last-child::before {
-	border-radius: 0 8px 8px 0;
+	border-radius: 0 var(--iz-radius-m, 10px) var(--iz-radius-m, 10px) 0;
 	right: 2px;
 }
 
@@ -12766,7 +12828,7 @@ button.iz-pr-offer-row:hover {
 	z-index: 1;
 	background: transparent !important;
 	color: var(--iz-violet-l) !important;
-	border-radius: 8px !important;
+	border-radius: var(--iz-radius-m, 10px) !important;
 }
 
 .iz-roster-planning-week-cal
@@ -12777,7 +12839,7 @@ button.iz-pr-offer-row:hover {
 	/* Its own corners, whatever the day's position in the row — the first/last
 	   child rules above square off the band's inner edges, which would clip this
 	   segment flat against its neighbour. */
-	border-radius: 8px !important;
+	border-radius: var(--iz-radius-m, 10px) !important;
 	inset: 2px 0;
 	left: 1px;
 	right: 1px;
@@ -12819,7 +12881,7 @@ button.iz-pr-offer-row:hover {
 	gap: 4px;
 	margin-left: auto;
 	padding: 6px 11px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
 	font-family: var(--iz-font);
@@ -12828,7 +12890,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 	text-decoration: none;
 	white-space: nowrap;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 
 .iz-payroll-tabs {
@@ -12851,7 +12913,7 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-txt);
 	background: var(--iz-glass);
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 	white-space: nowrap;
 }
 
@@ -12884,11 +12946,11 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-special-service-offer {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	padding: 10px;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 
 .iz-special-service-offer:not(:disabled):hover {
@@ -12909,7 +12971,7 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	flex-direction: column;
 	border: 1px solid var(--iz-line2);
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	overflow: hidden;
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -12926,7 +12988,7 @@ button.iz-pr-offer-row:hover {
 	background: transparent;
 	color: inherit;
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background var(--iz-motion-fast, 160ms) ease;
 }
 
 .iz-special-service-catalog__row:last-child {
@@ -12971,7 +13033,7 @@ button.iz-pr-offer-row:hover {
 .iz-special-service-catalog__rate {
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 
@@ -13023,15 +13085,15 @@ button.iz-pr-offer-row:hover {
 	.iz-time-picker-btn {
 	min-height: 42px;
 	border: 1px solid var(--iz-line2);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(255, 255, 255, 0.03);
 	font-family: var(--iz-font);
 	font-size: 18px;
 	font-weight: 600;
 	color: var(--iz-txt);
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-special-service-filters-grid .iz-special-service-filter-control.iz-select {
@@ -13043,7 +13105,7 @@ button.iz-pr-offer-row:hover {
 	.iz-special-service-filter-control
 	.iz-time-picker-btn {
 	padding: 0 36px 0 13px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 
 .iz-special-service-filter-date .iz-roster-planning-date-trigger:hover,
@@ -13067,7 +13129,7 @@ button.iz-pr-offer-row:hover {
 	.iz-special-service-filter-control
 	.iz-time-picker-label.iz-muted2 {
 	color: var(--iz-muted2);
-	font-weight: 500;
+	font-weight: 600;
 }
 
 .iz-special-service-filters-grid
@@ -13158,15 +13220,15 @@ button.iz-pr-offer-row:hover {
 	gap: 6px;
 	min-height: 36px;
 	padding: 0 14px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	font-size: 12px;
 	font-weight: 600;
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-bg2);
 	color: var(--iz-txt);
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-pr-manage-header__btn:hover {
 	border-color: var(--iz-line2);
@@ -13193,7 +13255,7 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-stats__count {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	letter-spacing: 0.02em;
 }
@@ -13222,15 +13284,15 @@ button.iz-pr-offer-row:hover {
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	overflow: hidden;
 	cursor: pointer;
 	text-align: left;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-pr-manage-card:hover {
 	border-color: var(--iz-line2);
@@ -13255,7 +13317,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 18px;
 	height: 18px;
-	border-radius: 5px;
+	border-radius: var(--iz-radius-s, 6px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(13, 13, 18, 0.92);
 	color: var(--iz-bg);
@@ -13437,14 +13499,14 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	gap: 14px;
 	padding: 16px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	cursor: pointer;
 	text-align: left;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-outlet-manage-card:hover {
 	border-color: var(--iz-line2);
@@ -13463,7 +13525,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 18px;
 	height: 18px;
-	border-radius: 5px;
+	border-radius: var(--iz-radius-s, 6px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(13, 13, 18, 0.92);
 	color: var(--iz-bg);
@@ -13491,7 +13553,7 @@ button.iz-pr-offer-row:hover {
 	width: 48px;
 	height: 48px;
 	flex-shrink: 0;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 
 /*
@@ -13545,7 +13607,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-manage-card__name {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	white-space: nowrap;
 	overflow: hidden;
@@ -13560,7 +13622,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	padding: 5px 12px;
 	border-radius: 999px;
-	font-size: 14px;
+	font-size: var(--iz-fs-label); /* was 14 — owner sweep, Manage Outlet */
 	font-weight: 700;
 	line-height: 1.2;
 }
@@ -13574,7 +13636,7 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	gap: 8px;
 	padding: 12px 14px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 }
@@ -13600,7 +13662,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-manage-card__kpi-value {
 	font-family: var(--iz-font);
 	font-size: 28px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1;
 	color: var(--iz-txt);
 }
@@ -13614,7 +13676,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-manage-card__kpi-empty {
 	font-family: var(--iz-font);
-	font-size: 28px;
+	font-size: var(--iz-fs-head); /* was 28 — the KPI figure step, 24 */
 	font-weight: 700;
 	line-height: 1;
 	color: var(--iz-muted2);
@@ -13759,14 +13821,14 @@ button.iz-pr-offer-row:hover {
 	width: 52px;
 	height: 52px;
 	flex-shrink: 0;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(167, 139, 250, 0.18);
 	color: #c4b5fd;
 }
 .iz-outlet-detail-head__title {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 	line-height: 1.2;
 }
@@ -13788,7 +13850,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-kpi {
 	padding: 14px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	text-align: center;
@@ -13811,7 +13873,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 8px;
 	font-family: var(--iz-font);
 	font-size: 28px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1;
 	color: var(--iz-txt);
 }
@@ -13850,7 +13912,7 @@ button.iz-pr-offer-row:hover {
 	gap: 8px;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--iz-gold-l, var(--iz-gold));
@@ -13877,7 +13939,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-empty {
 	padding: 20px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	text-align: center;
 	color: var(--iz-muted2);
@@ -13895,7 +13957,7 @@ button.iz-pr-offer-row:hover {
 	gap: 12px;
 	margin-bottom: 10px;
 	padding: 10px 12px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(167, 139, 250, 0.22);
 	background: rgba(167, 139, 250, 0.06);
 }
@@ -13905,7 +13967,7 @@ button.iz-pr-offer-row:hover {
 	background: rgba(0, 0, 0, 0.18);
 }
 .iz-outlet-detail-group-head__label {
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--iz-violet-l);
@@ -13923,7 +13985,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-group-head__stats-value {
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.2;
 }
@@ -13955,7 +14017,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-shift-card,
 .iz-outlet-detail-shift-card--future {
 	border: 1px solid var(--iz-line2);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
 }
@@ -13991,7 +14053,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-shift-future__title {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 	line-height: 1.3;
 }
@@ -14007,7 +14069,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 5px;
 	padding: 3px 9px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-bg2);
 	color: var(--iz-txt);
@@ -14027,7 +14089,7 @@ button.iz-pr-offer-row:hover {
 	gap: 4px;
 	flex-shrink: 0;
 	padding: 5px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-bg2);
 	color: var(--iz-muted);
@@ -14050,7 +14112,7 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	gap: 6px;
 	padding: 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	min-width: 0;
 }
 .iz-outlet-detail-metric--demand {
@@ -14081,7 +14143,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-metric__nums {
 	font-family: var(--iz-font);
 	font-size: 22px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.1;
 	color: var(--iz-txt);
 }
@@ -14118,7 +14180,7 @@ button.iz-pr-offer-row:hover {
 	height: 18px;
 	margin-top: 4px;
 	color: var(--iz-muted);
-	transition: transform 0.15s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-detail-shift-card[open] .iz-outlet-detail-shift-card__chevron {
 	transform: rotate(180deg);
@@ -14128,7 +14190,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-detail-shift-note {
 	padding: 12px 14px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(96, 165, 250, 0.25);
 	background: rgba(59, 130, 246, 0.08);
 	color: #bfdbfe;
@@ -14171,7 +14233,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-detail-shift-future__pay {
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-gold-l);
 }
 .iz-outlet-detail-shift-future__action {
@@ -14180,7 +14242,7 @@ button.iz-pr-offer-row:hover {
 	gap: 4px;
 	margin-top: 6px;
 	padding: 5px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-bg2);
 	color: var(--iz-muted);
@@ -14214,7 +14276,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-kpi {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 12px 14px;
@@ -14224,7 +14286,7 @@ button.iz-pr-offer-row:hover {
 	display: block;
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: -0.3px;
 	line-height: 1.1;
 }
@@ -14270,7 +14332,7 @@ button.iz-pr-offer-row:hover {
 	margin-bottom: 0;
 	border: 1px solid var(--iz-line) !important;
 	background: rgba(0, 0, 0, 0.22) !important;
-	border-radius: 12px !important;
+	border-radius: var(--iz-radius-l, 14px) !important;
 	box-shadow: none !important;
 }
 
@@ -14293,7 +14355,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-gps-card .iz-gmaps-frame {
 	border: none;
 	border-bottom: none;
-	border-radius: 12px 12px 0 0;
+	border-radius: var(--iz-radius-l, 14px) var(--iz-radius-l, 14px) 0 0;
 }
 
 .iz-roster-gps-foot {
@@ -14367,14 +14429,14 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	min-width: 0;
 	padding: 9px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-gps-row:hover,
@@ -14456,7 +14518,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-page .iz-outlet-section-card {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border-color: var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 }
@@ -14472,7 +14534,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-filterbar {
 	margin-bottom: 14px;
 	padding: 12px 14px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 }
@@ -14487,7 +14549,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-filterbar__title {
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.09em;
 	text-transform: uppercase;
 	color: var(--iz-violet-l, #d4c4f5);
@@ -14515,8 +14577,8 @@ button.iz-pr-offer-row:hover {
 	padding: 4px 12px;
 	cursor: pointer;
 	transition:
-		background 0.12s ease,
-		border-color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-roster-filterbar__clear:hover {
 	background: rgba(212, 196, 245, 0.22);
@@ -14537,7 +14599,7 @@ button.iz-pr-offer-row:hover {
 	background: var(--iz-violet-l, #d4c4f5);
 	color: #17122a;
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 }
 .iz-roster-filterbar__row {
@@ -14597,7 +14659,7 @@ button.iz-pr-offer-row:hover {
 	max-width: 210px;
 	height: 42px;
 	min-height: 42px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 .iz-roster-filterbar__label {
 	font-size: 12px;
@@ -14613,7 +14675,7 @@ button.iz-pr-offer-row:hover {
 	gap: 8px;
 	min-height: 42px;
 	padding: 0 12px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.3);
 }
@@ -14636,7 +14698,7 @@ button.iz-pr-offer-row:hover {
 	min-height: 42px;
 	width: 92px;
 	padding: 0 11px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.3);
 	font-variant-numeric: tabular-nums;
@@ -14767,7 +14829,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-shift-filters {
 	margin-bottom: 12px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border-color: var(--iz-line);
 	background: rgba(0, 0, 0, 0.18);
 }
@@ -14801,7 +14863,7 @@ button.iz-pr-offer-row:hover {
 	 */
 	min-height: calc(100dvh - var(--iz-portal-header-h, 56px) - 24px);
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	overflow: hidden;
 	background: rgba(0, 0, 0, 0.12);
 }
@@ -14852,7 +14914,7 @@ button.iz-pr-offer-row:hover {
 	gap: 6px;
 	padding: 4px;
 	margin-bottom: 10px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.28);
 }
@@ -14863,15 +14925,15 @@ button.iz-pr-offer-row:hover {
 	gap: 7px;
 	padding: 9px 8px;
 	border: 0;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: transparent;
 	color: var(--iz-muted);
 	font-size: 14px;
 	font-weight: 700;
 	cursor: pointer;
 	transition:
-		background 0.12s ease,
-		color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-approvals-group:hover {
 	color: var(--iz-txt);
@@ -14937,7 +14999,7 @@ button.iz-pr-offer-row:hover {
 	background: rgba(232, 224, 245, 0.12);
 	color: var(--iz-muted);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 }
 
@@ -14954,7 +15016,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-tab {
 	padding: 11px 8px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-glass);
 	color: var(--iz-txt);
@@ -14970,9 +15032,9 @@ button.iz-pr-offer-row:hover {
      (grid keeps all three the same height) reads better than clipping it. */
 	cursor: pointer;
 	transition:
-		background 0.15s,
-		border-color 0.15s,
-		color 0.15s;
+		background var(--iz-motion-fast, 160ms),
+		border-color var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms);
 }
 
 .iz-approvals-tab.on {
@@ -14988,7 +15050,7 @@ button.iz-pr-offer-row:hover {
 	gap: 6px;
 	width: 100%;
 	padding: 9px 12px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px dashed rgba(183, 156, 232, 0.45);
 	background: transparent;
 	color: var(--iz-violet-l);
@@ -14996,7 +15058,7 @@ button.iz-pr-offer-row:hover {
 	font-size: 12px;
 	font-weight: 600;
 	cursor: pointer;
-	transition: background 0.15s;
+	transition: background var(--iz-motion-fast, 160ms);
 }
 
 .iz-approvals-add-btn:hover {
@@ -15019,15 +15081,15 @@ button.iz-pr-offer-row:hover {
 	gap: 12px;
 	width: 100%;
 	padding: 13px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 
 .iz-approvals-list-item:hover {
@@ -15105,7 +15167,7 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	justify-content: center;
 	flex-shrink: 0;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	font-family: var(--iz-font);
 	font-weight: 700;
 	color: #fff;
@@ -15133,7 +15195,7 @@ button.iz-pr-offer-row:hover {
 	width: 52px;
 	height: 52px;
 	font-size: 22px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 }
 
 .iz-approvals-avatar--rose {
@@ -15181,7 +15243,7 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	width: 34px;
 	height: 34px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(183, 156, 232, 0.35);
 	background: rgba(183, 156, 232, 0.12);
 	color: var(--iz-violet-l);
@@ -15243,7 +15305,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-info-card {
 	padding: 12px 14px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(183, 156, 232, 0.06);
 }
@@ -15339,7 +15401,7 @@ button.iz-pr-offer-row:hover {
 .iz-approvals-event-tag {
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-tiny);
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.4px;
 	color: #e8c27a;
 	border: 1px solid rgba(232, 194, 122, 0.45);
@@ -15365,15 +15427,15 @@ button.iz-pr-offer-row:hover {
 	align-items: flex-start;
 	gap: 4px;
 	padding: 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.2);
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 
 .iz-approvals-doc-tab.on {
@@ -15453,14 +15515,14 @@ button.iz-pr-offer-row:hover {
 	align-items: flex-start;
 	gap: 4px;
 	padding: 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.2);
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-approvals-doc-card:disabled {
@@ -15548,7 +15610,7 @@ button.iz-pr-offer-row:hover {
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	overflow: hidden;
 	background: rgba(183, 156, 232, 0.08);
@@ -15598,14 +15660,14 @@ button.iz-pr-offer-row:hover {
 	min-height: 0;
 	width: 100%;
 	margin: 6px 10px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 
 .iz-approvals-doc-cell .cell-media {
 	flex: 1;
 	min-height: 0;
 	margin: 6px 10px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	overflow: hidden;
 }
 
@@ -15656,7 +15718,7 @@ button.iz-pr-offer-row:hover {
 	align-items: flex-start;
 	gap: 10px;
 	padding: 12px 14px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(232, 194, 122, 0.25);
 	background: rgba(232, 194, 122, 0.06);
 }
@@ -15747,7 +15809,7 @@ button.iz-pr-offer-row:hover {
 	margin-bottom: 10px;
 	padding: 11px 16px;
 	border: none;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-violet);
 	color: #fff;
 	font-family: var(--iz-font);
@@ -15755,8 +15817,8 @@ button.iz-pr-offer-row:hover {
 	font-weight: 700;
 	cursor: pointer;
 	transition:
-		opacity 0.15s,
-		transform 0.15s;
+		opacity var(--iz-motion-fast, 160ms),
+		transform var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-auto-assign:hover {
@@ -15784,7 +15846,7 @@ button.iz-pr-offer-row:hover {
 }
 
 .iz-roster-planning-panel {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 	overflow: hidden;
@@ -15899,16 +15961,16 @@ button.iz-pr-offer-row:hover {
 	width: 32px;
 	align-items: center;
 	justify-content: center;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
 	color: #b8a8cc;
 	flex-shrink: 0;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-week-nav:hover {
@@ -15919,7 +15981,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-week-scroll {
 	overflow-x: auto;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.18);
 }
@@ -16047,13 +16109,13 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	gap: 1px;
 	padding: 5px 6px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid transparent;
 	text-align: left;
 	overflow: hidden;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-week-cell--empty {
@@ -16162,7 +16224,7 @@ button.iz-pr-offer-row:hover {
 	/* Padding follows the type — 6px/7px was set for 9px text and reads as a
 	   squeeze once the same box holds 14px. */
 	padding: 9px 11px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px dashed rgba(232, 194, 122, 0.55);
 	background: linear-gradient(
 		160deg,
@@ -16178,7 +16240,7 @@ button.iz-pr-offer-row:hover {
 	width: 100%;
 	height: 34px;
 	object-fit: cover;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 	margin-bottom: 1px;
 }
 /* Type went up a notch when the band was grouped by venue, and up again on 24
@@ -16186,7 +16248,7 @@ button.iz-pr-offer-row:hover {
    the agency actually reads off a card, so it carries the largest step. */
 .iz-roster-demand-card .outlet {
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	max-width: 100%;
 	overflow: hidden;
@@ -16202,7 +16264,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-demand-card .count {
 	align-self: flex-start;
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 	color: #241806;
@@ -16231,7 +16293,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-demand-card .ended {
 	align-self: flex-start;
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.07em;
 	color: var(--iz-muted);
@@ -16271,7 +16333,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-demand-band {
 	margin-bottom: 10px;
 	padding: 10px 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(232, 194, 122, 0.28);
 	background:
 		linear-gradient(
@@ -16290,7 +16352,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-demand-band-title {
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 	color: var(--iz-amber);
@@ -16321,7 +16383,7 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	gap: 6px;
 	padding: 8px 9px;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(232, 194, 122, 0.16);
 	background: rgba(255, 255, 255, 0.015);
 	/* The row is its own scroll context, so one venue's overflow cannot drag
@@ -16347,7 +16409,7 @@ button.iz-pr-offer-row:hover {
 	width: 40px;
 	height: 40px;
 	flex: 0 0 40px;
-	border-radius: 11px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(232, 194, 122, 0.34);
 	background: rgba(232, 194, 122, 0.1);
 	color: var(--iz-gold-l);
@@ -16355,7 +16417,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-demand-outlet-name {
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	min-width: 0;
 	overflow: hidden;
@@ -16381,7 +16443,7 @@ button.iz-pr-offer-row:hover {
    badged into its corner, and every size is named here instead of being spelt
    out at each call site. */
 .iz-demand-sheet-card {
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg-2);
 	overflow: hidden;
@@ -16421,12 +16483,12 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 28px;
 	height: 28px;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.18);
 	background: rgba(14, 11, 22, 0.7);
 	color: #fff;
 	opacity: 0.85;
-	transition: opacity 0.15s ease;
+	transition: opacity var(--iz-motion-fast, 160ms) ease;
 }
 .iz-demand-sheet-cover-btn:hover .iz-demand-sheet-zoom-hint,
 .iz-demand-sheet-cover-btn:focus-visible .iz-demand-sheet-zoom-hint {
@@ -16453,7 +16515,7 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 52px;
 	height: 52px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(232, 194, 122, 0.45);
 	background: rgba(14, 11, 22, 0.82);
 	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
@@ -16473,7 +16535,7 @@ button.iz-pr-offer-row:hover {
 .iz-demand-sheet-outlet {
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.25;
 	color: var(--iz-txt);
 	overflow: hidden;
@@ -16510,7 +16572,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-demand-sheet-heading {
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.09em;
 	color: var(--iz-muted);
@@ -16563,7 +16625,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-roster-demand-card--rail .day {
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.07em;
 	color: var(--iz-amber);
@@ -16664,7 +16726,7 @@ button.iz-pr-offer-row:hover {
 	max-width: 100%;
 	padding: 0 4px;
 	font-size: 11px;
-	font-weight: 500;
+	font-weight: 600;
 	line-height: 1.25;
 	text-align: center;
 	/* Not `nowrap` + ellipsis: a two-line clamp shows far more of a short
@@ -16741,14 +16803,14 @@ button.iz-pr-offer-row:hover {
 	justify-content: space-between;
 	gap: 10px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-shift-pick:hover:not(:disabled) {
@@ -16803,7 +16865,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-shift-filters {
 	margin-bottom: 14px;
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -16886,14 +16948,14 @@ button.iz-pr-offer-row:hover {
 	align-items: center;
 	gap: 8px;
 	padding: 0 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background-color: var(--iz-panel2);
 	height: 38px;
 	min-height: 38px;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-filter-input {
@@ -16911,7 +16973,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-filter-input::placeholder {
 	color: var(--iz-muted2);
-	font-weight: 500;
+	font-weight: 600;
 }
 
 .iz-roster-filter-field .iz-time-input-ph {
@@ -16921,7 +16983,7 @@ button.iz-pr-offer-row:hover {
 .iz-roster-filter-input--plain {
 	width: 100%;
 	padding: 0 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background-color: var(--iz-panel2);
 	color: var(--iz-txt);
@@ -16933,8 +16995,8 @@ button.iz-pr-offer-row:hover {
 	height: 38px;
 	min-height: 38px;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-shift-filters-grid .iz-select {
@@ -16956,7 +17018,7 @@ button.iz-pr-offer-row:hover {
 	height: 38px;
 	min-height: 38px;
 	padding: 0 28px 0 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background-color: var(--iz-panel2);
 	font-family: var(--iz-font);
@@ -16978,7 +17040,7 @@ button.iz-pr-offer-row:hover {
 	.iz-time-picker-btn
 	.iz-time-picker-label.iz-muted2 {
 	color: var(--iz-muted2);
-	font-weight: 500;
+	font-weight: 600;
 }
 
 .iz-roster-filter-input--plain:focus,
@@ -17009,7 +17071,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-table-wrap {
 	overflow-x: auto;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 }
@@ -17058,22 +17120,57 @@ button.iz-pr-offer-row:hover {
 	color: inherit;
 	text-align: inherit;
 	cursor: pointer;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
+	/* Underlined at rest (DESIGN.md §11.3a): border 0, no fill and the row's own
+	   ink made it read as plain text. The line is a hairline grey, never lavender
+	   at rest; only the <button> carries it, so a cell printed without a sheet to
+	   open stays plain. Its focus ring is the shared one in portal-interaction.css. */
+	text-decoration-line: underline;
+	text-decoration-color: var(--iz-line2);
+	text-underline-offset: 3px;
 	transition:
-		color 0.15s ease,
-		background 0.15s ease;
+		color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease,
+		text-decoration-color var(--iz-motion-fast, 160ms) ease;
 }
 
 .iz-roster-amount-btn:hover,
 .iz-roster-amount-btn:focus-visible {
 	color: var(--iz-gold-l);
 	background: rgba(201, 155, 78, 0.08);
-	outline: none;
+	text-decoration-color: var(--iz-gold);
 }
 
 .iz-roster-amount-btn--gold {
 	color: var(--iz-gold-l);
 	font-weight: 600;
+}
+
+/* An inline link inside a sentence (the outlet shift detail's Workspace price
+   links): muted ink with a hairline-grey underline at rest, never lavender at
+   rest; on hover or focus the text steps up to ink and the line turns lavender,
+   the same answer as .iz-roster-amount-btn above. Scoped under .iz-portal so it
+   outranks the global `main a:not(.iz-btn-solid), .prose a, p a` rule in
+   styles.css (0,1,2), which otherwise paints these links --gold-light with a raw
+   champagne underline.
+   ⚠️ `.iz-sheet` too: the Outlet > Calendar shift detail opens in an IzSheet
+   that is portalled to <body>, OUTSIDE .iz-portal, where a `.iz-portal`-only
+   rule never matched and the links stayed lavender with no underline. The
+   :is() keeps the same weight, (0,2,1). */
+:is(.iz-portal, .iz-sheet) a.iz-inline-link {
+	color: var(--iz-muted);
+	text-decoration-line: underline;
+	text-decoration-color: var(--iz-line2);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+	transition:
+		color var(--iz-motion-fast, 160ms) ease,
+		text-decoration-color var(--iz-motion-fast, 160ms) ease;
+}
+:is(.iz-portal, .iz-sheet) a.iz-inline-link:hover,
+:is(.iz-portal, .iz-sheet) a.iz-inline-link:focus-visible {
+	color: var(--iz-txt);
+	text-decoration-color: var(--iz-gold);
 }
 
 .iz-roster-row--swap {
@@ -17094,12 +17191,12 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 32px;
 	height: 32px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.06);
 	color: #e8dff7;
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 
 .iz-roster-icon-btn:hover {
@@ -17109,7 +17206,7 @@ button.iz-pr-offer-row:hover {
 
 .iz-roster-mini-btn {
 	padding: 5px 10px;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.04);
 	font-size: 12px;
@@ -17196,7 +17293,7 @@ button.iz-pr-offer-row:hover {
 	gap: 10px;
 	padding: 0 13px;
 	min-height: 44px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.03);
 }
@@ -17270,7 +17367,7 @@ button.iz-pr-offer-row:hover {
 		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b5f7c' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
 		no-repeat right 12px center;
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 13px 36px 13px 13px;
 	color: var(--iz-txt);
 	font-size: 14px;
@@ -17288,7 +17385,7 @@ button.iz-pr-offer-row:hover {
 	min-height: 46px;
 	padding: 0 10px 0 13px;
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.03);
 	position: relative;
 }
@@ -17299,8 +17396,8 @@ button.iz-pr-offer-row:hover {
 	color: inherit;
 	text-align: left;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-hist-picker-btn.open,
 .iz-hist-picker-btn:focus-visible {
@@ -17329,7 +17426,7 @@ button.iz-pr-offer-row:hover {
 	margin-top: 8px;
 	padding: 12px;
 	border: 1px solid var(--iz-line2);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
@@ -17384,7 +17481,7 @@ button.iz-pr-offer-row:hover {
 	appearance: none;
 	-webkit-appearance: none;
 	border: 1px solid var(--iz-line2);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-bg2);
 	color: var(--iz-txt);
 	font-family: var(--iz-font);
@@ -17437,15 +17534,15 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.2);
 	padding: 8px 10px;
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-outlet-report-range-target.is-active {
 	border-color: rgba(183, 156, 232, 0.5);
@@ -17474,7 +17571,7 @@ button.iz-pr-offer-row:hover {
 	width: 100%;
 	padding: 8px !important;
 	border: 1px solid var(--iz-line);
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(0, 0, 0, 0.2);
 }
 .iz-outlet-report-cal-picker--popover {
@@ -17494,11 +17591,11 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	color: var(--iz-txt);
 	transition:
-		background 0.15s,
-		color 0.15s;
+		background var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms);
 }
 .iz-multi-cal-nav-btn:hover {
 	background: rgba(255, 255, 255, 0.06);
@@ -17516,7 +17613,7 @@ button.iz-pr-offer-row:hover {
 	flex: 1;
 	align-items: center;
 	gap: 8px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 	padding: 7px 9px;
@@ -17548,7 +17645,7 @@ button.iz-pr-offer-row:hover {
 	border-radius: 999px;
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 }
 .iz-outlet-report-range-legend-item.is-start
 	.iz-outlet-report-range-legend-badge {
@@ -17629,7 +17726,7 @@ button.iz-pr-offer-row:hover {
 	padding: 0 !important;
 	font-size: var(--iz-fs-label) !important;
 	line-height: 1;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 }
 .iz-outlet-report-cal-picker button[data-selected-single="true"],
 .iz-outlet-report-cal-picker button[data-range-start="true"],
@@ -17665,7 +17762,7 @@ button.iz-pr-offer-row:hover {
 	top: 1px;
 	right: 3px;
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1;
 	opacity: 0.85;
 }
@@ -17677,7 +17774,7 @@ button.iz-pr-offer-row:hover {
 	top: 1px;
 	right: 3px;
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1;
 	opacity: 0.9;
 }
@@ -17688,10 +17785,10 @@ button.iz-pr-offer-row:hover {
 	border-radius: 0 !important;
 }
 .iz-outlet-report-cal-picker .group\/day:has(.iz-report-range-start) button {
-	border-radius: 6px 0 0 6px;
+	border-radius: var(--iz-radius-s, 6px) 0 0 var(--iz-radius-s, 6px);
 }
 .iz-outlet-report-cal-picker .group\/day:has(.iz-report-range-end) button {
-	border-radius: 0 6px 6px 0;
+	border-radius: 0 var(--iz-radius-s, 6px) var(--iz-radius-s, 6px) 0;
 }
 .iz-outlet-report-cal-picker .group\/day:has(.iz-report-range-middle) button {
 	border-radius: 0;
@@ -17709,15 +17806,15 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-bg2);
 	padding: 6px 8px;
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-hist-range-target.is-active {
 	border-color: rgba(167, 139, 250, 0.45);
@@ -17757,7 +17854,7 @@ button.iz-pr-offer-row:hover {
 	gap: 12px;
 }
 .iz-pr-schedule-rules {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
@@ -17787,7 +17884,7 @@ button.iz-pr-offer-row:hover {
 	flex-direction: column;
 	gap: 2px;
 	padding: 8px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	font-size: 12px;
 }
@@ -17811,7 +17908,7 @@ button.iz-pr-offer-row:hover {
 	background: rgba(255, 107, 107, 0.06);
 }
 .iz-pr-schedule-cal-wrap {
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.2);
 	padding: 12px 8px 10px;
@@ -17863,7 +17960,7 @@ button.iz-pr-offer-row:hover {
 	padding: 0 !important;
 	font-size: 14px;
 	font-weight: 600;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	line-height: 1;
 }
 .iz-pr-cal-open .iz-pr-cal-day-btn {
@@ -17906,7 +18003,7 @@ button.iz-pr-offer-row:hover {
 	display: inline-block;
 	width: 10px;
 	height: 10px;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	margin-right: 4px;
 	vertical-align: middle;
 }
@@ -17941,7 +18038,7 @@ button.iz-pr-offer-row:hover {
 	--cal-full: #4ade80;
 	--cal-short: #f4b740;
 	--cal-none: #f87171;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: linear-gradient(
 		180deg,
@@ -17977,8 +18074,8 @@ button.iz-pr-offer-row:hover {
 	padding: 6px 14px;
 	cursor: pointer;
 	transition:
-		background 0.12s ease,
-		border-color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-ops-cal-today:hover:not(:disabled) {
 	background: rgba(36, 30, 52, 0.98);
@@ -18002,14 +18099,14 @@ button.iz-pr-offer-row:hover {
 	justify-content: center;
 	width: 2rem;
 	height: 2rem;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(18, 15, 28, 0.9);
 	color: var(--iz-muted);
 	cursor: pointer;
 	transition:
-		background 0.12s ease,
-		color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-ops-cal-nav-btn:hover {
 	background: rgba(28, 24, 40, 0.95);
@@ -18018,7 +18115,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-ops-cal-month {
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	text-align: center;
 	margin: 0;
@@ -18073,14 +18170,14 @@ button.iz-pr-offer-row:hover {
 	gap: 4px 8px;
 	margin-bottom: 6px;
 	padding: 4px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.25);
 	font-size: 14px;
 	color: var(--iz-muted);
 }
 .iz-outlet-ops-cal-summary__count {
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 }
 .iz-outlet-ops-cal-summary__sep {
@@ -18093,7 +18190,7 @@ button.iz-pr-offer-row:hover {
 	margin-left: auto;
 	border-radius: 999px;
 	padding: 1px 9px;
-	font-weight: 800;
+	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	color: var(--cal-none);
 	border: 1px solid color-mix(in srgb, var(--cal-none) 46%, transparent);
@@ -18137,7 +18234,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-ops-cal-cell {
 	background: rgba(18, 15, 28, 0.92);
 	border: 1px solid rgba(255, 255, 255, 0.06);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	min-height: 6.4rem;
 	padding: 7px 8px 8px;
 	display: flex;
@@ -18174,7 +18271,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-ops-cal-day-num--today {
 	background: var(--iz-violet-l, #d4c4f5);
 	color: #17122a;
-	font-weight: 800;
+	font-weight: 700;
 }
 .iz-outlet-ops-cal-events {
 	display: flex;
@@ -18212,7 +18309,7 @@ button.iz-pr-offer-row:hover {
 	box-sizing: border-box;
 	overflow: hidden;
 	text-align: left;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid rgba(255, 255, 255, 0.05);
 	border-left-width: 4px;
 	padding: 5px 7px;
@@ -18221,8 +18318,8 @@ button.iz-pr-offer-row:hover {
 	cursor: pointer;
 	background: rgba(0, 0, 0, 0.35);
 	transition:
-		background 0.12s ease,
-		border-color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-ops-cal-event:hover {
 	background: rgba(0, 0, 0, 0.55);
@@ -18262,7 +18359,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-ops-cal-event-time {
 	display: block;
-	font-weight: 800;
+	font-weight: 700;
 	font-size: 12px;
 	color: var(--iz-muted);
 	letter-spacing: 0.01em;
@@ -18296,12 +18393,12 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-ops-cal-fill {
 	justify-self: end;
 	flex-shrink: 0;
-	border-radius: 5px;
+	border-radius: var(--iz-radius-s, 6px);
 	padding: 1px 4px;
 	font-family: var(--iz-font);
 	font-variant-numeric: tabular-nums;
 	font-size: 11px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.4;
 	white-space: nowrap;
 	border: 1px solid transparent;
@@ -18332,16 +18429,16 @@ button.iz-pr-offer-row:hover {
 	background: rgba(212, 196, 245, 0.12);
 	color: var(--iz-violet-l, #d4c4f5);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.25;
 	padding: 2px 12px;
 	cursor: pointer;
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
 	transition:
-		background 0.12s ease,
-		color 0.12s ease,
-		border-color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		color var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-ops-cal-more:hover {
 	background: rgba(212, 196, 245, 0.2);
@@ -18362,13 +18459,13 @@ button.iz-pr-offer-row:hover {
 	text-align: left;
 	border: 1px solid var(--iz-line);
 	border-left-width: 5px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(0, 0, 0, 0.28);
 	padding: 13px 16px;
 	cursor: pointer;
 	transition:
-		background 0.12s ease,
-		border-color 0.12s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 .iz-outlet-ops-cal-daylist-row:hover {
 	background: rgba(0, 0, 0, 0.5);
@@ -18379,7 +18476,7 @@ button.iz-pr-offer-row:hover {
 }
 .iz-outlet-ops-cal-daylist-row__time {
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-muted);
 	white-space: nowrap;
 	font-variant-numeric: tabular-nums;
@@ -18397,7 +18494,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-ops-cal-daylist-row .iz-outlet-ops-cal-fill {
 	font-size: 14px;
 	padding: 3px 9px;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 }
 .iz-outlet-ops-cal-event-meta,
 .iz-outlet-ops-cal-event-agency,
@@ -18440,14 +18537,14 @@ button.iz-pr-offer-row:hover {
 	gap: 12px;
 }
 .iz-outlet-staffing-block {
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.28);
 	padding: 10px 12px;
 }
 .iz-outlet-staffing-heading {
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 	color: var(--iz-muted);
@@ -18457,7 +18554,7 @@ button.iz-pr-offer-row:hover {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.35);
 	padding: 8px 10px;
@@ -18465,7 +18562,7 @@ button.iz-pr-offer-row:hover {
 .iz-outlet-staff-tag {
 	display: inline-flex;
 	align-items: center;
-	border-radius: 6px;
+	border-radius: var(--iz-radius-s, 6px);
 	padding: 2px 7px;
 	font-size: 11px;
 	font-weight: 700;
@@ -18558,7 +18655,7 @@ button.iz-pr-offer-row:hover {
 	min-height: 46px;
 	padding: 0 13px;
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.03);
 	color: var(--iz-txt);
 	font-size: 16px;
@@ -18566,8 +18663,8 @@ button.iz-pr-offer-row:hover {
 	cursor: pointer;
 	text-align: left;
 	transition:
-		border-color 0.15s,
-		box-shadow 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		box-shadow var(--iz-motion-fast, 160ms);
 }
 .iz-hist-select-trigger.sm,
 .iz-portal-main
@@ -18590,6 +18687,15 @@ button.iz-pr-offer-row:hover {
 	   does not, and this control is now a history one. */
 	background: rgba(255, 255, 255, 0.03);
 }
+/* Keyboard focus keeps the portal's ring (19 Nov 2026): the roster date
+   trigger's selector above out-ranks it at (0,3,0) (the history one, at
+   (0,2,0), already lost to it), and a 12% glow alone is too faint to find.
+   Open and hover stay as they are — only a keyboard focus draws this. */
+.iz-hist-select-trigger:focus-visible,
+.iz-roster-filterbar__date .iz-roster-planning-date-trigger:focus-visible {
+	outline: 2px solid var(--iz-violet);
+	outline-offset: 2px;
+}
 .iz-hist-select-menu {
 	position: absolute;
 	left: 0;
@@ -18600,7 +18706,7 @@ button.iz-pr-offer-row:hover {
 	padding: 6px;
 	list-style: none;
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.85);
 	max-height: 220px;
@@ -18610,7 +18716,7 @@ button.iz-pr-offer-row:hover {
 	display: block;
 	width: 100%;
 	border: none;
-	border-radius: 9px;
+	border-radius: var(--iz-radius-m, 10px);
 	padding: 10px 11px;
 	background: transparent;
 	color: var(--iz-txt);
@@ -18631,12 +18737,12 @@ button.iz-pr-offer-row:hover {
 	width: 100%;
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 12px 13px;
 	color: var(--iz-txt);
 	font-size: 14px;
 	font-family: var(--iz-font);
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-hist-num-input::placeholder {
 	color: var(--iz-muted2);
@@ -18653,13 +18759,13 @@ button.iz-pr-offer-row:hover {
 	align-items: flex-start;
 	gap: 11px;
 	padding: 12px 13px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 button.iz-agency-row:hover {
 	border-color: rgba(183, 156, 232, 0.35);
@@ -18685,13 +18791,13 @@ button.iz-agency-row:hover {
 	flex-shrink: 0;
 	width: 42px;
 	height: 42px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #fff;
 	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
@@ -18706,7 +18812,7 @@ button.iz-agency-row:hover {
 	justify-content: center;
 	margin-top: 2px;
 	color: transparent;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-agency-row__check--on {
 	border-color: var(--iz-gold-l);
@@ -18724,14 +18830,14 @@ button.iz-agency-row:hover {
 	display: flex;
 	gap: 6px;
 	padding: 4px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid var(--iz-line2);
 }
 .iz-hist-tabs button {
 	flex: 1;
 	border: none;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	padding: 10px 8px;
 	font-size: 12px;
 	font-weight: 700;
@@ -18739,7 +18845,7 @@ button.iz-agency-row:hover {
 	color: var(--iz-muted);
 	background: transparent;
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -18758,7 +18864,7 @@ button.iz-agency-row:hover {
 	flex: 1;
 	min-width: 4.5rem;
 	padding: 8px 10px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: var(--iz-bg2);
 	color: var(--iz-muted);
@@ -18767,9 +18873,9 @@ button.iz-agency-row:hover {
 	font-weight: 600;
 	text-align: center;
 	transition:
-		border-color 0.15s,
-		color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-hist-period-chip.active {
 	border-color: var(--iz-gold);
@@ -18787,7 +18893,7 @@ button.iz-agency-row:hover {
 	grid-template-columns: 1.35fr 1fr;
 	gap: 1px;
 	background: rgba(183, 156, 232, 0.2);
-	border-radius: 14px 14px 0 0;
+	border-radius: var(--iz-radius-l, 14px) var(--iz-radius-l, 14px) 0 0;
 	overflow: hidden;
 }
 .iz-hist-outlet-sheet-list {
@@ -18805,7 +18911,7 @@ button.iz-agency-row:hover {
 	gap: 12px;
 	width: 100%;
 	padding: 13px 14px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	color: var(--iz-txt);
@@ -18815,8 +18921,8 @@ button.iz-agency-row:hover {
 	text-align: left;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 .iz-hist-outlet-opt:hover {
 	border-color: rgba(183, 156, 232, 0.35);
@@ -18869,7 +18975,7 @@ button.iz-agency-row:hover {
 .iz-hist-shift-earn-cell .v {
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-micro);
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-txt);
 	line-height: 1.2;
 	font-variant-numeric: tabular-nums;
@@ -18901,7 +19007,7 @@ button.iz-agency-row:hover {
 	gap: 10px;
 }
 .iz-hist-payroll-week {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: linear-gradient(
 		180deg,
@@ -18910,8 +19016,8 @@ button.iz-agency-row:hover {
 	);
 	overflow: hidden;
 	transition:
-		border-color 0.2s ease,
-		background 0.2s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-hist-payroll-week.is-current {
 	border-color: rgba(244, 183, 64, 0.38);
@@ -18933,7 +19039,7 @@ button.iz-agency-row:hover {
 	padding: 13px 14px;
 	text-align: left;
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-hist-payroll-week__trigger:hover {
 	background: rgba(255, 255, 255, 0.03);
@@ -18948,7 +19054,7 @@ button.iz-agency-row:hover {
 	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.2);
 	color: var(--iz-gold-l);
@@ -18967,7 +19073,7 @@ button.iz-agency-row:hover {
 	display: block;
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--iz-title);
@@ -18994,7 +19100,7 @@ button.iz-agency-row:hover {
 	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(0, 0, 0, 0.22);
 	color: var(--iz-muted);
@@ -19024,7 +19130,7 @@ button.iz-agency-row:hover {
 /* Collapsible section — PR Shifts home, outlet panels */
 .iz-collapsible-section {
 	margin-top: 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: linear-gradient(
 		180deg,
@@ -19033,8 +19139,8 @@ button.iz-agency-row:hover {
 	);
 	overflow: hidden;
 	transition:
-		border-color 0.2s ease,
-		background 0.2s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-collapsible-section.is-open {
 	border-color: rgba(183, 156, 232, 0.32);
@@ -19053,7 +19159,7 @@ button.iz-agency-row:hover {
 	padding: 12px 14px;
 	text-align: left;
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background var(--iz-motion-fast, 160ms) ease;
 	user-select: none;
 	-webkit-user-select: none;
 }
@@ -19067,7 +19173,7 @@ button.iz-agency-row:hover {
 	display: block;
 	font-family: var(--iz-font);
 	font-size: 12px;
-	font-weight: 800;
+	font-weight: 700;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
 	color: var(--iz-title);
@@ -19094,7 +19200,7 @@ button.iz-agency-row:hover {
 	flex-shrink: 0;
 	align-items: center;
 	justify-content: center;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(0, 0, 0, 0.22);
 	color: var(--iz-muted);
@@ -19121,7 +19227,7 @@ button.iz-agency-row:hover {
 	gap: 8px;
 }
 .iz-hist-shift-metric {
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	border: 1px solid var(--iz-line);
 	background: rgba(0, 0, 0, 0.15);
 	padding: 9px 10px;
@@ -19151,7 +19257,7 @@ button.iz-agency-row:hover {
 }
 .iz-data-table-wrap {
 	overflow-x: auto;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -19167,6 +19273,18 @@ button.iz-agency-row:hover {
 	border-bottom: 1px solid var(--iz-line);
 	vertical-align: top;
 	text-align: left;
+}
+/* A cell that ASKS for right or centre gets it (19 Nov 2026, TEST_SCRIPT §9
+   14 (c)). The rule above is un-layered, so it beat Tailwind's layered
+   `text-right` on every money column of this table — Post Job / special
+   service cost and the receipt scan slip's RM — which rendered LEFT despite
+   the markup. (0,2,1) outranks its (0,1,1); money digits line up. */
+.iz-data-table :is(th, td).text-right {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.iz-data-table :is(th, td).text-center {
+	text-align: center;
 }
 .iz-data-table th {
 	font-family: var(--iz-font);
@@ -19194,13 +19312,13 @@ button.iz-agency-row:hover {
 	resize: vertical;
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid var(--iz-line2);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	padding: 12px 13px;
 	color: var(--iz-txt);
 	font-size: 14px;
 	font-family: var(--iz-font);
 	line-height: 1.45;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 .iz-pv-dispute-input::placeholder {
 	color: var(--iz-muted2);
@@ -19216,7 +19334,7 @@ button.iz-agency-row:hover {
 	align-items: flex-start;
 	gap: 10px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 107, 107, 0.35);
 	background: var(--iz-red-bg);
 }
@@ -19232,7 +19350,7 @@ button.iz-agency-row:hover {
 
 .iz-pv-dispute-details {
 	border: 1px solid var(--iz-line);
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
 }
@@ -19264,7 +19382,7 @@ button.iz-agency-row:hover {
 }
 .iz-pv-dispute-details-chevron {
 	color: var(--iz-muted);
-	transition: transform 0.18s ease;
+	transition: transform var(--iz-motion-fast, 160ms) ease;
 }
 .iz-pv-dispute-details[open] .iz-pv-dispute-details-chevron {
 	transform: rotate(180deg);
@@ -19287,7 +19405,7 @@ button.iz-agency-row:hover {
 .iz-pv-dispute-file-img {
 	width: 100%;
 	height: 100%;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	object-fit: cover;
 	border: 1px solid var(--iz-line);
 }
@@ -19720,7 +19838,7 @@ html:has(.iz-pr-app) {
 	 * 28 or quietly breaking the rule.
 	 */
 	font-size: var(--iz-fs-display);
-	font-weight: 800;
+	font-weight: 700;
 	/*
 	 * THE app's gold — `--iz-accent` #e3b877, the exact colour the InnocenZ logo
 	 * in the rail above is painted (sampled off the rendered SVG, not chosen by
@@ -19755,7 +19873,7 @@ html:has(.iz-pr-app) {
 
 .iz-portal-sidebar-org__name {
 	font-size: var(--iz-fs-label);
-	font-weight: 800;
+	font-weight: 700;
 	/* A company name is not a slug: let a long one wrap rather than clip. */
 	overflow-wrap: anywhere;
 }
@@ -19773,14 +19891,14 @@ html:has(.iz-pr-app) {
 	gap: 10px;
 	padding: 10px 8px;
 	margin-bottom: 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-grad-card);
 	border: 1px solid var(--iz-line);
 	text-decoration: none;
 	color: inherit;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 }
 
 .iz-portal-sidebar-identity:hover {
@@ -19806,7 +19924,7 @@ html:has(.iz-pr-app) {
 	align-items: center;
 	gap: 10px;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	color: var(--iz-muted);
 	font-family: var(--iz-font);
 	font-size: 16px;
@@ -19815,7 +19933,7 @@ html:has(.iz-pr-app) {
 	border: 1px solid transparent;
 	background: none;
 	cursor: pointer;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 	text-align: left;
 	width: 100%;
 }
@@ -19862,15 +19980,15 @@ html:has(.iz-pr-app) {
 	align-items: center;
 	justify-content: center;
 	padding: 4px;
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	text-decoration: none;
 	color: inherit;
 	transition:
-		border-color 0.15s,
-		background 0.15s,
-		transform 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms),
+		transform var(--iz-motion-fast, 160ms);
 }
 
 .iz-portal-header-profile:hover {
@@ -19896,7 +20014,7 @@ html:has(.iz-pr-app) {
 	gap: 10px;
 	width: 100%;
 	padding: 10px 12px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid rgba(255, 117, 117, 0.28);
 	background: rgba(255, 117, 117, 0.06);
 	color: var(--iz-red);
@@ -19905,8 +20023,8 @@ html:has(.iz-pr-app) {
 	font-weight: 600;
 	cursor: pointer;
 	transition:
-		border-color 0.15s,
-		background 0.15s;
+		border-color var(--iz-motion-fast, 160ms),
+		background var(--iz-motion-fast, 160ms);
 	text-align: left;
 }
 
@@ -20123,7 +20241,7 @@ html:has(.iz-pr-app) {
 	   to "how big is the number" no matter which of them wins the cascade. */
 	container-type: inline-size;
 	--iz-kpi-num: var(--iz-fs-body);
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	padding: 18px 20px;
@@ -20144,8 +20262,8 @@ html:has(.iz-pr-app) {
 		0 8px 28px rgba(124, 58, 237, 0.14),
 		inset 0 1px 0 rgba(255, 255, 255, 0.04);
 	transition:
-		border-color 0.15s ease,
-		box-shadow 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		box-shadow var(--iz-motion-fast, 160ms) ease;
 }
 
 .iz-portal-kpi-payout:hover {
@@ -20172,7 +20290,7 @@ html:has(.iz-pr-app) {
 .iz-portal-kpi .n {
 	font-family: var(--iz-font);
 	font-size: var(--iz-kpi-num);
-	font-weight: 800;
+	font-weight: 700;
 	margin-top: 8px;
 	letter-spacing: -0.5px;
 	font-variant-numeric: tabular-nums;
@@ -20180,7 +20298,7 @@ html:has(.iz-pr-app) {
 }
 
 .iz-portal-panel {
-	border-radius: 18px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border: 1px solid var(--iz-line);
 	background: var(--iz-grad-card);
 	overflow: hidden;
@@ -20226,7 +20344,7 @@ html:has(.iz-pr-app) {
 
 .iz-portal-table td.iz-portal-table-meta {
 	color: #f0eaf8;
-	font-weight: 500;
+	font-weight: 600;
 }
 
 .iz-portal-table-name {
@@ -20239,7 +20357,7 @@ html:has(.iz-pr-app) {
 .iz-portal-table-name--link {
 	color: var(--iz-gold-l);
 	text-decoration: none;
-	transition: opacity 0.15s ease;
+	transition: opacity var(--iz-motion-fast, 160ms) ease;
 }
 .iz-portal-table-name--link:hover {
 	opacity: 0.85;
@@ -20252,7 +20370,7 @@ html:has(.iz-pr-app) {
 	justify-content: center;
 	width: 36px;
 	height: 36px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: rgba(159, 122, 234, 0.28);
 	color: #f0e8ff;
 	font-family: var(--iz-font);
@@ -20395,7 +20513,7 @@ html:has(.iz-pr-app) {
 
 .iz-portal-table-row--clickable {
 	cursor: pointer;
-	transition: background 0.15s ease;
+	transition: background var(--iz-motion-fast, 160ms) ease;
 }
 .iz-portal-table-row--clickable:hover td,
 .iz-portal-table-row--clickable:focus-visible td {
@@ -20455,16 +20573,16 @@ html:has(.iz-pr-app) {
 .iz-portal-ai-btn {
 	display: block;
 	padding: 14px 16px;
-	border-radius: 18px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border: 1px solid rgba(159, 122, 234, 0.35);
 	background: rgba(124, 58, 237, 0.08);
 	box-shadow: 0 8px 28px rgba(124, 58, 237, 0.12);
 	text-decoration: none;
 	color: inherit;
 	transition:
-		border-color 0.15s ease,
-		background 0.15s ease,
-		box-shadow 0.15s ease;
+		border-color var(--iz-motion-fast, 160ms) ease,
+		background var(--iz-motion-fast, 160ms) ease,
+		box-shadow var(--iz-motion-fast, 160ms) ease;
 }
 
 .iz-portal-ai-btn:hover {
@@ -20497,12 +20615,12 @@ html:has(.iz-pr-app) {
 	align-items: center;
 	gap: 10px;
 	padding: 12px 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(124, 58, 237, 0.08);
 	text-decoration: none;
 	color: inherit;
-	transition: 0.15s;
+	transition: var(--iz-motion-fast, 160ms);
 }
 
 .iz-portal-ai-card:hover {
@@ -20585,11 +20703,11 @@ html:has(.iz-pr-app) {
 	display: block;
 	width: 100%;
 	aspect-ratio: 3 / 4;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px dashed var(--iz-line2);
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
-	transition: border-color 0.15s;
+	transition: border-color var(--iz-motion-fast, 160ms);
 }
 .iz-reg-id-slot__btn:hover {
 	border-color: var(--iz-gold-d);
@@ -20611,7 +20729,7 @@ html:has(.iz-pr-app) {
 	display: flex;
 	gap: 12px;
 	padding: 12px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -20620,20 +20738,20 @@ html:has(.iz-pr-app) {
 	gap: 14px;
 	align-items: center;
 	padding: 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 }
 .iz-reg-agency-detail__av {
 	width: 56px;
 	height: 56px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-family: var(--iz-font);
 	font-size: 18px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #fff;
 	flex-shrink: 0;
 }
@@ -20643,7 +20761,7 @@ html:has(.iz-pr-app) {
 	gap: 14px 12px;
 	margin: 14px 0;
 	padding: 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 }
@@ -20656,13 +20774,13 @@ html:has(.iz-pr-app) {
 .iz-reg-agency-card__av {
 	width: 44px;
 	height: 44px;
-	border-radius: 12px;
+	border-radius: var(--iz-radius-l, 14px);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-family: var(--iz-font);
 	font-size: 14px;
-	font-weight: 800;
+	font-weight: 700;
 	color: #fff;
 	flex-shrink: 0;
 }
@@ -20693,7 +20811,7 @@ html:has(.iz-pr-app) {
 	color: #fff;
 }
 .iz-reg-summary-details {
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.02);
 	overflow: hidden;
@@ -20744,7 +20862,7 @@ html:has(.iz-pr-app) {
 }
 .iz-reg-ack-card {
 	padding: 14px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-line);
 	background: rgba(255, 255, 255, 0.03);
 }
@@ -20752,7 +20870,7 @@ html:has(.iz-pr-app) {
 	margin: 0 0 12px;
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-reg-ack-row {
@@ -20792,7 +20910,7 @@ html:has(.iz-pr-app) {
 	margin: 0 0 10px;
 	font-family: var(--iz-font);
 	font-size: 16px;
-	font-weight: 800;
+	font-weight: 700;
 	color: var(--iz-title);
 }
 .iz-reg-terms-row {
@@ -20817,7 +20935,7 @@ html:has(.iz-pr-app) {
 .iz-reg-pending-card {
 	width: 100%;
 	padding: 22px 20px 24px;
-	border-radius: 20px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border: 1px solid var(--iz-line);
 	background: linear-gradient(
 		180deg,
@@ -20847,7 +20965,7 @@ html:has(.iz-pr-app) {
 	width: 64px;
 	height: 64px;
 	margin: 18px auto 0;
-	border-radius: 18px;
+	border-radius: var(--iz-radius-xl, 20px);
 	border: 1px solid rgba(251, 191, 36, 0.22);
 	background: rgba(251, 191, 36, 0.08);
 }
@@ -20924,7 +21042,7 @@ html:has(.iz-pr-app) {
 	width: 100%;
 	max-width: 420px;
 	padding: 8px 4px;
-	animation: iz-fade 0.4s ease;
+	animation: iz-fade var(--iz-motion-slow, 400ms) ease;
 }
 
 .iz-portal-auth-card .iz-logo-tile,
@@ -20967,7 +21085,7 @@ html:has(.iz-pr-app) {
 	color: var(--iz-muted2);
 	opacity: 0.7;
 	padding: 3px 6px;
-	border-radius: 4px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: rgba(10, 8, 16, 0.72);
 	border: 1px solid rgba(255, 255, 255, 0.06);
 	letter-spacing: 0.02em;
@@ -21109,7 +21227,7 @@ html:has(.iz-pr-app) {
 	gap: 1px;
 	margin-top: 4px;
 	padding: 3px 4px;
-	border-radius: 5px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: repeating-linear-gradient(
 		135deg,
 		rgba(240, 180, 41, 0.16),
@@ -21467,7 +21585,7 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 	width: min(300px, 72vw);
 	aspect-ratio: 1;
 	margin-inline: auto;
-	border-radius: 24px;
+	border-radius: var(--iz-radius-xl, 20px);
 	overflow: hidden;
 	background: #0a0a0a;
 	cursor: grab;
@@ -21520,7 +21638,7 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 	color: var(--iz-muted);
 	font-family: var(--iz-font);
 	font-size: var(--iz-fs-tiny);
-	font-weight: 650;
+	font-weight: 600;
 	cursor: pointer;
 	padding: 4px 2px;
 }
@@ -21534,7 +21652,7 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 	gap: 8px;
 	padding: 12px;
 	border: 1px solid var(--iz-line);
-	border-radius: 16px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-glass2);
 }
 .iz-avatar-crop__previews-label {
@@ -21667,7 +21785,7 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 		width: min(300px, 84vw);
 		max-height: 100dvh;
 		overflow-y: auto;
-		animation: iz-portal-drawer-in 0.18s ease-out;
+		animation: iz-portal-drawer-in var(--iz-motion-fast, 160ms) ease-out;
 	}
 
 	/* The rail is display:none on a phone; inside the drawer it is the point.
@@ -21725,14 +21843,14 @@ body:has(.iz-portal) .iz-pv-doc [class*="title"] {
 	gap: 8px 14px;
 	margin-bottom: 12px;
 	padding: 11px 16px;
-	border-radius: 14px;
+	border-radius: var(--iz-radius-l, 14px);
 	border: 1px solid var(--iz-alert-line);
 	background: var(--iz-alert-bg);
 	font-size: var(--iz-fs-label);
 	text-decoration: none;
 	transition:
-		background 0.15s ease,
-		border-color 0.15s ease;
+		background var(--iz-motion-fast, 160ms) ease,
+		border-color var(--iz-motion-fast, 160ms) ease;
 }
 a.iz-alert:hover {
 	background: var(--iz-alert-bg-hover);
@@ -21768,7 +21886,8 @@ a.iz-alert:hover {
 	color: var(--iz-alert-tone);
 }
 .iz-alert__title {
-	font-weight: 800;
+	/* 600, the title weight (DESIGN.md §4: no 800). */
+	font-weight: 600;
 	line-height: 1.3;
 	color: var(--iz-alert-tone);
 	white-space: nowrap;
@@ -21779,7 +21898,7 @@ a.iz-alert:hover {
 .iz-alert__figure {
 	flex: none;
 	font-size: var(--iz-fs-title);
-	font-weight: 800;
+	font-weight: 700;
 	line-height: 1.2;
 	color: var(--iz-txt);
 	white-space: nowrap;
@@ -21833,6 +21952,30 @@ a.iz-alert:hover .iz-alert__cta,
 .iz-alert__cta:hover {
 	border-color: var(--iz-alert-tone);
 	color: var(--iz-alert-tone);
+}
+/* A NOTICE, NOT A DOOR — the voucher detail's "why you cannot act yet" lines
+   (routes/agency/pv.tsx). Same frame and tone as the strips above, but rendered
+   as a <div> with no `__cta` and no arrow, and every hover, lift and ring rule
+   (here, todo-panel.css, portal-motion.css M3/M7) targets `a.iz-alert`, so it
+   never answers the pointer like the To do rows do. Its sentence WRAPS: the
+   strips' one-line title would push a long reason off a phone. The icon sits
+   on the first line, and a detail line takes a row of its own under the title. */
+.iz-alert--notice {
+	align-items: flex-start;
+}
+.iz-alert--notice .iz-alert__head {
+	flex: 1 1 auto;
+	min-width: 0;
+	align-items: flex-start;
+}
+.iz-alert--notice .iz-alert__icon {
+	margin-top: 2px;
+}
+.iz-alert--notice .iz-alert__title {
+	white-space: normal;
+}
+.iz-alert--notice .iz-alert__meta {
+	flex-basis: 100%;
 }
 
 /* The outlet portal reads at one step up throughout (see the readability layer

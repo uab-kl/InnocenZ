@@ -85,6 +85,39 @@ describe('the shift schema accepts the special night', () => {
     ).toBe(false);
   });
 
+  it('refuses two items sharing one id — the phone would log the drink twice', () => {
+    const repeated = CreateShiftSchema.safeParse({
+      ...base,
+      eventKind: 'special',
+      eventDrinkMenu: [cosmo, { ...cosmo, name: 'Cosmo Royale', priceRm: 220 }],
+    });
+    expect(repeated.success).toBe(false);
+    expect(repeated.error?.issues[0]?.message).toBe(
+      'Two items on the event price list share the id "cosmo" — give each item its own id.',
+    );
+    // Compared after trimming, which is how the id is stored.
+    expect(
+      CreateShiftSchema.safeParse({
+        ...base,
+        eventDrinkMenu: [cosmo, { ...cosmo, slug: ' cosmo ' }],
+      }).success,
+    ).toBe(false);
+    // The same refusal on an edit — the rule rides on the array, so it survives
+    // `.partial()` (a refined OBJECT would throw at import under zod 4.4).
+    expect(
+      UpdateShiftSchema.safeParse({ eventDrinkMenu: [cosmo, cosmo] }).error?.issues[0]?.message,
+    ).toContain('share the id "cosmo"');
+  });
+
+  it('is an id rule, not a name rule: the same name under two ids passes', () => {
+    expect(
+      CreateShiftSchema.safeParse({
+        ...base,
+        eventDrinkMenu: [cosmo, { ...cosmo, slug: 'cosmo-2' }, tips],
+      }).success,
+    ).toBe(true);
+  });
+
   it('an edit keeps its three states apart: omitted, cleared, replaced', () => {
     const omitted = UpdateShiftSchema.parse({ status: 'confirmed' });
     expect(omitted.eventDrinkMenu).toBeUndefined();

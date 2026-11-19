@@ -2,6 +2,11 @@ import { Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AdminBackToTop } from "@/components/admin/admin-design-chrome";
 import "@/components/admin/admin-design.css";
+// One hover/press/focus language for all three portals — after the portal's
+// own CSS so it wins the cascade. See styles/portal-interaction.css.
+import "@/styles/portal-interaction.css";
+// One selected-tab look (gold, dark ink) for all three portals.
+import "@/styles/portal-tabs.css";
 import { Header } from "@/components/layout/header";
 import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
 import { Sidebar } from "@/components/layout/sidebar";

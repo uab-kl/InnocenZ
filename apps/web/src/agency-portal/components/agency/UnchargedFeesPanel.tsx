@@ -762,16 +762,19 @@ export function UnchargedFeesPanel({
 												toast(t.payroll.couldNotAddToVoucher, "warn"),
 											);
 									}}
-									/* CHAMPAGNE GOLD, because this is the action that moves
+									/* THE ACT COLOUR, because this is the action that moves
 								   money — the portal's own rule (owner, 2 Sep 2026: "this
 								   colour, save or make payment"). It rendered as a grey
 								   pill while Void carried the only colour on the row, so
 								   the destructive answer looked like the primary one.
-								   `--iz-grad-accent` is the same gradient `.iz-btn-gold`
-								   uses; NOT `--iz-gold`, which is the violet the prototype
-								   misnamed. Written as an arbitrary PROPERTY, not `bg-[…]`
-								   — a gradient set as background-color paints nothing. */
-									className="rounded-lg [background:var(--iz-grad-accent)] px-3 py-1.5 text-xs font-bold text-[#241a08] shadow-[0_10px_22px_-12px_rgba(201,155,78,0.6)] transition hover:brightness-105 disabled:opacity-60"
+								   The colours are the approved design's `.iz-btn-gold`
+								   (approved-portal-design.css:236-245): flat, no glow. It
+								   painted the prototype's champagne gradient with a gold
+								   glow, the one glowing button left on a portal page. Not
+								   `iz-btn-gold` itself: without `.iz-btn` that class keeps
+								   the prototype's glow (prototype-theme.css:641-647), and
+								   `.iz-btn` would make this row button 46px tall. */
+									className="rounded-lg border border-[var(--iz-act-line)] bg-[var(--iz-act)] px-3 py-1.5 text-xs font-bold text-white transition-colors enabled:hover:bg-[var(--iz-act-hover)] disabled:opacity-60"
 								>
 									{isMarking ? t.payroll.adding : t.payroll.addToVoucher}
 								</button>

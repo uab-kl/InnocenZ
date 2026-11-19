@@ -936,7 +936,7 @@ function SignupDetailPanel({
 
 	return (
 		<>
-			<div className="iz-approvals-detail-head">
+			<div key={signup.id} className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
 					<ApprovalsAvatar
 						name={pendingFloorNickname(signup)}
@@ -1178,7 +1178,7 @@ function LinkRequestDetailPanel({
 	const prPhoto = usePrPhotoById()(link.prId, link.prName);
 	return (
 		<>
-			<div className="iz-approvals-detail-head">
+			<div key={link.id} className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
 					<ApprovalsAvatar
 						name={link.prName}
@@ -1277,7 +1277,7 @@ function LeaveDetailPanel({
 
 	return (
 		<>
-			<div className="iz-approvals-detail-head">
+			<div key={req.id} className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
 					<ApprovalsAvatar
 						name={prName}
@@ -2448,6 +2448,9 @@ function AgencyPending() {
 							</span>
 							<input
 								className="iz-field-input !text-sm"
+								// The visible label above is a <span>, so name the field
+								// for screen readers (signed-in panel sweep, 19 Nov 2026).
+								aria-label={INVITE_FIELD_LABEL[field](t)}
 								value={invite[field]}
 								aria-required={field === "mobile" || undefined}
 								onChange={(e) => {

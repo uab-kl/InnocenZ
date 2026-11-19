@@ -34,7 +34,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = path.join(
@@ -67,39 +66,80 @@ function databaseUrl() {
 	return line.slice('DATABASE_URL='.length).trim();
 }
 
+/**
+ * The SAME rows `roleHasPermission` answers from — nothing more.
+ *
+ * ⚠️ This read used to ignore two of the server's conditions, so the snapshot
+ * could list a grant the API refuses:
+ *   · status — the server asks for an `active` permission and module, so a
+ *     deactivated one kept its button on screen and collected a 403;
+ *   · portal — the server asks for a module on the ROLE'S OWN portal
+ *     (`settings`, `dashboard`, `history`, `billing`, `special_service` are a
+ *     separate row per portal), so a grant on the other portal's twin would
+ *     have been counted here and refused there.
+ * Both were byte-identical on 12 Nov 2026 (146 rows either way).
+ *
+ * The ROLE's status is read rather than filtered: see `build()`. Exported so
+ * `sync-rbac-matrix.test.ts` can pin these conditions without a database.
+ */
+export const GRANTS_SQL = `
+	select p.code as portal, r.role_name as role, r.status as role_status,
+	       m.module_key || ':' || pe.permission_type as grant
+	from main.role r
+	join main.role_permission rp on rp.role_id = r.id
+	join main.m_permission pe on pe.id = rp.permission_id
+	     and pe.status = 'active'
+	join main.m_module m on m.id = pe.module_id
+	     and m.status = 'active'
+	     and m.portal_id = r.portal_id
+	join main.portal p on p.id = r.portal_id
+	where p.code in ('outlet', 'agency')
+	order by 1, 2, 4`;
+
 async function readGrants() {
+	// Loaded here, not at the top, so importing this file for its test needs
+	// neither a database nor the driver.
+	const { default: pg } = await import('pg');
 	const client = new pg.Client({ connectionString: databaseUrl() });
 	await client.connect();
 	try {
-		const { rows } = await client.query(`
-			select p.code as portal, r.role_name as role,
-			       m.module_key || ':' || pe.permission_type as grant
-			from main.role r
-			join main.role_permission rp on rp.role_id = r.id
-			join main.m_permission pe on pe.id = rp.permission_id
-			join main.m_module m on m.id = pe.module_id
-			join main.portal p on p.id = r.portal_id
-			where p.code in ('outlet', 'agency')
-			order by 1, 2, 3`);
+		const { rows } = await client.query(GRANTS_SQL);
 		return rows;
 	} finally {
 		await client.end();
 	}
 }
 
-function build(rows, portal, lanes) {
+/**
+ * ⚠️ A SWITCHED-OFF LANE ROLE STOPS THE SYNC — on purpose, as an alarm.
+ *
+ * The server refuses every request from a lane whose role is not `active`
+ * (`roleHasPermission` filters on it), so that lane can do NOTHING. Writing it
+ * as `[]` would hide a whole lane being locked out behind a green sync, and
+ * filtering the role away would trip the "missing lane" refusal below with the
+ * wrong reason. Naming it is the useful answer. Remember `init-roles` switches
+ * seeded roles back on at every `migrate:deploy`.
+ */
+export function build(rows, portal, lanes) {
 	const byRole = new Map();
+	const inactive = new Map();
 	for (const row of rows) {
 		if (row.portal !== portal) continue;
+		if (row.role_status !== 'active') inactive.set(row.role, row.role_status);
 		if (!byRole.has(row.role)) byRole.set(row.role, new Set());
 		byRole.get(row.role).add(row.grant);
 	}
 	const out = {};
 	for (const [lane, roleName] of Object.entries(lanes)) {
+		if (inactive.has(roleName)) {
+			throw new Error(
+				`The '${roleName}' role on the ${portal} portal has status '${inactive.get(roleName)}' — the server refuses every request from that lane while it does. Reactivate the role, then sync. Refusing to write a snapshot that would hide a locked-out lane.`,
+			);
+		}
 		const grants = byRole.get(roleName);
 		if (!grants) {
 			throw new Error(
-				`No '${roleName}' role row on the ${portal} portal — the database is missing a lane the portals render. Refusing to write a snapshot that would silently strip it.`,
+				`No '${roleName}' role row with an active grant on the ${portal} portal — the database is missing a lane the portals render. Refusing to write a snapshot that would silently strip it.`,
 			);
 		}
 		out[lane] = [...grants].sort();
@@ -137,35 +177,46 @@ ${block('OUTLET_ROLE_GRANTS', outlet)}
 ${block('AGENCY_ROLE_GRANTS', agency)}`;
 }
 
-const check = process.argv.includes('--check');
-const rows = await readGrants();
-const next = render(
-	build(rows, 'outlet', OUTLET_LANES),
-	build(rows, 'agency', AGENCY_LANES),
-);
-const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : null;
+export { AGENCY_LANES, OUTLET_LANES };
 
-// Compared with line endings normalised: git may check the file out as CRLF,
-// and a snapshot that is "stale" only in its newlines is not stale.
-const same = current !== null && current.replace(/\r\n/g, '\n') === next;
+async function main() {
+	const check = process.argv.includes('--check');
+	const rows = await readGrants();
+	const next = render(
+		build(rows, 'outlet', OUTLET_LANES),
+		build(rows, 'agency', AGENCY_LANES),
+	);
+	const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : null;
 
-if (check) {
+	// Compared with line endings normalised: git may check the file out as CRLF,
+	// and a snapshot that is "stale" only in its newlines is not stale.
+	const same = current !== null && current.replace(/\r\n/g, '\n') === next;
+
+	if (check) {
+		if (same) {
+			console.log('[rbac] the portal matrix matches the database.');
+			process.exit(0);
+		}
+		console.error(
+			current === null
+				? `[rbac] STALE — ${path.relative(ROOT, OUT)} does not exist.`
+				: `[rbac] STALE — ${path.relative(ROOT, OUT)} disagrees with the database.`,
+		);
+		console.error('[rbac] run: node tools/scripts/sync-rbac-matrix.mjs');
+		process.exit(1);
+	}
+
 	if (same) {
-		console.log('[rbac] the portal matrix matches the database.');
+		console.log('[rbac] already up to date — nothing written.');
 		process.exit(0);
 	}
-	console.error(
-		current === null
-			? `[rbac] STALE — ${path.relative(ROOT, OUT)} does not exist.`
-			: `[rbac] STALE — ${path.relative(ROOT, OUT)} disagrees with the database.`,
-	);
-	console.error('[rbac] run: node tools/scripts/sync-rbac-matrix.mjs');
-	process.exit(1);
+	fs.writeFileSync(OUT, next);
+	console.log(`[rbac] wrote ${path.relative(ROOT, OUT)} from the live database.`);
 }
 
-if (same) {
-	console.log('[rbac] already up to date — nothing written.');
-	process.exit(0);
+// Run only as the CLI (`pnpm rbac:sync` / `rbac:check`), never on import.
+// Compared case-insensitively: Windows may spell the drive letter either way.
+const invokedAs = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (invokedAs.toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()) {
+	await main();
 }
-fs.writeFileSync(OUT, next);
-console.log(`[rbac] wrote ${path.relative(ROOT, OUT)} from the live database.`);

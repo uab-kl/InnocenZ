@@ -112,6 +112,12 @@ export interface ModuleApiResponse {
 export interface ModulesQueryParams {
 	moduleName?: string;
 	status?: RbacStatus;
+	/**
+	 * Narrow to one portal's modules. The CODE, not the id — the console knows
+	 * modules by portal code, and `fetchModules` resolves it to the id the API
+	 * filters on, so no caller has to carry a uuid around.
+	 */
+	portalCode?: PortalCode;
 	page?: number;
 	pageSize?: number;
 }

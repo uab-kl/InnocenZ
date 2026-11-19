@@ -4,7 +4,9 @@ import type { MemberSubscriptionRepositoryClass } from '@/features/member-subscr
 import type { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import type { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
 import { logger } from '@/util/logger.js';
+import { db } from '@/db/index.js';
 import type { DbTransaction } from '@/types/db-transaction.js';
+import { lockLiveAddonRows } from '@/features/member-subscription/live-lane-guard.js';
 import {
   type AppliedPlanChange,
   type LedgerRequestFacts,
@@ -104,6 +106,7 @@ export class AdminRequestLedger {
       const amount = record.quotedAmount;
 
       if (record.type === 'pos_integration_quote') {
+        const subscriber = { subscriberType: record.subscriberType, subscriberId: record.subscriberId };
         // A POS request that names a PLAN is the venue asking to come OFF the
         // add-on and go back to plan-only billing. Resolving it ends the add-on
         // rather than starting another one — otherwise "switch back" would add a
@@ -112,25 +115,20 @@ export class AdminRequestLedger {
           ? await this.subscriptionRepository.getSubscriptionById(record.requestedPlanId)
           : null;
         if (requested && requested.kind === 'plan') {
-          const { records: live } = await this.memberSubscriptionRepository.listPaginated({
-            filter: {
-              subscriberType: record.subscriberType,
-              subscriberId: record.subscriberId,
-              status: 'active',
-              kind: 'addon',
-            },
-            page: 1,
-            pageSize: 20,
+          // One transaction under the lane lock — see the note on the re-quote
+          // below; the same two faults applied here.
+          await db.transaction(async (tx) => {
+            const live = await lockLiveAddonRows(tx, subscriber);
+            const endedAt = new Date();
+            for (const row of live) {
+              const ended = await this.memberSubscriptionRepository.update(
+                row.id,
+                { status: 'cancelled', endedAt, adminRequestId: record.id, updatedBy: actor },
+                tx,
+              );
+              if (!ended) throw new globalThis.Error(`[applyResolvedPriceToLedger] could not end add-on row ${row.id}`);
+            }
           });
-          const endedAt = new Date();
-          for (const row of live) {
-            await this.memberSubscriptionRepository.update(row.id, {
-              status: 'cancelled',
-              endedAt,
-              adminRequestId: record.id,
-              updatedBy: actor,
-            });
-          }
           return;
         }
 
@@ -142,42 +140,58 @@ export class AdminRequestLedger {
           logger.warn('[AdminRequestController] POS Integration add-on missing from the catalog');
           return;
         }
-        const { records: existing } = await this.memberSubscriptionRepository.listPaginated({
-          filter: {
-            subscriberType: record.subscriberType,
-            subscriberId: record.subscriberId,
-            status: 'active',
-            kind: 'addon',
-          },
-          page: 1,
-          pageSize: 20,
-        });
+        /*
+         * ⚠️ EXPIRE-THEN-CREATE IS ONE TRANSACTION, UNDER THE LANE LOCK
+         * (12 Nov 2026). It was a list, an update loop and an insert on three
+         * separate round trips, with two faults:
+         *
+         *  - it listed `status = 'active'` only, so a `past_due` add-on — still
+         *    LIVE by the shared definition — survived and sat beside the new
+         *    line;
+         *  - `update` swallows its errors into null, so a failed expire still
+         *    let the create run: two live lines for one product.
+         *
+         * Now the live rows are read under the same lock a plan switch takes,
+         * a failed expire throws (rolling the whole re-quote back), and the new
+         * line is opened in the same transaction. Proration runs AFTER the
+         * commit, as `applyPlanChangeToLedger` does: it writes invoice lines
+         * referencing the new row from its own connection.
+         */
         const now = new Date();
-        for (const row of existing) {
-          await this.memberSubscriptionRepository.update(row.id, {
-            status: 'expired',
-            endedAt: now,
-            updatedBy: actor,
-          });
-        }
+        const { existing, createdAddon } = await db.transaction(async (tx) => {
+          const live = await lockLiveAddonRows(tx, subscriber);
+          for (const row of live) {
+            const ended = await this.memberSubscriptionRepository.update(
+              row.id,
+              { status: 'expired', endedAt: now, updatedBy: actor },
+              tx,
+            );
+            if (!ended) throw new globalThis.Error(`[applyResolvedPriceToLedger] could not expire add-on row ${row.id}`);
+          }
+          const created = await this.memberSubscriptionRepository.create(
+            {
+              subscriberType: subscriber.subscriberType,
+              subscriberId: subscriber.subscriberId,
+              subscriberName: record.subscriberName,
+              subscriptionId: addon.id,
+              planName: addon.name,
+              amount,
+              billingCycle: addon.billingCycle,
+              status: 'active',
+              startedAt: now,
+              adminRequestId: record.id,
+              createdBy: actor,
+              updatedBy: actor,
+            },
+            tx,
+          );
+          if (!created) throw new globalThis.Error('[applyResolvedPriceToLedger] could not open the add-on line');
+          return { existing: live, createdAddon: created };
+        });
         // What this add-on cost before the re-quote — the row being closed on
         // the same product. Absent when the add-on is being taken for the first
         // time, in which case there is nothing to price against.
         const previousAddon = existing.find((row) => row.subscriptionId === addon.id) ?? null;
-        const createdAddon = await this.memberSubscriptionRepository.create({
-          subscriberType: record.subscriberType,
-          subscriberId: record.subscriberId,
-          subscriberName: record.subscriberName,
-          subscriptionId: addon.id,
-          planName: addon.name,
-          amount,
-          billingCycle: addon.billingCycle,
-          status: 'active',
-          startedAt: now,
-          adminRequestId: record.id,
-          createdBy: actor,
-          updatedBy: actor,
-        });
         // Owner, 28 Aug: add-ons follow the same rule as plans. A re-quote
         // upward mints the difference as an upgrade line on the POS lane's
         // current period; downward, the difference is a credit taken off the

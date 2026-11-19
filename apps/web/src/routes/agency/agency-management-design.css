@@ -35,7 +35,7 @@
 	max-width: 100%;
 	padding: 5px;
 	border: 1px solid var(--iz-line);
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-bg2);
 }
 
@@ -43,7 +43,7 @@
 	min-height: 44px;
 	padding: 10px 20px;
 	border: 0;
-	border-radius: 7px;
+	border-radius: var(--iz-radius-s, 6px);
 	background: transparent;
 	color: var(--iz-muted);
 	font: inherit;
@@ -87,7 +87,7 @@
 	gap: 20px;
 	padding: 24px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 
@@ -118,7 +118,7 @@
 
 .iz-agency-settings .iz-profile-section {
 	padding: 8px 24px;
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 
@@ -143,7 +143,7 @@
 
 [data-portal="agency"] .iz-agency-settings .iz-profile-field__label {
 	font-size: var(--iz-fs-tiny);
-	font-weight: 500;
+	font-weight: 600;
 	letter-spacing: 0;
 	text-transform: none;
 }
@@ -217,7 +217,7 @@
 	padding: 10px 15px;
 	font-size: var(--iz-fs-body);
 	line-height: 1.5;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 	border: 1px solid var(--iz-line);
 	white-space: normal;
@@ -235,7 +235,7 @@
 	margin: 0;
 	padding: 20px;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 
@@ -291,7 +291,7 @@
 	:is(.iz-pr-manage-card, .iz-outlet-manage-card) {
 	min-width: 0;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	box-shadow: none;
 	overflow: hidden;
@@ -389,7 +389,7 @@
 	padding: 12px 14px;
 	margin-top: 20px;
 	border: 1px solid var(--iz-line);
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 	font-size: var(--iz-fs-body);
 	line-height: 1.5;
 	color: var(--iz-txt);
@@ -403,7 +403,7 @@
 	) {
 	min-width: 0;
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 	box-shadow: none;
 }
@@ -439,7 +439,7 @@
 .iz-portal[data-portal="agency"] .iz-approvals-layout {
 	grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
 	border: 1px solid var(--iz-line);
-	border-radius: 13px;
+	border-radius: var(--iz-radius-l, 14px);
 	background: var(--iz-panel);
 }
 
@@ -468,12 +468,12 @@
 	font-size: var(--iz-fs-body);
 	line-height: 1.4;
 	white-space: normal;
-	border-radius: 8px;
+	border-radius: var(--iz-radius-m, 10px);
 }
 
 .iz-portal[data-portal="agency"] .iz-approvals-list-item {
 	padding: 16px;
-	border-radius: 10px;
+	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-panel);
 }
 

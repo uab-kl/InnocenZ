@@ -1,4 +1,11 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+
+// The sweep's audit row is stubbed: these tests are the pure rule, and the
+// helper's own contract lives in audit-log.system.test.ts.
+vi.mock('@/features/audit-log/audit-log.system.js', () => ({
+  writeSystemAudit: vi.fn(async () => false),
+}));
+
 import { NO_SHOW_GRACE_HOURS, nextStartAfter, noShowCutoff } from './no-show-sweep.job';
 
 /**
