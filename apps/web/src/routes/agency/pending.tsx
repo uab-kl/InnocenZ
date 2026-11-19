@@ -2448,6 +2448,9 @@ function AgencyPending() {
 							</span>
 							<input
 								className="iz-field-input !text-sm"
+								// The visible label above is a <span>, so name the field
+								// for screen readers (signed-in panel sweep, 19 Nov 2026).
+								aria-label={INVITE_FIELD_LABEL[field](t)}
 								value={invite[field]}
 								aria-required={field === "mobile" || undefined}
 								onChange={(e) => {

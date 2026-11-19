@@ -11855,7 +11855,9 @@ button.iz-pr-offer-row:hover {
 }
 .iz-sheet-head h3 {
 	font-family: var(--iz-font);
-	font-size: 22px;
+	/* A panel's title is a section title: the ladder's 20 (was a raw 22 —
+	   signed-in panel sweep, 19 Nov 2026, agency "Add PR"). */
+	font-size: var(--iz-fs-title);
 	font-weight: 700;
 	letter-spacing: -0.35px;
 	color: var(--iz-txt);
@@ -11904,7 +11906,9 @@ button.iz-pr-offer-row:hover {
 .iz-field-label {
 	display: block;
 	font-family: var(--iz-font);
-	font-size: 12px;
+	/* 16 everywhere — panels render outside `.iz-portal > main`, where the
+	   caption override did not reach, so their labels stayed a raw 12. */
+	font-size: var(--iz-fs-label);
 	font-weight: 700;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
