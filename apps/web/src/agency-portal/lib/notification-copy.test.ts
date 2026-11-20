@@ -738,6 +738,7 @@ const BACKEND_KINDS = [
 	"subscription_tier_weekly",
 	"subscription_invoice_opened",
 	"subscription_autopay_failed",
+	"pr_detach_decided",
 ] as const;
 
 const ONE_PER_KIND: Record<NotificationRecord["kind"], Row> = {
@@ -860,6 +861,12 @@ const ONE_PER_KIND: Record<NotificationRecord["kind"], Row> = {
 		title: "Automatic payment failed: RM 10.00",
 		body: "",
 		payload: { amount: "10.00", currency: "MYR" },
+	},
+	pr_detach_decided: {
+		kind: "pr_detach_decided",
+		title: "Detach approved",
+		body: "Vicky Tan is detached from Atlas Agency.",
+		payload: { decision: "approved", prName: "Vicky Tan" },
 	},
 };
 

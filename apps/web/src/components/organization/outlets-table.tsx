@@ -135,7 +135,7 @@ export function OutletsTable({
 								>
 									<SelectValue placeholder={t.admin.filterByStatus} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 									{ORG_STATUSES.map((status) => (
 										<SelectItem key={status} value={status}>

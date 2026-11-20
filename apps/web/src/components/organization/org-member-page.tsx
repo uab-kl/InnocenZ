@@ -14,6 +14,7 @@ import {
 	User,
 	UserCog,
 } from "lucide-react";
+import { MEMBER_PAGE_FROM_LEGACY } from "@/components/admin/admin-trail";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import {
 	DetailsHero,
 	SystemInfoCard,
 } from "./details-sheet-parts";
+import type { MemberPageSearch } from "./member-page-target";
 import { memberStatusLabel } from "./org-status";
 import {
 	AGENCY_TEAM_GROUPS,
@@ -70,10 +72,13 @@ export function OrgMemberPage({
 	orgKind,
 	orgId,
 	userId,
+	from,
 }: {
 	orgKind: OrgKind;
 	orgId: string;
 	userId: string;
+	/** Which list opened the page — `?from=` on the route. */
+	from?: MemberPageSearch["from"];
 }) {
 	const { t } = usePortalLocale();
 	const { logout } = useAuth();
@@ -164,9 +169,19 @@ export function OrgMemberPage({
 		account?.phoneNum ||
 		t.adminUsers.actorUnknown;
 
-	const backTo = isAgency
-		? "/admin/user-management/agency"
-		: "/admin/user-management/outlet";
+	/*
+	 * Back to the list that opened the page. It pointed at the Organisations
+	 * list, which has no way in here at all: the only doorways are the Members
+	 * lists and Legacy Member, so Back took the admin somewhere they had never
+	 * been, under a rail item and crumb that named it too (design review, 20 Nov
+	 * 2026). The rail and the trail now file this page by the same `from`.
+	 */
+	const backTo =
+		from === MEMBER_PAGE_FROM_LEGACY
+			? "/admin/user-management/legacy-member"
+			: isAgency
+				? "/admin/user-management/agency-team"
+				: "/admin/user-management/outlet-team";
 
 	const portalName = (portalId: string | null) =>
 		portalsQuery.data?.find((p) => p.id === portalId)?.name ?? null;
@@ -181,7 +196,7 @@ export function OrgMemberPage({
 				description={t.adminOrg.memberPageHint}
 				actions={
 					<Button variant="outline" size="sm" asChild>
-						<Link to={backTo}>
+						<Link to={backTo} search={{}}>
 							<ArrowLeft className="mr-2 h-4 w-4" />
 							{t.common.back}
 						</Link>

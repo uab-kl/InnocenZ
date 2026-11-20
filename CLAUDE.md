@@ -246,6 +246,16 @@ and `TEST_SCRIPT.md` **§11 What's new** — into
   (verified, sealed wages, totals, signed/paid), amber = waiting — pending AND approved
   share it deliberately, white = mixed states, red = disputed/deductions. Mobile authority:
   `cellReviewTone()` in `receipt-review.ts`; web: `STATUS_VARIANT` in AgencyReceiptsPanel.
+- **WHAT KIND OF THING GETS WHAT COLOUR — web portals (owner, 20 Nov 2026: "what kind of
+  things what colour remember · remember static dont be like too messy colour").**
+  Anything you click or choose (buttons, selects, date pickers, options, tabs, links,
+  collapsible headers, back/Return, focus, ticks, coloured borders) = **champagne** — the
+  one action solid `#cbb089` with dark ink, every other control outlined, a selection the
+  soft tint `#3e3732`. Icons and charts = **neon**. Money with a state = green / amber /
+  red (the code above); money with none (a price, a total) = sky `--iz-money`. **Everything
+  static — text, cards, labels, unselected options — stays neutral; never colour it.** Ask
+  "can you press it?" before giving anything colour. Lives in `styles/afterglow.css`;
+  DESIGN.md §0 has the table; verify with a computed-colour audit of every control.
 - **Real outlet/agency logins: NEVER leave Velvet/Atlas demo data on screen.**
   Use `BLANK_OUTLET_*` / `BLANK_AGENCY_*` in `buildBlankPortalReset` and Settings
   overlays — not `DEFAULT_*`. See `.cursor/rules/no-demo-data-on-real-sessions.mdc`.
@@ -324,6 +334,10 @@ and `TEST_SCRIPT.md` **§11 What's new** — into
   instruction. **Two accepted exceptions only:** the brand wordmark (a logo) and the number
   inside a small count badge (a 16px digit bursts the pill). The FONT stays per portal —
   admin Manrope, agency/outlet Arial — that is each one's approved design, not a size.
+  ⚠️ **Superseded 20 Nov 2026 by the owner ("Afterglow Vivid"):** all three portals now use
+  **Sora** for text and **Newsreader** for the page title (`--iz-font-title`), with the night
+  colours in `apps/web/src/styles/afterglow.css` (DESIGN.md §0). The ladder above is unchanged.
+  Do not "restore" Arial / Manrope or the plum + lavender palette from the notes in this file.
   ⚠️ Verify by MEASURING: `getComputedStyle` over every visible text element of each lane's
   pages, listing any size outside 16/20/24 — the check reads source and cannot see a
   `22px !important` override or a label sized by seven competing rules.

@@ -138,7 +138,7 @@ export function ModulesTable({
 								>
 									<SelectValue placeholder={t.rbac.filterByStatus} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">{t.rbac.allStatusCaps}</SelectItem>
 									<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
 									<SelectItem value="inactive">
@@ -165,7 +165,7 @@ export function ModulesTable({
 								>
 									<SelectValue placeholder={t.rbac.filterByPortal} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">{t.rbac.allPortals}</SelectItem>
 									<SelectItem value="admin">{t.rbac.portalAdmin}</SelectItem>
 									<SelectItem value="agency">{t.rbac.portalAgency}</SelectItem>

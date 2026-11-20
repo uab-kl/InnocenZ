@@ -1,9 +1,20 @@
 ---
 name: no-account-existence-leaks
-description: "Owner decision (29 Sep 2026, built 30 Sep): public sign-in and sign-up never say whether an email, phone or ID number has an account — one sentence each, same bcrypt work, a refusal floor, the same lockout for unknown identifiers; only a proved phone or emailed-code email may be named"
+description: "SIGN-UP / reset never say whether an email, phone or ID has an account (29 Sep 2026). SIGN-IN was REVERSED 19 Nov 2026 by the owner: it now says 'Account not found — sign up' vs 'Wrong password'"
 metadata:
   type: feedback
 ---
+
+**⚠️ 19 Nov 2026 — SIGN-IN REVERSED (owner's choice, after being shown the trade-off).** Owner:
+*"if no dont say wrong say account no found , ask user to sign up as outlet or pr agency"*; offered
+"keep one message + add a sign-up prompt" (safer) vs "name them apart", chose **"2"**. `POST /auth/login`
+now answers "Account not found — please sign up as an Outlet or PR Agency" (email) / "Account not
+found — please sign up first" (phone) for no account or a password-less stub, and "Wrong password" for
+an existing account. Kept: 401, one bcrypt compare, the 500 ms floor, both lockouts, inactive /
+suspended said only after a right password. **Everything below still holds for SIGN-UP, password
+reset and the emailed codes** — do not "fix" sign-in back to one answer, and do not spread the
+reversal to sign-up without the owner. Accepted risk: sign-in can be used to test whether an email or
+phone has an account.
 
 **Owner, 29 Sep 2026, chose "General message, both"; the go-ahead to edit `auth.controller.ts` came
 30 Sep ("for 1 continue with the general sign-up/sign-in messages").** Built 30 Sep 2026.

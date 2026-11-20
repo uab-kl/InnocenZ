@@ -290,7 +290,7 @@ function MemberSignupPage() {
 					</p>
 					<Link
 						to="/login"
-						className="mt-2 inline-flex items-center justify-center rounded-lg bg-royal-gold px-5 py-3 text-sm font-semibold text-[#1a1726]"
+						className="auth-act mt-2 inline-flex items-center justify-center rounded-lg bg-royal-gold px-5 py-3 text-sm font-semibold text-[#1a1726]"
 					>
 						{copy.goToLogin}
 					</Link>
@@ -350,7 +350,7 @@ function MemberSignupPage() {
 							<button
 								type="button"
 								onClick={() => photoInput.current?.click()}
-								className="mt-1 rounded-lg border border-royal-gold/25 bg-background/40 px-3 py-2 text-sm text-foreground"
+								className="auth-outline mt-1 rounded-lg border border-royal-gold/25 bg-background/40 px-3 py-2 text-sm text-foreground"
 							>
 								{copy.choosePhoto}
 							</button>
@@ -505,7 +505,7 @@ function MemberSignupPage() {
 					<button
 						type="submit"
 						disabled={submitMutation.isPending}
-						className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-royal-gold px-4 py-3 text-sm font-semibold text-[#1a1726] disabled:opacity-50"
+						className="auth-act inline-flex w-full items-center justify-center gap-2 rounded-lg bg-royal-gold px-4 py-3 text-sm font-semibold text-[#1a1726] disabled:opacity-50"
 					>
 						{submitMutation.isPending ? (
 							<>
@@ -832,7 +832,7 @@ function KindTile({
 			aria-checked={selected}
 			onClick={onClick}
 			className={cn(
-				"flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-5 text-center transition-all",
+				"auth-choice flex flex-col items-center justify-center gap-2 rounded-xl border px-3 py-5 text-center transition-all",
 				selected
 					? "border-royal-gold/60 bg-royal-gold/10 shadow-glow-gold"
 					: "border-royal-gold/20 bg-background/40 hover:border-royal-gold/35",
@@ -874,7 +874,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 		 * component mounted and the page rendered flat, which is exactly what it
 		 * did until the owner asked about the background.
 		 */
-		<div className="login-page signup-page relative flex min-h-svh w-full flex-col">
+		<div className="login-page signup-page auth-night relative flex min-h-svh w-full flex-col">
 			<LoginAmbience />
 
 			{/* The same overlay rail as /signup and /login: back link far left,

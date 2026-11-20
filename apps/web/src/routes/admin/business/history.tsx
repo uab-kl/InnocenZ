@@ -359,7 +359,7 @@ function HistoryPage() {
 									>
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="current">
 											{t.adminBusiness.viewCurrentPlan}
 										</SelectItem>
@@ -382,7 +382,7 @@ function HistoryPage() {
 									>
 										<SelectValue placeholder={t.admin.allStatus} />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 										<SelectItem value="active">
 											{statusLabels.active(t)}

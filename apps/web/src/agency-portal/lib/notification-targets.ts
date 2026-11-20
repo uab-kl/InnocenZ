@@ -65,6 +65,8 @@ const KIND_MAP: Record<NotificationKind, OpsNotificationKind> = {
 	subscription_tier_weekly: "subscription_tier_weekly",
 	subscription_invoice_opened: "subscription_tier_weekly",
 	subscription_autopay_failed: "subscription_tier_weekly",
+	// A membership decision, like a join or a departure — the "Agency" chip.
+	pr_detach_decided: "agency_join_resolved",
 };
 
 /**
@@ -138,6 +140,14 @@ export function notificationTarget(
 				return { href: "/agency/roster" };
 			case "agency_join_resolved":
 				return { href: "/agency/pending" };
+			// The PR the admin answered about, opened on Manage PR. Approved, the
+			// PR is off the roster and the page shows the list instead.
+			case "pr_detach_decided": {
+				const pr = payloadText(record, "prId");
+				return pr
+					? { href: "/agency/prs", search: { pr } }
+					: { href: "/agency/prs" };
+			}
 			// "Review it on Approvals → MC/Leaves": the tab, not the Approvals
 			// page's first tab (Agency-Tied sign-ups), which is where it opened.
 			case "leave_requested":

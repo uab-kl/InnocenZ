@@ -41,6 +41,14 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			],
 			links: [
 				{ rel: "stylesheet", href: appCss },
+				// The portals' Afterglow faces (owner, 20 Nov 2026): Sora for text,
+				// Newsreader for page titles. Its own link, so the broken @import at
+				// the top of styles.css (left as is: "leave the fonts") cannot take
+				// these down with it.
+				{
+					rel: "stylesheet",
+					href: "https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap",
+				},
 				{ rel: "icon", href: "/assets/innocenz-logo.png", type: "image/png" },
 				{ rel: "apple-touch-icon", href: "/assets/innocenz-logo.png" },
 			],

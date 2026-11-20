@@ -56,6 +56,7 @@ function enrichedRow(userId: string, name: string) {
     email: null,
     phoneNum: null,
     idNo: null,
+    approvedAt: new Date('2026-09-02T00:00:00Z'),
     createdAt: new Date('2026-09-01T00:00:00Z'),
     updatedAt: new Date('2026-09-01T00:00:00Z'),
     createdBy: 'seed',
@@ -81,6 +82,7 @@ function prRow(userId: string, name: string) {
     phone: null,
     email: null,
     icNo: null,
+    approvedAt: new Date('2026-09-02T00:00:00Z'),
     createdAt: new Date('2026-09-01T00:00:00Z'),
     updatedAt: new Date('2026-09-01T00:00:00Z'),
     createdBy: 'seed',
@@ -236,6 +238,19 @@ describe('GET /pr — kpiScore', () => {
     expect(loadPrKpiScores).not.toHaveBeenCalled();
     expect(res.body.data).toHaveLength(2);
     for (const row of res.body.data) expect(row).not.toHaveProperty('kpiScore');
+  });
+
+  // When a PR joined an agency (0171) is the agency's own fact: its roster and
+  // the admin read it (the one-year detach rule), a venue booking the PR does not.
+  it('approvedAt: on the agency roster, never on an outlet row', async () => {
+    const agency = fakeResponse();
+    await build('agency').list(request('agency'), agency);
+    for (const row of agency.body.data) expect(row).toHaveProperty('approvedAt');
+
+    const outlet = fakeResponse();
+    await build('outlet').list(request('outlet'), outlet);
+    expect(outlet.body.data).toHaveLength(2);
+    for (const row of outlet.body.data) expect(row).not.toHaveProperty('approvedAt');
   });
 
   it('the instrument: the formula check does catch a leaked component', () => {

@@ -37,6 +37,7 @@ const ZERO: AdminTodoCounts = {
 	outlets: 0,
 	planRequests: 0,
 	planChanges: 0,
+	prDetach: 0,
 	jobs: 0,
 };
 const t = translations.en;
@@ -78,6 +79,23 @@ describe("AdminTodoPanel", () => {
 		expect(links[1].className).not.toContain("admin-todo__row--first");
 		// The count is on the row, not just implied by its presence.
 		expect(links[1].textContent).toContain("3");
+	});
+
+	// A waiting PR detach request (0171) has its own row and page — never the
+	// Plan Request row, whose page does not list it.
+	it("draws the PR detach row after the money rows, linking to its own page", () => {
+		state = {
+			counts: { ...ZERO, planRequests: 1, prDetach: 2 },
+			loading: false,
+		};
+		render(<AdminTodoPanel />);
+		const links = screen.getAllByRole("link");
+		expect(links.map((a) => a.getAttribute("href"))).toEqual([
+			"/admin/service/requests",
+			"/admin/service/pr-detach",
+		]);
+		expect(links[1].textContent).toContain(t.todo.adminPrDetachTitle);
+		expect(links[1].textContent).toContain("2");
 	});
 
 	// Rows that HAVE arrived still show, even while another queue is loading.

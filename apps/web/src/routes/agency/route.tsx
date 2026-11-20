@@ -41,6 +41,8 @@ import "@/styles/portal-interaction.css";
 import "@/styles/portal-tabs.css";
 // Motion that guides — agency + outlet only. See agency-portal/portal-motion.css.
 import "@agency-portal/portal-motion.css";
+// The night look, Afterglow Vivid (owner, 20 Nov 2026) — last, so it wins.
+import "@/styles/afterglow.css";
 
 export const Route = createFileRoute("/agency")({
 	// Agency-only tree: admin/outlet sessions are sent to their own portal.

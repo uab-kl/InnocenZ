@@ -21,6 +21,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { actorText } from "@/components/admin/actor-name";
 import { AdminFilters } from "@/components/admin/admin-filters";
+import { MEMBER_PAGE_FROM_LEGACY } from "@/components/admin/admin-trail";
+import { EmailLine } from "@/components/admin/email-line";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import {
 	AgencyDetailsSheet,
@@ -543,10 +545,19 @@ function mapDisabledAccountRow(
 	};
 }
 
-/** A `member` row's View target; null for every other kind of row. */
+/**
+ * A `member` row's View target; null for every other kind of row. It says it
+ * came from here, so the member page files itself under Legacy Member in the
+ * rail and the trail, and Back returns here.
+ */
 function legacyMemberTarget(row: LegacyRow) {
 	return row.role === "member"
-		? memberPageTarget(row.orgKind, row.orgId, row.userId)
+		? memberPageTarget(
+				row.orgKind,
+				row.orgId,
+				row.userId,
+				MEMBER_PAGE_FROM_LEGACY,
+			)
 		: null;
 }
 
@@ -1072,7 +1083,7 @@ function LegacyMemberPage() {
 									</SelectTrigger>
 									{/* Every `value` here is the stored role the filter compares
 								    against — only the labels move. */}
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="all">{t.adminUsers.allRoles}</SelectItem>
 										<SelectItem value="agency">
 											{t.adminUsers.roleAgency}
@@ -1104,7 +1115,7 @@ function LegacyMemberPage() {
 									</SelectTrigger>
 									{/* `name` / `createdAt` / `updatedAt` are the sort keys the
 								    comparator switches on — labels only. */}
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="name">{t.admin.colName}</SelectItem>
 										<SelectItem value="createdAt">
 											{t.admin.colCreated}
@@ -1129,7 +1140,7 @@ function LegacyMemberPage() {
 									>
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="asc">
 											{t.adminUsers.ascending}
 										</SelectItem>
@@ -1175,13 +1186,24 @@ function LegacyMemberPage() {
 					<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
 						<Table className="iz-admin-management-table">
 							<TableHeader>
+								{/*
+								  `table-layout: fixed` split the width evenly, and an even
+								  fifth broke addresses mid-word. From xl the other columns take
+								  what their content needs (a code on one line, the date on one
+								  line) and Contact, left without a width, takes the rest.
+								  Narrower, a long address ends in "…" (EmailLine) instead.
+								*/}
 								<TableRow>
-									<TableHead>
+									<TableHead className="xl:w-[18%]">
 										{t.admin.colName} / {t.adminUsers.colCodeId}
 									</TableHead>
 									<TableHead>{t.adminUsers.colContact}</TableHead>
-									<TableHead>{t.admin.colStatus}</TableHead>
-									<TableHead>{t.adminUsers.colUpdated}</TableHead>
+									<TableHead className="xl:w-[18%]">
+										{t.admin.colStatus}
+									</TableHead>
+									<TableHead className="xl:w-[21%]">
+										{t.adminUsers.colUpdated}
+									</TableHead>
 									<TableHead>{t.admin.colActions}</TableHead>
 								</TableRow>
 							</TableHeader>
@@ -1270,11 +1292,30 @@ function LegacyMemberPage() {
 														</Badge>
 													</div>
 												</TableCell>
-												<TableCell data-label={t.adminUsers.colContact}>
-													{row.contact}
+												<TableCell
+													data-label={t.adminUsers.colContact}
+													className="max-md:col-span-full"
+												>
+													{row.contact.includes("@") ? (
+														<EmailLine email={row.contact} />
+													) : (
+														row.contact
+													)}
 													{row.detail && row.detail !== row.contact && (
 														<div className="iz-admin-record-secondary">
-															{row.detail}
+															{/* "email · phone" one per line, so the address is
+															    shown whole instead of wrapping mid-word or leaving
+															    a "·" hanging at a line end. An address detail has
+															    no " · " and stays one wrapping line. */}
+															{row.detail
+																.split(" · ")
+																.map((part) =>
+																	part.includes("@") ? (
+																		<EmailLine key={part} email={part} />
+																	) : (
+																		<div key={part}>{part}</div>
+																	),
+																)}
 														</div>
 													)}
 												</TableCell>

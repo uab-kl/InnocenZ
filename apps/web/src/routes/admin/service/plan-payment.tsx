@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { AdminFilters } from "@/components/admin/admin-filters";
 import { InvoicePaymentSheet } from "@/components/admin/invoice-payment-sheet";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { queueRowState } from "@/components/admin/queue-cues";
 import { RefundsDueCard } from "@/components/admin/refunds-due-card";
 import { SourceToggle } from "@/components/admin/source-toggle";
 import {
@@ -143,8 +144,8 @@ const roleLabels: Record<SubscriberType, (t: PortalTranslations) => string> = {
 };
 
 const roleBadgeColors: Record<SubscriberType, string> = {
-	outlet: "border-sky-400/40 bg-sky-400/10 text-sky-300",
-	agency: "border-violet-400/40 bg-violet-400/10 text-violet-300",
+	outlet: "border-border bg-transparent text-foreground",
+	agency: "border-border bg-transparent text-foreground",
 };
 
 /**
@@ -278,7 +279,7 @@ function PlanPaymentPage() {
 								{t.adminService.billingPeriodsHintBefore}
 								<Link
 									to="/admin/service/plan-changes"
-									className="text-lavender underline underline-offset-2"
+									className="iz-admin-cell-link text-lavender underline underline-offset-2"
 								>
 									{t.admin.navPlanChange}
 								</Link>
@@ -321,7 +322,7 @@ function PlanPaymentPage() {
 									>
 										<SelectValue placeholder={t.admin.allStatus} />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 										<SelectItem value="unpaid">
 											{statusLabels.unpaid(t)}
@@ -448,6 +449,9 @@ function PlanPaymentPage() {
 												key={`group-${group.subscriberId}`}
 												className="cursor-pointer bg-muted/30 hover:bg-muted/50"
 												onClick={() => newest && setDetailId(newest.id)}
+												{...queueRowState(
+													summary.unpaidCount > 0 ? "open" : "done",
+												)}
 											>
 												<TableCell
 													data-label={t.adminService.colWho}
@@ -524,15 +528,19 @@ function PlanPaymentPage() {
 												<TableCell data-label={t.admin.colAction}>
 													<Button
 														type="button"
-														variant="outline"
+														variant={
+															summary.unpaidCount > 0 ? "default" : "ghost"
+														}
 														size="sm"
-														className="admin-finance-review"
+														className="admin-finance-review iz-queue-action"
 														onClick={(event) => {
 															event.stopPropagation();
 															if (newest) setDetailId(newest.id);
 														}}
 													>
-														{t.rbac.review}
+														{summary.unpaidCount > 0
+															? t.rbac.review
+															: t.common.view}
 													</Button>
 												</TableCell>
 											</TableRow>

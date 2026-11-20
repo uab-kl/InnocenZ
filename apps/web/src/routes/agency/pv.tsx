@@ -2040,7 +2040,7 @@ function AgencyPV() {
 								 */}
 								<button
 									type="button"
-									className="iz-chip ml-auto !border-[var(--iz-act-line)] !bg-[var(--iz-act)] font-bold !text-white enabled:hover:!bg-[var(--iz-act-hover)] disabled:!cursor-default disabled:opacity-40"
+									className="iz-chip ml-auto !border-[var(--iz-act-line)] !bg-[var(--iz-act)] font-bold !text-[color:var(--iz-act-ink,#fff)] enabled:hover:!bg-[var(--iz-act-hover)] disabled:!cursor-default disabled:opacity-40"
 									disabled={selectedIds.length === 0 || bulkBusy}
 									onClick={() => {
 										if (bulkMode === "pay" && !bulkConfirmArmed) {
@@ -2285,8 +2285,10 @@ function ReceiptScanRow({
 				<div className="min-w-0">
 					<div className="flex flex-wrap items-center gap-2">
 						<p className="iz-heading text-base font-bold">{scan.receiptRef}</p>
+						{/* How it was captured — a label, so neutral; its state is the
+						    pill on the right. */}
 						{scan.logSource === "manual" && (
-							<IzPill variant="amber">{t.agencyHub.selfLog}</IzPill>
+							<IzPill variant="label">{t.agencyHub.selfLog}</IzPill>
 						)}
 					</div>
 					<p className="iz-tiny iz-muted2 mt-0.5 iz-nums">{scan.id}</p>
@@ -2315,7 +2317,7 @@ function ReceiptScanRow({
 						{scan.logSource === "manual" ? (
 							<IzPill variant={statusPill.variant}>{statusPill.label}</IzPill>
 						) : (
-							<IzPill variant={entry === "manual" ? "violet" : "ink"}>
+							<IzPill variant="label">
 								{receiptEntryMethodLabel(entry, t)}
 							</IzPill>
 						)}

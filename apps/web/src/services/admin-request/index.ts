@@ -8,7 +8,10 @@ export type AdminRequestType =
 	| "custom_renegotiation"
 	| "plan_change"
 	| "contact"
-	| "other";
+	| "other"
+	// An agency asking to detach a PR tied under a year (migration 0171). Filed
+	// from Manage PR only; answered Approve / Decline on Service → PR Detach.
+	| "pr_detach";
 // Plan-change lifecycle: outlet switches sit as 'pending' until the admin marks
 // them 'approved' or 'declined'; agency switches are auto-applied and logged as
 // 'direct'. Other request types use pending → contacted → resolved.
@@ -79,14 +82,18 @@ export interface AdminRequest {
 	 */
 	livePlanName?: string | null;
 	livePlanAmount?: string | null;
+	/** `pr_detach` only: the PR the request is about (a `user` id). */
+	subjectUserId?: string | null;
+	/** `pr_detach` only: that PR's name, read server-side through the FK. */
+	subjectName?: string | null;
 }
 
 export interface AdminRequestsQueryParams {
 	type?: AdminRequestType;
 	/** Whitelist of types — serialized as a comma list into ?type=. */
 	types?: AdminRequestType[];
-	/** Exclude a single type from the results (e.g. plan_change). */
-	excludeType?: AdminRequestType;
+	/** Exclude a type, or several (serialized as a comma list). */
+	excludeType?: AdminRequestType | AdminRequestType[];
 	status?: AdminRequestStatus;
 	subscriberType?: SubscriberType;
 	dates?: string;
@@ -136,7 +143,9 @@ export async function fetchAdminRequests(
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
 		type: params.types?.length ? params.types.join(",") : params.type,
-		excludeType: params.excludeType,
+		excludeType: Array.isArray(params.excludeType)
+			? params.excludeType.join(",")
+			: params.excludeType,
 		status: params.status,
 		subscriberType: params.subscriberType,
 		dates: params.dates,
@@ -299,12 +308,17 @@ export async function fetchMyCustomQuote(
 
 export async function fetchPendingCount(
 	onRefreshFail: () => void,
-	params: { type?: AdminRequestType; excludeType?: AdminRequestType } = {},
+	params: {
+		type?: AdminRequestType;
+		excludeType?: AdminRequestType | AdminRequestType[];
+	} = {},
 ): Promise<{ pending: number }> {
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
 		type: params.type,
-		excludeType: params.excludeType,
+		excludeType: Array.isArray(params.excludeType)
+			? params.excludeType.join(",")
+			: params.excludeType,
 	});
 	const response = await client.get<{
 		success: boolean;
@@ -341,6 +355,25 @@ export async function approvePlanChange(
  * be Resolved, so an admin who did not agree to one had nothing to click and it
  * sat Pending forever.
  */
+/**
+ * Approve an agency's PR detach request (owner, 20 Nov 2026): that agency's
+ * membership with the PR ends ('left', as Detach writes it) and the agency is
+ * told. The server answers with the sentence to show, or refuses in words —
+ * already answered, or the PR already off that roster.
+ */
+export async function approvePrDetach(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: AdminRequest | null }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: AdminRequest | null;
+	}>(`/admin-request/${id}/approve`, {});
+	return response.data;
+}
+
 export async function declineRequest(
 	id: string,
 	onRefreshFail: () => void,

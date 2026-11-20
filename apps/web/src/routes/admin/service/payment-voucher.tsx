@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useActorName } from "@/components/admin/actor-name";
 import { AdminFilters } from "@/components/admin/admin-filters";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { queueRowState } from "@/components/admin/queue-cues";
 import {
 	PV_STATUS_BADGE,
 	RECEIPT_STATUS_BADGE,
@@ -236,7 +237,7 @@ function PaymentVoucherPage() {
 										>
 											<SelectValue placeholder={t.admin.allStatus} />
 										</SelectTrigger>
-										<SelectContent>
+										<SelectContent position="popper" align="start">
 											<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 											<SelectItem value="pending_review">
 												{statusLabels.pending_review(t)}
@@ -374,6 +375,7 @@ function PaymentVoucherPage() {
 										key={voucher.id}
 										className="cursor-pointer"
 										onClick={() => setSelectedId(voucher.id)}
+										{...queueRowState(voucher.status === "disputed" ? "open" : "done")}
 									>
 										<TableCell
 											data-label={t.adminService.colPrName}
@@ -399,15 +401,15 @@ function PaymentVoucherPage() {
 											<StatusBadge status={voucher.status} />
 											<Button
 												type="button"
-												variant="outline"
+												variant={voucher.status === "disputed" ? "default" : "ghost"}
 												size="sm"
-												className="admin-finance-review"
+												className="admin-finance-review iz-queue-action"
 												onClick={(event) => {
 													event.stopPropagation();
 													setSelectedId(voucher.id);
 												}}
 											>
-												{t.rbac.review}
+												{voucher.status === "disputed" ? t.rbac.review : t.common.view}
 											</Button>
 										</TableCell>
 										{/* The reference, now that the row has been found by WHO and

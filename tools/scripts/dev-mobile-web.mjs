@@ -24,6 +24,7 @@ import {
   resolveBin,
   spawnProc,
   makeShutdown,
+  refuseForeignBackend,
 } from './dev-shared.mjs';
 
 const children = [];
@@ -37,6 +38,9 @@ const apiUrl =
   `http://localhost:${rootEnv.BACKEND_PORT?.trim() || '7777'}/api`;
 const r2PublicUrl =
   rootEnv.EXPO_PUBLIC_R2_PUBLIC_URL?.trim() || rootEnv.R2_PUBLIC_URL?.trim() || '';
+
+// Another project on this backend port would answer every PR-app call.
+await refuseForeignBackend(apiUrl);
 
 console.log(`Starting Expo web against ${apiUrl} (backend must already be running).`);
 
@@ -52,6 +56,8 @@ const expo = spawnProc(children, process.execPath, [expoCli, 'start', '--web'], 
     EXPO_PUBLIC_API_URL: apiUrl,
     BROWSER: 'none',
     ...(r2PublicUrl ? { EXPO_PUBLIC_R2_PUBLIC_URL: r2PublicUrl } : {}),
+    // Metro's port — see dev-mobile.mjs (set RCT_METRO_PORT in .env.local).
+    ...(rootEnv.RCT_METRO_PORT ? { RCT_METRO_PORT: rootEnv.RCT_METRO_PORT } : {}),
   },
 });
 

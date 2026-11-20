@@ -769,7 +769,9 @@ interface StoreState {
 	agencyPRs: AgencyManagedPR[];
 	suspendAgencyPr: (prId: string) => void;
 	detachAgencyPr: (prId: string) => void;
-	requestAgencyPrDetach: (prId: string) => void;
+	// `requestAgencyPrDetach` was here: a toast saying "InnocenZ admin will
+	// review" while nothing was filed. Manage PR now files a real request
+	// (`useAgencyPrs().requestDetach` → POST /pr/:id/detach-request).
 	setAgencyPrKpiTier: (prId: string, tier: string) => void;
 	setAgencyPrTrainingTier: (prId: string, tier: string) => void;
 	updateAgencyPrProfile: (
@@ -4728,14 +4730,6 @@ export const useStore = create<StoreState>()(
 					};
 				});
 				get().toast(`${pr.name} detached from agency roster`, "info");
-			},
-			requestAgencyPrDetach: (prId) => {
-				const pr = get().agencyPRs.find((p) => p.id === prId);
-				if (!pr) return;
-				get().toast(
-					`Detach request sent for ${pr.name} — InnocenZ admin will review`,
-					"info",
-				);
 			},
 			setAgencyPrKpiTier: (prId, tier) => {
 				set((st) => ({

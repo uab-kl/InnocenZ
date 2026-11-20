@@ -49,8 +49,8 @@ function PortalGateLoadingBody({
 			className={cn(
 				"relative flex min-h-svh w-full flex-col items-center justify-center overflow-hidden px-6",
 				isPortal
-					? "bg-[#0e0a1a] text-white/70"
-					: "bg-background text-muted-foreground",
+					? "bg-[#0b0a0d] text-[#bdb6ad]"
+					: "bg-[#0b0a0d] text-[#bdb6ad]",
 				className,
 			)}
 			aria-live="polite"
@@ -58,14 +58,14 @@ function PortalGateLoadingBody({
 		>
 			{isPortal ? (
 				<div className="pointer-events-none absolute inset-0" aria-hidden>
-					<div className="absolute -right-16 -top-20 h-72 w-72 rounded-full bg-[rgba(183,156,232,0.16)] blur-2xl" />
-					<div className="absolute left-[-4rem] top-[38%] h-52 w-52 rounded-full bg-[rgba(227,184,119,0.1)] blur-2xl" />
-					<div className="absolute bottom-[-5rem] right-8 h-60 w-60 rounded-full bg-[rgba(155,126,217,0.12)] blur-2xl" />
-					<div className="absolute inset-0 bg-[rgba(20,17,32,0.35)]" />
+					<div className="absolute -right-16 -top-20 h-72 w-72 rounded-full bg-[rgba(255,95,158,0.10)] blur-2xl" />
+					<div className="absolute left-[-4rem] top-[38%] h-52 w-52 rounded-full bg-[rgba(203,176,137,0.07)] blur-2xl" />
+					<div className="absolute bottom-[-5rem] right-8 h-60 w-60 rounded-full bg-[rgba(122,107,255,0.08)] blur-2xl" />
+					<div className="absolute inset-0 bg-[rgba(11,10,13,0.35)]" />
 				</div>
 			) : (
 				<div className="pointer-events-none absolute inset-0" aria-hidden>
-					<div className="absolute inset-0 bg-[radial-gradient(900px_500px_at_50%_-10%,color-mix(in_oklab,var(--primary)_12%,transparent),transparent_60%)]" />
+					<div className="absolute inset-0 bg-[radial-gradient(900px_500px_at_50%_-10%,color-mix(in_oklab,#ff5f9e_10%,transparent),transparent_60%)]" />
 				</div>
 			)}
 
@@ -81,7 +81,7 @@ function PortalGateLoadingBody({
 				<div
 					className={cn(
 						"mb-1 motion-safe:animate-[iz-boot-pulse_2.2s_ease-in-out_infinite]",
-						isPortal && "drop-shadow-[0_0_28px_rgba(183,156,232,0.25)]",
+						isPortal && "drop-shadow-[0_0_28px_rgba(203,176,137,0.22)]",
 					)}
 				>
 					<BrandLogo variant="stacked" size="sm" />
@@ -90,7 +90,7 @@ function PortalGateLoadingBody({
 				<p
 					className={cn(
 						"mt-5 text-center text-sm font-medium tracking-wide",
-						isPortal ? "text-white/55" : "text-muted-foreground",
+						"text-[#bdb6ad]",
 					)}
 				>
 					{onRetry ? t.chooseOrg.failed : t.webShell.gettingReady}
@@ -103,9 +103,7 @@ function PortalGateLoadingBody({
 						disabled={retrying}
 						className={cn(
 							"mt-6 min-h-11 w-full rounded-lg px-4 py-3 text-base font-semibold disabled:opacity-60",
-							isPortal
-								? "bg-[var(--iz-act)] text-white"
-								: "bg-primary text-primary-foreground",
+							"bg-[#cbb089] text-[#1c160e] hover:bg-[#d6bd99]",
 						)}
 					>
 						{retrying ? t.common.loading : t.common.retry}
@@ -114,13 +112,13 @@ function PortalGateLoadingBody({
 					<div
 						className={cn(
 							"relative mt-6 h-[3px] w-40 overflow-hidden rounded-full",
-							isPortal ? "bg-white/10" : "bg-muted",
+							"bg-white/10",
 						)}
 					>
 						<span
 							className={cn(
 								"absolute inset-y-0 left-0 w-2/5 rounded-full motion-safe:animate-[iz-boot-bar_1.6s_ease-in-out_infinite] motion-reduce:hidden",
-								isPortal ? "bg-[#b79ce8]" : "bg-primary",
+								"bg-[#cbb089]",
 							)}
 						/>
 					</div>

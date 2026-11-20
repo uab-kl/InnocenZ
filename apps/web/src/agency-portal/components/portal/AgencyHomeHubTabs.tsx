@@ -811,8 +811,10 @@ export function AgencyHomeHubTabs({
 														{formatDisputeDay(workingDayIso(r), t)}
 													</td>
 													<td className="iz-portal-table-status">
+														{/* Scanned / Self-log says how it was captured
+														    — a label, so neutral, not the waiting amber. */}
 														<IzPill
-															variant="amber"
+															variant="label"
 															className="!py-0.5 !text-[9px]"
 														>
 															{r.source === "manual"

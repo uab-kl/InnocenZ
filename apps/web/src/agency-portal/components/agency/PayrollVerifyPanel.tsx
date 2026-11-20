@@ -2,6 +2,7 @@ import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyRece
 import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import {
 	formatRM,
+	IZ_LABEL_PILL,
 	IzCard,
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
@@ -160,9 +161,9 @@ function ReceiptRow({
 				<div className="flex flex-wrap items-center gap-2">
 					<ScanLine className="h-3.5 w-3.5" />
 					<span className="text-sm font-medium">{receipt.receiptNo}</span>
-					<span
-						className={`iz-pill !text-[10px] ${receipt.source === "scan" ? "iz-pill-green" : "iz-pill-amber"}`}
-					>
+					{/* How it was captured is a LABEL, so neutral — green "Scanned" and
+					    amber "Self-logged" read as states beside the real one. */}
+					<span className={`iz-pill !text-[10px] ${IZ_LABEL_PILL}`}>
 						{sourceLabel(receipt.source, t)}
 					</span>
 					<span

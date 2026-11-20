@@ -40,7 +40,9 @@ export type NotificationKind =
 	/** A new bill was opened for this organisation — outlet AND agency (0137). */
 	| "subscription_invoice_opened"
 	/** A saved card / Touch 'n Go charge for a bill was declined — pay it by hand (0166). */
-	| "subscription_autopay_failed";
+	| "subscription_autopay_failed"
+	/** The InnocenZ admin answered a request to detach a PR tied under a year (0171). Agency-addressed. */
+	| "pr_detach_decided";
 
 export interface NotificationRecord {
 	id: string;

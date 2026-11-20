@@ -350,7 +350,15 @@ export function DetailField({
 				{value && href ? (
 					<a
 						href={href}
-						className="break-words text-lg font-medium text-primary hover:underline"
+						// An e-mail stays WHOLE on one line (owner, 20 Nov 2026), like the
+						// admin tables' EmailLine: "…" if it cannot fit, the full
+						// address on hover. Other links keep wrapping.
+						title={href.startsWith("mailto:") ? value : undefined}
+						className={
+							href.startsWith("mailto:")
+								? "iz-admin-email-value text-lg font-medium text-primary hover:underline"
+								: "break-words text-lg font-medium text-primary hover:underline"
+						}
 					>
 						{value}
 					</a>

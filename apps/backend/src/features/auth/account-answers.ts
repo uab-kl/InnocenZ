@@ -19,10 +19,31 @@
  * English. Change a sentence only together with those maps.
  */
 
-/** A failed EMAIL sign-in — unknown address, no password set, or the wrong one. */
-export const LOGIN_WRONG_EMAIL_OR_PASSWORD = 'Wrong email or password';
+/*
+ * ⚠️ SIGN-IN NO LONGER HIDES WHETHER AN ACCOUNT EXISTS (owner, 19 Nov 2026 —
+ * reversing 29 Sep for SIGN-IN ONLY: "if no dont say wrong say account no
+ * found, ask user to sign up as outlet or pr agency", then "2" = name the
+ * missing account and the wrong password separately). Accepted trade-off:
+ * anyone can now test whether an email or phone has an account by trying to
+ * sign in. Sign-up, password reset and the emailed codes below keep the
+ * one-answer rule. The unknown-identifier lockout and the refusal floor stay.
+ */
 
-/** The same answer for a PHONE sign-in. */
+/** An EMAIL sign-in with no usable account behind it (none, or a stub with no password yet). */
+export const LOGIN_EMAIL_ACCOUNT_NOT_FOUND =
+  'Account not found — please sign up as an Outlet or PR Agency';
+
+/** A PHONE sign-in with no usable account — phone sign-in is the PR app's, so no organisation door. */
+export const LOGIN_PHONE_ACCOUNT_NOT_FOUND = 'Account not found — please sign up first';
+
+/** A sign-in to an account that exists, with the wrong password. */
+export const LOGIN_WRONG_PASSWORD = 'Wrong password';
+
+/**
+ * The 29 Sep one-answer sentences. No longer SENT by this server; kept because
+ * the web and the PR app still translate them for an older server that does.
+ */
+export const LOGIN_WRONG_EMAIL_OR_PASSWORD = 'Wrong email or password';
 export const LOGIN_WRONG_PHONE_OR_PASSWORD = 'Wrong phone number or password';
 
 /**

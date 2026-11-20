@@ -40,6 +40,7 @@ const LABELS: Record<string, keyof PortalTranslations["admin"]> = {
 	"sidebar-service-requests": "navPlanRequest",
 	"sidebar-service-plan-changes": "navPlanChange",
 	"sidebar-service-plan-payment": "navPlanPayment",
+	"sidebar-service-pr-detach": "navPrDetach",
 	"sidebar-service-payment-voucher": "navPaymentVouchers",
 	"sidebar-business-plan": "navPlan",
 	"sidebar-business-history": "navCurrentPlan",

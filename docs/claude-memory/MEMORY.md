@@ -7,6 +7,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [DB rules](innocenz-database-rules.md) — reuse tables, 4 audit cols, FK-only, id-first PK
 - [Tables](db-table-conventions.md) — never duplicate one; reuse via FK
 - [PR not a member](pr-is-under-an-agency-not-a-member.md) — PR = agency_pr row; member = staff
+- [PR detach one-year rule](pr-detach-one-year-rule.md) — under a year = pr_detach admin request; approved_at by trigger
 - [Test script](verify-against-test-script.md) — verify each change in TEST_SCRIPT.md
 - [Memory sync](sync-memory-mirrors.md) — sync BOTH ways, never one-way
 - [New migration](warn-before-adding-a-migration.md) — STANDING: say so, wait for OK
@@ -15,7 +16,8 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [DB writes](shared-db-writes-need-the-user.md) — blocked; give the user dry-runs
 - [Typography](typography-is-enforced-by-a-check.md) — STANDING: pnpm check:type ratchet
 - [Status colour](innocenz-status-colour-code.md) — green settled, amber waiting, red disputed
-- [Buttons](innocenz-portal-button-colours.md) — gold = save/pay; --iz-gold is violet
+- [Portal colour rule](portal-colour-rule.md) — STANDING: champagne=press, neon=icons/charts, money=state/sky, static=neutral
+- [Buttons](innocenz-portal-button-colours.md) — superseded by the colour rule above (history)
 - [Mobile UI](innocenz-mobile-flexible-ui.md) — flex to any phone; safe-area insets
 - [Payee](innocenz-payee-name-format.md) — "(Nick) Full Name" via formatPayeeLabel
 - [Confirm actions](innocenz-confirm-every-action.md) — show the server's success sentence
@@ -96,7 +98,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [Foreign tier](outlet-read-a-foreign-agencys-tier.md) — scope the fact, not rows
 - [Oldest row](oldest-membership-was-the-agency.md) — FIXED: isn't the agency
 - [IC fields](ic-authority-is-field-scoped.md) — IC wins for dob, not gender
-- [Existence leaks](no-account-existence-leaks.md) — never reveal an account
+- [Existence leaks](no-account-existence-leaks.md) — sign-up never reveals an account; sign-in does since 19 Nov
 - [Signed links](sensitive-files-signed-links.md) — sensitive files, 1-hour links
 - [OTP](otp-channel-split.md) — one code, 3 channels
 - [Phone login](pr-phone-login-mismatch.md) — FIXED: match on digits
@@ -136,6 +138,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [Vite build](vite-build-was-a-development-build.md) — prod flag from NODE_ENV · [Biome](biome-scope-and-mobile-style.md) — apps/web only
 - [Shared checkout](shared-checkout-git-state-moves.md) — git state moves; CRLF · [Truncate](truncate-on-open-destroys-the-file.md) — encode, temp, replace
 - [Remote sessions](read-remote-claude-session-history.md) — fetch via Chrome
+- [Shared ports](dev-ports-shared-with-other-projects.md) — another project on 3000/7777/8081: refuse, never kill or reuse
 ### The codebase, screen by screen
 - [PR wiring](pr-mobile-backend-wiring.md) — /mine pattern; all wired · [PR app](innocenz-pr-mobile-app.md) — apps/mobile = PR app
 - [PR signup](pr-signup-mobile.md) — 6-step mobile wizard · [Admin backlog](innocenz-admin-backlog.md) — per-tab auth pinning
@@ -145,6 +148,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [Row clamp](auto-assign-100-row-clamp.md) — FIXED: pageSize cut 7 queries · [Dedupe](dedupe-survivor-became-an-address.md) — FIXED: DISTINCT ON lost an agency
 - [Demo slices](outlet-panel-reads-demo-slices.md) — outlet Today read DEMO · [Post Job next](outlet-post-job-next.md) — write vs request call
 - [Post Job](outlet-post-job-today-calendar.md) — DONE; Today vs Calendar · [Post Job menu](post-job-read-demo-menu-not-backend.md) — read demo, not backend
+- [Link marks hubs current](tanstack-link-prefix-active.md) — router stamps aria-current by prefix; hubs need exact
 - [Outlet reads](outlet-shift-read-access.md) — History wired · [Outlet swap](outlet-swap-feature-build.md) — BUILT end-to-end
 - [PR card](pr-card-att-paid-live.md) — Att./Paid from real rows · [Roster wiring](roster-backend-wiring.md) — PR→shift→assignment→PV
 - [Roster Live](roster-live-tab-and-pr-mobile-scoping.md) — reads the backend · [Workspace](workspace-rating-verified-merged.md) — + Ratings, merged

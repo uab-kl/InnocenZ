@@ -1,6 +1,9 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
 import { PayrollKindDayFilter } from "@agency-portal/components/agency/PayrollKindDayFilter";
-import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
+import {
+	isRenderablePhoto,
+	ProofPhotos,
+} from "@agency-portal/components/agency/ProofPhotoViewer";
 import { ShiftFactsBlock } from "@agency-portal/components/agency/ShiftFactsBlock";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
@@ -41,6 +44,7 @@ import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
+import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import type {
 	AgencyReceipt,
 	PaymentVoucherDispute,
@@ -267,15 +271,19 @@ function DisputeEvidence({
 							</p>
 						)}
 						{editable && (
-							<button
-								type="button"
-								className="iz-btn iz-btn-ghost mt-1.5 !h-7 !px-2.5 !text-[11px]"
-								onClick={() => setOpenId(editing ? null : receipt.id)}
-								aria-expanded={editing}
-							>
-								<Pencil className="mr-1 h-3 w-3" />{" "}
-								{editing ? t.receipts.closeEditor : t.payroll.editReceipt}
-							</button>
+							// Half width, as on the Receipts card — `.iz-btn` is width 100%,
+							// and a lone full-width button reads heavier than Accept.
+							<div className="mt-2 grid grid-cols-2 gap-2">
+								<button
+									type="button"
+									className="iz-btn iz-btn-soft flex items-center gap-1.5"
+									onClick={() => setOpenId(editing ? null : receipt.id)}
+									aria-expanded={editing}
+								>
+									<Pencil className="h-4 w-4" />
+									{editing ? t.receipts.closeEditor : t.payroll.editReceipt}
+								</button>
+							</div>
 						)}
 						{editable && editing && (
 							<AgencyReceiptEditor receipt={receipt} lines={receipt.lines} />
@@ -319,9 +327,35 @@ function DisputeRow({
 	const { t, locale } = usePortalLocale();
 	const [note, setNote] = useState("");
 	const [rejecting, setRejecting] = useState(false);
-	/** Undecided claims open themselves — see the header button below. */
-	const [open, setOpen] = useState(!dispute.outcome);
+	/** Every claim starts collapsed — the owner's call; see the header button below. */
+	const [open, setOpen] = useState(false);
 	const proof = dispute.proofPhotos ?? [];
+	/*
+	 * WHICH OUTLET the claim is from, for the folded header (owner, 20 Nov 2026:
+	 * "need show from what outlet when she dispute"). Read off the same `shifts`
+	 * the opened card draws under "The shift behind this figure" — no second
+	 * fetch — and EVERY distinct venue, never `shifts[0]`: a whole-day claim over
+	 * two shifts at two venues names both. No shift linked → no outlet, and the
+	 * header reads exactly as it did.
+	 */
+	const outletLabel = [
+		...new Set(
+			(dispute.shifts ?? [])
+				.map((shift) => shift.outletName?.trim())
+				.filter((name): name is string => Boolean(name)),
+		),
+	].join(" / ");
+	/*
+	 * The header picture — the paper behind the figure, only when exactly ONE
+	 * receipt is. With several, a thumbnail would be a silent pick among them, the
+	 * same reason `shifts[0]` is never drawn. Resolved and checked as the shared
+	 * viewer does, so a legacy path never shows a torn icon.
+	 */
+	const behind = receiptsForDispute(dispute, receipts);
+	const paperPhoto =
+		behind.length === 1 ? (behind[0].proofPhotos ?? [])[0] : undefined;
+	const paperUrl = paperPhoto ? resolveProofPhotoUrl(paperPhoto) : null;
+	const thumb = paperUrl && isRenderablePhoto(paperUrl) ? paperUrl : null;
 
 	const submit = (outcome: "accepted" | "rejected") => {
 		// A rejection needs a reason; the server enforces it too, so surfacing it
@@ -336,110 +370,136 @@ function DisputeRow({
 	return (
 		<div className="rounded-xl border border-[var(--iz-line)] p-3">
 			{/*
-			 * THE WHOLE CARD FOLDS, and the outcome decides how it starts.
+			 * THE WHOLE CARD FOLDS, and every claim starts FOLDED — the owner's call
+			 * (20 Nov 2026: "the dispute and the receipt part normally collapse
+			 * it"). Undecided claims used to open themselves; a week of them buried
+			 * the queue in shift blocks, proof and editors.
 			 *
-			 * A settled claim is a record: shift block, both figures, the reason,
-			 * the proof, the receipt behind it and the editor — a screen and a half
-			 * of evidence about a decision nobody can change. Undecided ones open
-			 * themselves, because that IS the work; the same rule the Receipts feed
-			 * applies to a receipt still waiting on the agency.
+			 * Folded, it is the Overtime card's shape ("the receipt and the dispute
+			 * design like the overtime style"): the paper's picture, "PR · Outlet ·
+			 * bucket" in bold, the day and week muted, the outcome on the right,
+			 * then the two figures under their labels — so an undecided claim still
+			 * says it is Open, and how much it is about, without a click.
 			 */}
 			<button
 				type="button"
-				className="flex w-full flex-wrap items-start justify-between gap-2 text-left"
+				className="w-full text-left"
 				onClick={() => setOpen((v) => !v)}
 				aria-expanded={open}
 			>
-				<div className="flex min-w-0 items-start gap-1.5">
-					<ChevronDown
-						className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)] transition-transform${
-							open ? "" : " -rotate-90"
-						}`}
-						aria-hidden
-					/>
-					<div className="min-w-0">
-						{/* The SHARED formatter, not a second copy — formatting the label here
-					    by hand is exactly how this row ended up without a nickname while
-					    the voucher card had one. */}
-						<div className="text-sm font-semibold">
-							{formatPayeeLabel(
-								dispute.voucher.prNickname,
-								dispute.voucher.prName,
-							) || t.receipts.unknownPr}{" "}
-							· {t.money[DISPUTE_COMPONENT_LABEL[dispute.component]]}
+				{/* The outcome stays on the RIGHT from `sm` up, beside a name that
+				    wraps; below `sm` the row wraps, as the Overtime card's does. */}
+				<div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap">
+					<div className="flex min-w-0 gap-2.5 sm:flex-1">
+						{thumb ? (
+							<img
+								src={thumb}
+								// Evidence, not decoration — named the way the evidence block
+								// names the same scan, never an empty alt.
+								alt={fill(t.agencyQueues.receiptScanAlt, {
+									no: behind[0].receiptNo,
+								})}
+								className="h-12 w-16 shrink-0 rounded border border-[var(--iz-line)] object-cover"
+								loading="lazy"
+								onError={(e) => {
+									e.currentTarget.style.display = "none";
+								}}
+							/>
+						) : null}
+						<div className="min-w-0">
+							{/* The SHARED formatter, not a second copy — formatting the label
+							    here by hand is exactly how this row ended up without a
+							    nickname while the voucher card had one. */}
+							<div className="text-sm font-semibold">
+								{formatPayeeLabel(
+									dispute.voucher.prNickname,
+									dispute.voucher.prName,
+								) || t.receipts.unknownPr}{" "}
+								·{" "}
+								{/* The venue in champagne (owner, 20 Nov 2026: "the dispute
+								    amount outlet name also"); the PR's name stays ink. */}
+								{outletLabel ? (
+									<>
+										<span className="text-[#d9c09a]">{outletLabel}</span>
+										{" · "}
+									</>
+								) : null}
+								{t.money[DISPUTE_COMPONENT_LABEL[dispute.component]]}
+							</div>
+							<p className="iz-tiny iz-muted mt-0.5">
+								{formatDay(dispute.disputeDate, locale)}
+								{dispute.voucher.weekStart && dispute.voucher.weekEnd
+									? ` · ${fill(t.agencyQueues.weekFromTo, {
+											from: formatPayrollDay(dispute.voucher.weekStart, t),
+											to: formatPayrollDay(dispute.voucher.weekEnd, t),
+										})}`
+									: ""}
+							</p>
 						</div>
-						<p className="iz-tiny iz-muted mt-0.5">
-							{formatDay(dispute.disputeDate, locale)}
-							{dispute.voucher.weekStart && dispute.voucher.weekEnd
-								? ` · ${fill(t.agencyQueues.weekFromTo, {
-										from: formatPayrollDay(dispute.voucher.weekStart, t),
-										to: formatPayrollDay(dispute.voucher.weekEnd, t),
-									})}`
-								: ""}
-						</p>
-						{/* THE CONTESTED FIGURE, on the header line — a folded card that
-					    named a person and a bucket but no money made the reviewer open
-					    every one to find the big ones. */}
-						<p className="iz-tiny iz-muted2 mt-0.5 iz-nums">
-							{formatRM(dispute.disputedAmount)}
-							{dispute.claimedAmount !== null
-								? ` → ${formatRM(dispute.claimedAmount)}`
-								: ""}
-						</p>
+					</div>
+					<div className="flex shrink-0 items-center gap-1.5">
+						{/* The row used to hardcode t.payroll.open — true only because the
+						    panel could not fetch anything else. Now that settled claims are
+						    listed, the pill has to say which one this is. */}
+						{dispute.outcome ? (
+							<span
+								className={`iz-pill !text-[10px] ${
+									dispute.outcome === "accepted"
+										? "iz-pill-green"
+										: dispute.outcome === "rejected"
+											? "iz-pill-red"
+											: "iz-pill-ink"
+								}`}
+							>
+								{dispute.outcome === "accepted"
+									? t.payroll.accepted
+									: dispute.outcome === "rejected"
+										? t.agencyQueues.rejected
+										: t.payroll.withdrawn}
+							</span>
+						) : (
+							<span className="iz-pill iz-pill-amber !text-[10px]">
+								{t.payroll.open}
+							</span>
+						)}
+						<ChevronDown
+							className={`h-4 w-4 text-[var(--iz-muted)] transition-transform${open ? " rotate-180" : ""}`}
+							aria-hidden
+						/>
 					</div>
 				</div>
-				{/* The row used to hardcode t.payroll.open — true only because the panel could
-				    not fetch anything else. Now that settled claims are listed, the
-				    pill has to say which one this is. */}
-				{dispute.outcome ? (
-					<span
-						className={`iz-pill !text-[10px] ${
-							dispute.outcome === "accepted"
-								? "iz-pill-green"
-								: dispute.outcome === "rejected"
-									? "iz-pill-red"
-									: "iz-pill-ink"
-						}`}
-					>
-						{dispute.outcome === "accepted"
-							? t.payroll.accepted
-							: dispute.outcome === "rejected"
-								? t.agencyQueues.rejected
-								: t.payroll.withdrawn}
+
+				{/* THE CONTESTED FIGURE, on the folded card — one that named a person
+				    and a bucket but no money made the reviewer open every one to find
+				    the big ones. What the voucher said beside what the PR says it
+				    should be: those two numbers are the whole argument. */}
+				<div className="mt-2 flex flex-wrap gap-4 text-sm">
+					<span>
+						<span className="iz-tiny iz-muted block">
+							{t.payroll.voucherSaysLabel}
+						</span>
+						{/* Champagne, as the owner asked for "the dispute amount". */}
+						<span className="iz-nums text-[#d9c09a]">
+							{formatRM(dispute.disputedAmount)}
+						</span>
 					</span>
-				) : (
-					<span className="iz-pill iz-pill-amber !text-[10px]">
-						{t.payroll.open}
-					</span>
-				)}
+					{dispute.claimedAmount !== null && (
+						<span>
+							<span className="iz-tiny iz-muted block">
+								{t.payroll.prClaims}
+							</span>
+							<span className="iz-nums">{formatRM(dispute.claimedAmount)}</span>
+						</span>
+					)}
+				</div>
 			</button>
 
 			{!open ? null : (
-				<>
-					{/* WHICH SHIFT this money is about — above the figures, because the
-			    answer to "is this claim right" starts with which night it was. */}
+				<div className="mt-2.5 border-t border-[var(--iz-line)]">
+					{/* WHICH SHIFT this money is about — first thing the opened card
+					    shows, because the answer to "is this claim right" starts with
+					    which night it was. */}
 					<DisputeShiftFacts dispute={dispute} />
-
-					<div className="mt-2 flex flex-wrap gap-4 text-sm">
-						<span>
-							<span className="iz-tiny iz-muted block">
-								{t.payroll.voucherSaysLabel}
-							</span>
-							<span className="iz-nums">
-								{formatRM(dispute.disputedAmount)}
-							</span>
-						</span>
-						{dispute.claimedAmount !== null && (
-							<span>
-								<span className="iz-tiny iz-muted block">
-									{t.payroll.prClaims}
-								</span>
-								<span className="iz-nums">
-									{formatRM(dispute.claimedAmount)}
-								</span>
-							</span>
-						)}
-					</div>
 
 					{dispute.reason && (
 						<p className="iz-tiny mt-2">
@@ -557,7 +617,7 @@ function DisputeRow({
 							</div>
 						</>
 					)}
-				</>
+				</div>
 			)}
 		</div>
 	);

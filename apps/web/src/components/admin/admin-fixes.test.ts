@@ -226,11 +226,19 @@ describe("memberPageTarget", () => {
 		expect(memberPageTarget("agency", "a1", "u1")).toEqual({
 			to: "/admin/user-management/agency/$agencyId/member/$userId",
 			params: { agencyId: "a1", userId: "u1" },
+			search: {},
 		});
 		expect(memberPageTarget("outlet", "o1", "u1")).toEqual({
 			to: "/admin/user-management/outlet/$outletId/member/$userId",
 			params: { outletId: "o1", userId: "u1" },
+			search: {},
 		});
+	});
+
+	it("says when Legacy Member opened it, so the page files itself there", () => {
+		expect(
+			memberPageTarget("agency", "a1", "u1", "legacy-member")?.search,
+		).toEqual({ from: "legacy-member" });
 	});
 
 	it("never guesses a destination when an id is missing", () => {

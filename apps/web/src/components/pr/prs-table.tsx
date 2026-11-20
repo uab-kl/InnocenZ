@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { AdminFilters } from "@/components/admin/admin-filters";
+import { EmailLine } from "@/components/admin/email-line";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
@@ -160,7 +161,7 @@ export function PrsTable({
 								>
 									<SelectValue placeholder={t.admin.filterByStatus} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 									<SelectItem value="active">{t.admin.statusActive}</SelectItem>
 									<SelectItem value="inactive">
@@ -177,13 +178,26 @@ export function PrsTable({
 				<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
 					<Table className="iz-admin-management-table">
 						<TableHeader>
+							{/*
+							  `table-layout: fixed` split the width evenly, and an even
+							  quarter was a few px short of a plain address, which then broke
+							  mid-word ("…@innocenz.dem" over a lone "o"). From xl the other
+							  columns take what their content needs (an ID number, the
+							  agency chip, the date — each on one line) and Contact, left
+							  without a width, takes the rest. Narrower, the even split
+							  stands and a long address ends in "…" (EmailLine) instead.
+							*/}
 							<TableRow>
-								<TableHead>
+								{/* 22% from 90rem keeps "IC · 900101-14-5678" on one line;
+								    below that it wraps anyway, so Contact gets the room. */}
+								<TableHead className="xl:w-[19%] min-[90rem]:w-[22%]">
 									{t.admin.colDisplayName} / {t.adminPr.legalName}
 								</TableHead>
 								<TableHead>{t.adminUsers.colContact}</TableHead>
-								<TableHead>{t.adminPr.agencies}</TableHead>
-								<TableHead>
+								<TableHead className="xl:w-[18%]">
+									{t.adminPr.agencies}
+								</TableHead>
+								<TableHead className="xl:w-[20%]">
 									{t.admin.colStatus} / {t.admin.colCreated}
 								</TableHead>
 								<TableHead>{t.admin.colActions}</TableHead>
@@ -262,8 +276,11 @@ export function PrsTable({
 												)}
 											</div>
 										</TableCell>
-										<TableCell data-label={t.adminUsers.colContact}>
-											{user.email || "—"}
+										<TableCell
+											data-label={t.adminUsers.colContact}
+											className="max-md:col-span-full"
+										>
+											<EmailLine email={user.email} />
 											<div className="iz-admin-record-secondary">
 												{user.phoneNum || "—"}
 											</div>

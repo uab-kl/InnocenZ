@@ -33,6 +33,7 @@ import {
 	enterOrganisation,
 	shouldChooseOrganisation,
 } from "@/lib/auth/enter-organisation";
+import { isInviteReturnPath } from "@/lib/auth/invite-return-path";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { portalOfPath } from "@/lib/auth/portal-of-path";
 import {
@@ -89,14 +90,22 @@ type LoginError =
  * fall through to the server's own text, because a half-guessed translation of
  * a sentence carrying a number is worse than an English one that is correct.
  */
+/** The backend's LOGIN_EMAIL_ACCOUNT_NOT_FOUND, verbatim — the one error that also gets a sign-up link. */
+const ACCOUNT_NOT_FOUND_EMAIL =
+	"Account not found — please sign up as an Outlet or PR Agency";
+
 const SERVER_MESSAGE_LABELS: Record<string, (t: PortalTranslations) => string> =
 	{
 		/*
-		 * One answer for an unknown account, an account with no password and a
-		 * wrong password (owner, 29 Sep 2026: "General message, both") —
-		 * `account-answers.ts` in the backend. "This account is not registered
-		 * yet." and "Wrong password" are no longer sent.
+		 * Owner, 19 Nov 2026 (reverses 29 Sep's one answer, for sign-in only):
+		 * a missing account and a wrong password are told apart —
+		 * `account-answers.ts` in the backend.
 		 */
+		[ACCOUNT_NOT_FOUND_EMAIL]: (t) => t.authPages.errorAccountNotFoundEmail,
+		"Account not found — please sign up first": (t) =>
+			t.authPages.errorAccountNotFoundPhone,
+		"Wrong password": (t) => t.authPages.errorWrongPassword,
+		// The 29 Sep one-answer sentences, still sent by an older server.
 		"Wrong email or password": (t) => t.authPages.errorWrongEmailOrPassword,
 		"Wrong phone number or password": (t) =>
 			t.authPages.errorWrongPhoneOrPassword,
@@ -298,6 +307,21 @@ function LoginPage() {
 					password: value.password,
 				});
 				const profile = await fetchProfile();
+
+				/*
+				 * An INVITATION first, for every role (owner, 19 Nov 2026: "for any
+				 * user pr , agency , outlet ,admin or any role"). The invite page sent
+				 * this person here to sign in so they can accept; their home portal —
+				 * and the organisation chooser — would swallow the invitation, which is
+				 * how an admin invited to an agency kept landing on the dashboard with
+				 * no new organisation. `isInviteReturnPath` accepts only the invite
+				 * page's own path, so this is not a redirect to anywhere else.
+				 */
+				if (isInviteReturnPath(requestedNext)) {
+					hardNavigate(requestedNext);
+					return;
+				}
+
 				const home = pickHomePortal(profile.portals, profile.roles);
 
 				/**
@@ -411,7 +435,12 @@ function LoginPage() {
 	});
 
 	return (
-		<div className="login-page login-threshold relative flex min-h-svh w-full flex-col overflow-hidden">
+		/*
+		 * `auth-night` draws this page in the portals' night look (owner, 20 Nov
+		 * 2026) — every rule hangs off it in the scoped block at the end of
+		 * styles.css. Remove the class and the page is exactly as before.
+		 */
+		<div className="login-page login-threshold auth-night relative flex min-h-svh w-full flex-col overflow-hidden">
 			{/*
 			 * Page-wide moving backdrop. `relative` on this wrapper is what gives
 			 * it a containing block; `overflow-hidden` stops the drifting pools
@@ -469,7 +498,12 @@ function LoginPage() {
 						 * that string as raw English JSX with no dictionary key, so it
 						 * stayed English under 中文.
 						 */}
-						<BrandLogo variant="stacked" size="auth" showMotto />
+						<BrandLogo
+							variant="stacked"
+							size="auth"
+							showMotto
+							className="auth-brand"
+						/>
 
 						{/* A short rule, not a full-width one — it reads as a mark under
 					    the crest rather than as a divider splitting the column. */}
@@ -504,7 +538,12 @@ function LoginPage() {
 					<div className="mx-auto w-full max-w-120">
 						<div className="mb-6 flex justify-center lg:hidden">
 							{/* Same tagline drop as the aside — the two must not disagree. */}
-							<BrandLogo variant="stacked" size="md" showMotto />
+							<BrandLogo
+								variant="stacked"
+								size="md"
+								showMotto
+								className="auth-brand"
+							/>
 						</div>
 
 						<div className="mb-6">
@@ -692,7 +731,21 @@ function LoginPage() {
 										className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3.5 text-xl text-destructive"
 									>
 										<AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-										<span>{loginErrorText(error, t)}</span>
+										<span>
+											{loginErrorText(error, t)}
+											{"message" in error &&
+											error.message === ACCOUNT_NOT_FOUND_EMAIL ? (
+												<>
+													{" "}
+													<Link
+														to="/signup"
+														className="font-semibold text-gold-bright underline underline-offset-4 hover:text-gold"
+													>
+														{t.authPages.signUpCta}
+													</Link>
+												</>
+											) : null}
+										</span>
 									</div>
 								)}
 

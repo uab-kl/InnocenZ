@@ -68,9 +68,10 @@
    On :root, not body — the portal gate can paint before body carries its
    design attribute; colour names alone cannot change any other page. */
 :root {
-	--iz-act: #68517f; /* the one filled action — "gold" in old class names */
-	--iz-act-hover: #795f93;
-	--iz-act-line: #9274ad;
+	--iz-act: #cbb089; /* the one filled action — champagne (owner, 20 Nov 2026); it was violet #68517f */
+	--iz-act-hover: #d6bd99;
+	--iz-act-line: transparent;
+	--iz-act-ink: #1c160e; /* dark ink on the champagne fill */
 	--iz-signout-line: #96616b;
 	--iz-ink-on-light: #12100c; /* dark digit on the soft red / amber pills */
 	--iz-line-violet: #877095; /* admin's sidebar collapse toggle */
@@ -95,6 +96,11 @@
 }
 :where(body[data-admin-design], body[data-agency-design], body[data-outlet-design]) .rounded-3xl {
 	border-radius: var(--iz-radius-xl); /* 24 → 20 */
+}
+/* The public `code` chip (styles.css) is 7px; inside the portals it is a chip
+   like any other (19 Nov drift sweep: admin Settings' API address). */
+:where(body[data-admin-design], body[data-agency-design], body[data-outlet-design]) code {
+	border-radius: var(--iz-radius-s); /* 7 → 6 */
 }
 /* The public site's `styles.css` gives every button and link a 180 ms
    transition (`button, .island-shell, a`). Inside the portals that is the

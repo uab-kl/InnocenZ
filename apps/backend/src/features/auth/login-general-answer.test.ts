@@ -37,18 +37,19 @@ import type { UserType } from '@/features/user/user.model';
 import { AuthControllerClass, LOGIN_REFUSAL_FLOOR_MS } from './auth.controller';
 import { FAILED_LOGIN_MEMORY_MINUTES } from './unknown-login-lockout';
 import {
-  LOGIN_WRONG_EMAIL_OR_PASSWORD,
-  LOGIN_WRONG_PHONE_OR_PASSWORD,
+  LOGIN_EMAIL_ACCOUNT_NOT_FOUND,
+  LOGIN_PHONE_ACCOUNT_NOT_FOUND,
+  LOGIN_WRONG_PASSWORD,
   lockedOutMessage,
 } from './account-answers';
 
 /**
- * OWNER, 29 SEP 2026 — "General message, both". Sign-in must not tell whoever
- * is typing whether an email or a phone number has an account: an unknown
- * identifier, an account with no password and a wrong password get ONE answer —
- * the same words, the same bcrypt work, the same floor, the same lockout — and
- * what is wrong with an ACCOUNT (inactive, a suspended organisation) is said
- * only to somebody who has proved its password.
+ * OWNER, 19 NOV 2026 — reverses 29 Sep's "General message, both" FOR SIGN-IN:
+ * an unknown identifier (or a password-less stub) is told "Account not found"
+ * and pointed at sign-up; an existing account with the wrong password is told
+ * "Wrong password". What still holds: the same bcrypt work, the same floor and
+ * the same lockout for every refusal, and what is wrong with an ACCOUNT
+ * (inactive, a suspended organisation) is said only once its password is right.
  */
 
 const USER_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -142,28 +143,32 @@ beforeEach(() => {
   orgStatus.block = null;
 });
 
-describe('POST /auth/login — one answer for every wrong guess', () => {
-  it('an unknown email and a wrong password get the identical 401', async () => {
+describe('POST /auth/login — a missing account and a wrong password are told apart', () => {
+  it('an unknown email is told the account was not found and pointed at sign-up', async () => {
     const unknown = await signIn(setup(null), byEmail);
-    const wrong = await signIn(setup(account()), byEmail);
-
     expect(unknown.statusCode).toBe(401);
-    expect(unknown.body).toEqual(wrong.body);
-    expect(unknown.body).toEqual({ success: false, message: LOGIN_WRONG_EMAIL_OR_PASSWORD });
+    expect(unknown.body).toEqual({ success: false, message: LOGIN_EMAIL_ACCOUNT_NOT_FOUND });
+    expect(unknown.body.message).toMatch(/sign up as an Outlet or PR Agency/);
   });
 
-  it('a phone sign-in says phone number — and is identical for an unknown number', async () => {
+  it('an existing account with the wrong password is told "Wrong password"', async () => {
+    const wrong = await signIn(setup(account()), byEmail);
+    expect(wrong.statusCode).toBe(401);
+    expect(wrong.body).toEqual({ success: false, message: LOGIN_WRONG_PASSWORD });
+  });
+
+  it('a phone sign-in: unknown number → not found (no organisation door), wrong password → wrong password', async () => {
     const unknown = await signIn(setup(null), byPhone);
     const wrong = await signIn(setup(account()), byPhone);
-    expect(unknown.body).toEqual({ success: false, message: LOGIN_WRONG_PHONE_OR_PASSWORD });
-    expect(wrong.body).toEqual(unknown.body);
+    expect(unknown.body).toEqual({ success: false, message: LOGIN_PHONE_ACCOUNT_NOT_FOUND });
+    expect(wrong.body).toEqual({ success: false, message: LOGIN_WRONG_PASSWORD });
   });
 
-  it('an account with NO password (a roster stub) is refused the same way, whatever the compare says', async () => {
+  it('an account with NO password (a roster stub) is "not found" — signing up claims it — whatever the compare says', async () => {
     password.matches = true;
     const res = await signIn(setup(account({ passwordHash: null })), byEmail);
     expect(res.statusCode).toBe(401);
-    expect(res.body.message).toBe(LOGIN_WRONG_EMAIL_OR_PASSWORD);
+    expect(res.body.message).toBe(LOGIN_EMAIL_ACCOUNT_NOT_FOUND);
   });
 
   it('every refusal costs exactly one bcrypt compare, account or not', async () => {
@@ -193,9 +198,9 @@ describe('POST /auth/login — one answer for every wrong guess', () => {
 });
 
 describe('POST /auth/login — the account’s own state, told only to whoever has its password', () => {
-  it('an INACTIVE account: a wrong password gets the general 401, the right one is told', async () => {
+  it('an INACTIVE account: a wrong password gets "Wrong password", only the right one is told', async () => {
     const wrong = await signIn(setup(account({ status: 'inactive' })), byEmail);
-    expect(wrong.body.message).toBe(LOGIN_WRONG_EMAIL_OR_PASSWORD);
+    expect(wrong.body.message).toBe(LOGIN_WRONG_PASSWORD);
 
     password.matches = true;
     const right = await signIn(setup(account({ status: 'inactive' })), byEmail);
@@ -206,7 +211,7 @@ describe('POST /auth/login — the account’s own state, told only to whoever h
   it('a SUSPENDED organisation: the same — never before the password is right', async () => {
     orgStatus.block = 'Your agency has been suspended. Contact InnocenZ.';
     const wrong = await signIn(setup(account()), byEmail);
-    expect(wrong.body.message).toBe(LOGIN_WRONG_EMAIL_OR_PASSWORD);
+    expect(wrong.body.message).toBe(LOGIN_WRONG_PASSWORD);
 
     password.matches = true;
     const right = await signIn(setup(account()), byEmail);

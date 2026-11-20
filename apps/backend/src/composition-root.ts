@@ -31,6 +31,10 @@ import { OrgMemberInviteControllerClass } from '@/features/auth/org-member-invit
 import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository.js';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
+import {
+  PrDetachRequestService,
+  databaseDetachDeps,
+} from '@/features/pr-personnel/pr-detach-request.js';
 import { AgencyOutletControllerClass } from '@/features/agency/agency-outlet.controller.js';
 import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
@@ -302,6 +306,16 @@ export const outletTransactionController = new OutletTransactionControllerClass(
   outletTransactionRepository,
 );
 
+// Shared by PR personnel (the agency files) and the admin inbox (the admin
+// answers), so both doors move one membership by one set of rules.
+export const prDetachRequestService = new PrDetachRequestService(
+  databaseDetachDeps(async (agencyId) =>
+    (await agencyMemberRepository.listByAgency(agencyId, { status: 'active' }))
+      .map((member) => member.userId)
+      .filter((userId): userId is string => !!userId),
+  ),
+);
+
 export const adminRequestRepository = new AdminRequestRepositoryClass();
 // Approving a plan change writes the member_subscription ledger, so the
 // controller also holds the ledger + plan-catalog repositories.
@@ -314,6 +328,8 @@ export const adminRequestController = new AdminRequestControllerClass(
   // A venue reads its OWN pending switch through the same scope resolver the
   // other member-facing controllers use — never from a client-supplied id.
   orgScopeDeps,
+  // Approve / Decline on a PR detach request (owner, 20 Nov 2026).
+  prDetachRequestService,
 );
 
 export const prRepository = new PrRepositoryClass();
@@ -393,6 +409,8 @@ export const prController = new PrControllerClass(
   roleRepository,
   // An outlet caller's PR pool is its approved agencies' rosters.
   agencyOutletRepository,
+  // The one-year tie rule + the admin "request detach" (owner, 20 Nov 2026).
+  prDetachRequestService,
 );
 
 export const shiftRepository = new ShiftRepositoryClass();

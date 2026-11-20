@@ -20,6 +20,11 @@ const PR_ROUTE_SENTENCES = [
 	"Name is required",
 	// PR_MOBILE_REQUIRED, backend pr-write-rules.ts (29 Sep 2026).
 	"A mobile number is required to add a new PR — it is how the PR claims the account at sign-up",
+	// POST /pr/:id/detach-request — backend pr-detach-rules.ts (20 Nov 2026):
+	// ALREADY_REQUESTED, NO_REQUEST_NEEDED, NOT_ON_ROSTER.
+	"A detach request for this PR is already waiting for the InnocenZ admin",
+	"This PR has been with your agency for a year or more — Detach removes them directly, no admin request needed",
+	"This PR is no longer on your agency roster",
 ];
 
 const HAS_CJK = /[㐀-鿿]/;

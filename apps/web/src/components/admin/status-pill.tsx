@@ -1,9 +1,9 @@
 import {
 	AlertTriangle,
 	CheckCircle2,
-	CircleHelp,
 	Clock,
 	MinusCircle,
+	Palette,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -133,8 +133,14 @@ export function StatusLegend() {
 	return (
 		<Dialog>
 			<DialogTrigger asChild>
+				{/*
+				  A palette, not a "?". It sat beside the Icon guide's "?" in the top
+				  bar, and two identical glyphs opening two different dialogs could be
+				  told apart only by hovering for the tooltip (design review, 20 Nov
+				  2026). The glyph now says what this one opens: the colours.
+				*/}
 				<Button variant="outline" size="icon" aria-label={title} title={title}>
-					<CircleHelp aria-hidden />
+					<Palette aria-hidden />
 				</Button>
 			</DialogTrigger>
 			<DialogContent>

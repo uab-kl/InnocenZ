@@ -8,6 +8,7 @@ import { AdminRequestLedger } from './admin-request-ledger.js';
 import { AdminRequestQueueHandlers } from './admin-request-queue.js';
 import { AdminRequestSubscriberHandlers } from './admin-request-subscriber.js';
 import { AdminRequestActionHandlers } from './admin-request-actions.js';
+import type { PrDetachRequestService } from '@/features/pr-personnel/pr-detach-request.js';
 
 /**
  * The admin-request inbox's HTTP surface — the one class `composition-root.ts`
@@ -31,6 +32,8 @@ export class AdminRequestControllerClass {
     /** The billing ledger — the owner's unpaid→no-switch rule reads it. */
     subscriptionInvoiceRepository: SubscriptionInvoiceRepositoryClass,
     orgScopeDeps: OrgScopeDeps,
+    /** Approve / Decline on a `pr_detach` request — the membership side. */
+    prDetach?: PrDetachRequestService,
   ) {
     const ledger = new AdminRequestLedger(
       repository,
@@ -46,7 +49,7 @@ export class AdminRequestControllerClass {
       orgScopeDeps,
       ledger,
     );
-    this.actions = new AdminRequestActionHandlers(repository, ledger);
+    this.actions = new AdminRequestActionHandlers(repository, ledger, prDetach);
   }
 
   // ── The admin's queue (admin-request-queue.ts) ──

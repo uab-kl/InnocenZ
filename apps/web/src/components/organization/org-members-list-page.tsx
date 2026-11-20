@@ -18,6 +18,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AdminFilters } from "@/components/admin/admin-filters";
+import { EmailLine } from "@/components/admin/email-line";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Badge } from "@/components/ui/badge";
@@ -246,12 +247,14 @@ export function OrgMembersListPage({
 			navigate({
 				to: "/admin/user-management/agency/$agencyId/member/$userId",
 				params: { agencyId: row.orgId, userId: row.userId },
+				search: {},
 			});
 			return;
 		}
 		navigate({
 			to: "/admin/user-management/outlet/$outletId/member/$userId",
 			params: { outletId: row.orgId, userId: row.userId },
+			search: {},
 		});
 	};
 
@@ -388,7 +391,7 @@ export function OrgMembersListPage({
 									>
 										<SelectValue placeholder={t.admin.filterByStatus} />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 										{STATUS_OPTIONS.map((status) => (
 											<SelectItem key={status} value={status}>
@@ -406,16 +409,29 @@ export function OrgMembersListPage({
 					<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
 						<Table className="iz-admin-management-table">
 							<TableHeader>
+								{/*
+								  `table-layout: fixed` split the width evenly, and an even
+								  fifth was a few px short of a plain address, which then broke
+								  mid-word. From xl the other columns take what their own
+								  content needs (a member ID on one line, the date on one line)
+								  and Contact — the one column left without a width — takes
+								  the rest. Narrower, the even split stands and a long address
+								  ends in "…" (EmailLine) rather than breaking.
+								*/}
 								<TableRow>
-									<TableHead>
+									<TableHead className="xl:w-[18%]">
 										{t.admin.colName} / {t.adminOrg.memberCodeLabel}
 									</TableHead>
-									<TableHead>
+									<TableHead className="xl:w-[18%]">
 										{isAgency ? t.adminOrg.agencyName : t.adminOrg.venue} /{" "}
-										{t.adminOrg.memberSubRole}
+										{/* Kept whole so a narrow header breaks at the "/",
+										    not inside "Sub-role". */}
+										<span className="whitespace-nowrap">
+											{t.adminOrg.memberSubRole}
+										</span>
 									</TableHead>
 									<TableHead>{t.adminUsers.colContact}</TableHead>
-									<TableHead>
+									<TableHead className="xl:w-[21%]">
 										{t.admin.colStatus} / {t.admin.colCreated}
 									</TableHead>
 									<TableHead>{t.admin.colActions}</TableHead>
@@ -466,7 +482,7 @@ export function OrgMembersListPage({
 											// `cursor-pointer` alone never told a touch user, or
 											// anyone who had not already moved the pointer onto the
 											// row, that this opened the member's page.
-											className="iz-admin-row-open"
+											className="iz-admin-row-open max-md:grid-flow-row-dense"
 											onClick={() => openMember(row)}
 										>
 											<TableCell>
@@ -497,8 +513,11 @@ export function OrgMembersListPage({
 													{laneLabel(row.subRole)}
 												</div>
 											</TableCell>
-											<TableCell data-label={t.adminUsers.colContact}>
-												<div className="text-sm">{row.email || "—"}</div>
+											<TableCell
+												data-label={t.adminUsers.colContact}
+												className="max-md:col-span-full"
+											>
+												<EmailLine email={row.email} className="text-sm" />
 												<div className="text-xs text-muted-foreground">
 													{row.phoneNum || "—"}
 												</div>
@@ -663,7 +682,7 @@ export function OrgMembersListPage({
 								<SelectTrigger aria-label={t.adminOrg.memberSubRole}>
 									<SelectValue placeholder={t.adminOrg.memberSubRole} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									{groups.map((group) => (
 										<SelectItem key={group.subRole} value={group.subRole}>
 											{group.title(t)}

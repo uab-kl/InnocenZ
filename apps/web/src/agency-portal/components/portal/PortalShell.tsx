@@ -1,6 +1,10 @@
 import { InnocenZWordmark, LogoMark } from "@agency-portal/components/Brand";
 import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
-import { type NavItem, navIsActive } from "@agency-portal/components/Nav";
+import {
+	type NavItem,
+	navIsActive,
+	navLinkActiveOptions,
+} from "@agency-portal/components/Nav";
 import {
 	NavAlertBadge,
 	navAlertAriaSuffix,
@@ -279,6 +283,7 @@ function PortalSidebarLink({
 	return (
 		<Link
 			to={item.to}
+			activeOptions={navLinkActiveOptions(item.to)}
 			className={`iz-portal-nav-link${active ? " on" : ""}`}
 			aria-current={active ? "page" : undefined}
 			onClick={onNavigate}

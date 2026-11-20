@@ -33,6 +33,7 @@ import {
 } from './pr-write-rules.js';
 import { EMPTY_PR_STATS, loadPrStats } from './pr-stats.js';
 import { loadPrKpiScores } from './pr-kpi.js';
+import { listOpenDetachRequests, type PrDetachRequestService } from './pr-detach-request.js';
 import { derivedAge } from './ic-dob.js';
 import {
   refreshStoredComcard,
@@ -70,6 +71,16 @@ type SignInContactAccount = {
   passwordHash: string | null;
   createdBy: string;
 };
+
+/**
+ * An outlet's view of a PR row without `approvedAt` (0171) — when a PR joined
+ * an agency is that agency's own fact; an outlet books the person and needs
+ * nothing of it. Same reasoning that keeps `stats` and `kpiScore` off its rows.
+ */
+function withoutTieDate<T extends { approvedAt?: unknown }>(row: T): Omit<T, 'approvedAt'> {
+  const { approvedAt: _omitted, ...rest } = row;
+  return rest;
+}
 
 /** Map agency_pr (+ user/user_profile) into the personnel list shape the web already uses. */
 function rosterRowFromMembership(
@@ -122,6 +133,7 @@ function rosterRowFromMembership(
     phone: row.phoneNum,
     email: row.email,
     icNo: row.idNo,
+    approvedAt: row.approvedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy,
@@ -244,6 +256,10 @@ export class PrControllerClass {
     // Resolves which agencies an outlet caller may book from — see
     // `resolveBookableAgencyIds`.
     private agencyOutletRepository: AgencyOutletRepository,
+    // The one-year tie rule and the admin "request detach" (owner, 20 Nov
+    // 2026). Optional only so the many fakes that build this controller for
+    // unrelated tests need not; composition-root always passes it.
+    private detachRequests?: PrDetachRequestService,
   ) {}
 
   /**
@@ -754,9 +770,7 @@ export class PrControllerClass {
               stats: stats.get(pr.id) ?? EMPTY_PR_STATS,
               kpiScore: kpiScores?.get(pr.id) ?? null,
             }))
-          : req.redactIdentityDocs
-            ? redactPrRowsForOutlet(prs)
-            : prs,
+          : (req.redactIdentityDocs ? redactPrRowsForOutlet(prs) : prs).map(withoutTieDate),
         pagination: {
           page,
           pageSize,
@@ -795,7 +809,7 @@ export class PrControllerClass {
     res: Response,
     id: string,
     opts: { forWrite: boolean },
-  ): Promise<{ pr: PrWithProfileType; agencyId: string } | null> {
+  ): Promise<{ pr: PrWithProfileType; agencyId: string; isAdmin: boolean } | null> {
     const notFound = () => {
       res
         .status(404)
@@ -819,7 +833,7 @@ export class PrControllerClass {
       // Null here means "not on YOUR roster" — 404, not 403, so a caller cannot
       // probe which PR ids exist outside their agency.
       if (!pr) return notFound();
-      return { pr, agencyId: scope.agencyId };
+      return { pr, agencyId: scope.agencyId, isAdmin: false };
     }
 
     // Admin. An explicitly named agency always wins, in either lane.
@@ -832,7 +846,7 @@ export class PrControllerClass {
       if (!uuidParam(named)) return notFound();
       const pr = await this.prRepository.getById(id, named);
       if (!pr) return notFound();
-      return { pr, agencyId: named };
+      return { pr, agencyId: named, isAdmin: true };
     }
 
     if (opts.forWrite) {
@@ -852,13 +866,13 @@ export class PrControllerClass {
       }
       const pr = await this.prRepository.getById(id, agencyIds[0]);
       if (!pr) return notFound();
-      return { pr, agencyId: agencyIds[0] };
+      return { pr, agencyId: agencyIds[0], isAdmin: true };
     }
 
     // Admin read, no agency named: oldest-membership view, as before.
     const pr = await this.prRepository.getById(id);
     if (!pr) return notFound();
-    return { pr, agencyId: pr.agencyId };
+    return { pr, agencyId: pr.agencyId, isAdmin: true };
   }
 
   /**
@@ -1014,7 +1028,7 @@ export class PrControllerClass {
         return res.status(200).json({
           success: true,
           message: 'OK',
-          data: redactPrRowForOutlet(resolved.pr),
+          data: withoutTieDate(redactPrRowForOutlet(resolved.pr)),
         });
       }
       res.status(200).json({
@@ -1588,6 +1602,25 @@ export class PrControllerClass {
       if (!resolved) return;
       const existing = resolved.pr;
 
+      /*
+       * THE ONE-YEAR TIE RULE (owner, 20 Nov 2026: "Keep rule, real admin
+       * request"). Under a year on this roster, an agency may not let the PR
+       * go on its own — it files `POST /pr/:id/detach-request` and the admin
+       * decides. This was a website-only check, and a blind one: real PRs
+       * carried no tie date, the website assumed "400 days ago", and every
+       * real Detach went straight through. An admin is not bound by it — the
+       * admin is who the rule hands the decision to.
+       */
+      if (!resolved.isAdmin && existing.userId && this.detachRequests) {
+        const refusal = await this.detachRequests.directDetachRefusal(
+          resolved.agencyId,
+          existing.userId,
+        );
+        if (refusal) {
+          return res.status(409).json({ success: false, message: refusal, data: null });
+        }
+      }
+
       // Detach membership — 'left', never a hard delete. The agency may always
       // let go of its own PR (no settlement gate on this side), but deleting
       // the row erased the very history the approvals page's Approved chip
@@ -1646,6 +1679,69 @@ export class PrControllerClass {
         message: Error.INTERNAL_SERVER_ERROR,
         data: null,
       });
+    }
+  }
+
+  /**
+   * `POST /pr/:id/detach-request` — the agency asks the InnocenZ admin to
+   * detach a PR it has had for less than a year (owner, 20 Nov 2026). Same
+   * gate as Detach itself (`workforce:update`, on the route).
+   *
+   * The PR is resolved exactly as `remove` resolves it, so a PR on another
+   * agency's roster is the same 404 — never a request filed against an agency
+   * the caller does not act for. The agency id is the caller's own; nothing in
+   * the body can name another. The service answers every refusal in words:
+   * not on the roster, tied a year already (Detach works directly), or a
+   * request already waiting.
+   */
+  async requestDetach(req: Request, res: Response) {
+    try {
+      if (!this.detachRequests) {
+        throw new globalThis.Error('PrController was built without a detach-request service');
+      }
+      const resolved = await this.resolvePrForCaller(req, res, paramId(req.params.id), {
+        forWrite: true,
+      });
+      if (!resolved) return;
+      if (resolved.isAdmin) {
+        return res.status(400).json({
+          success: false,
+          message: 'An admin detaches a PR directly — use Detach.',
+          data: null,
+        });
+      }
+      const outcome = await this.detachRequests.file({
+        agencyId: resolved.agencyId,
+        userId: resolved.pr.userId,
+        actor: getActor(req),
+        message: typeof req.body?.message === 'string' ? req.body.message : null,
+      });
+      return res
+        .status(outcome.status)
+        .json({ success: outcome.ok, message: outcome.message, data: outcome.data ?? null });
+    } catch (error) {
+      logger.error('[PrController.requestDetach] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * `GET /pr/detach-requests` — the caller's agency's detach requests still
+   * waiting for the admin, so Manage PR can show "Detach requested" on those
+   * PRs instead of offering a second request. Scoped from the session: an
+   * agency reads its own; an admin console with no acting agency has none.
+   */
+  async listMyDetachRequests(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      if (!scope.agencyId) {
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
+      const rows = await listOpenDetachRequests(scope.agencyId);
+      return res.status(200).json({ success: true, message: 'OK', data: rows });
+    } catch (error) {
+      logger.error('[PrController.listMyDetachRequests] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
 

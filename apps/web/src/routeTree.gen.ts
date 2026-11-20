@@ -73,6 +73,7 @@ import { Route as AdminServiceOtherRouteImport } from './routes/admin/service/ot
 import { Route as AdminServicePaymentVoucherRouteImport } from './routes/admin/service/payment-voucher'
 import { Route as AdminServicePlanChangesRouteImport } from './routes/admin/service/plan-changes'
 import { Route as AdminServicePlanPaymentRouteImport } from './routes/admin/service/plan-payment'
+import { Route as AdminServicePrDetachRouteImport } from './routes/admin/service/pr-detach'
 import { Route as AdminServiceRequestsRouteImport } from './routes/admin/service/requests'
 import { Route as AdminUserManagementAdminRouteImport } from './routes/admin/user-management/admin'
 import { Route as AdminUserManagementAgencyTeamRouteImport } from './routes/admin/user-management/agency-team'
@@ -407,6 +408,11 @@ const AdminServicePlanPaymentRoute = AdminServicePlanPaymentRouteImport.update({
   path: '/service/plan-payment',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminServicePrDetachRoute = AdminServicePrDetachRouteImport.update({
+  id: '/service/pr-detach',
+  path: '/service/pr-detach',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminServiceRequestsRoute = AdminServiceRequestsRouteImport.update({
   id: '/service/requests',
   path: '/service/requests',
@@ -530,6 +536,7 @@ export interface FileRoutesByFullPath {
   '/admin/service/payment-voucher': typeof AdminServicePaymentVoucherRoute
   '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/plan-payment': typeof AdminServicePlanPaymentRoute
+  '/admin/service/pr-detach': typeof AdminServicePrDetachRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency-team': typeof AdminUserManagementAgencyTeamRoute
@@ -602,6 +609,7 @@ export interface FileRoutesByTo {
   '/admin/service/payment-voucher': typeof AdminServicePaymentVoucherRoute
   '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/plan-payment': typeof AdminServicePlanPaymentRoute
+  '/admin/service/pr-detach': typeof AdminServicePrDetachRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency-team': typeof AdminUserManagementAgencyTeamRoute
@@ -679,6 +687,7 @@ export interface FileRoutesById {
   '/admin/service/payment-voucher': typeof AdminServicePaymentVoucherRoute
   '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/plan-payment': typeof AdminServicePlanPaymentRoute
+  '/admin/service/pr-detach': typeof AdminServicePrDetachRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency-team': typeof AdminUserManagementAgencyTeamRoute
@@ -757,6 +766,7 @@ export interface FileRouteTypes {
     | '/admin/service/payment-voucher'
     | '/admin/service/plan-changes'
     | '/admin/service/plan-payment'
+    | '/admin/service/pr-detach'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency-team'
@@ -829,6 +839,7 @@ export interface FileRouteTypes {
     | '/admin/service/payment-voucher'
     | '/admin/service/plan-changes'
     | '/admin/service/plan-payment'
+    | '/admin/service/pr-detach'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency-team'
@@ -905,6 +916,7 @@ export interface FileRouteTypes {
     | '/admin/service/payment-voucher'
     | '/admin/service/plan-changes'
     | '/admin/service/plan-payment'
+    | '/admin/service/pr-detach'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency-team'
@@ -1389,6 +1401,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminServicePlanPaymentRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/service/pr-detach': {
+      id: '/admin/service/pr-detach'
+      path: '/service/pr-detach'
+      fullPath: '/admin/service/pr-detach'
+      preLoaderRoute: typeof AdminServicePrDetachRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/service/requests': {
       id: '/admin/service/requests'
       path: '/service/requests'
@@ -1553,6 +1572,7 @@ interface AdminRouteRouteChildren {
   AdminServicePaymentVoucherRoute: typeof AdminServicePaymentVoucherRoute
   AdminServicePlanChangesRoute: typeof AdminServicePlanChangesRoute
   AdminServicePlanPaymentRoute: typeof AdminServicePlanPaymentRoute
+  AdminServicePrDetachRoute: typeof AdminServicePrDetachRoute
   AdminServiceRequestsRoute: typeof AdminServiceRequestsRoute
 }
 
@@ -1569,6 +1589,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminServicePaymentVoucherRoute: AdminServicePaymentVoucherRoute,
   AdminServicePlanChangesRoute: AdminServicePlanChangesRoute,
   AdminServicePlanPaymentRoute: AdminServicePlanPaymentRoute,
+  AdminServicePrDetachRoute: AdminServicePrDetachRoute,
   AdminServiceRequestsRoute: AdminServiceRequestsRoute,
 }
 

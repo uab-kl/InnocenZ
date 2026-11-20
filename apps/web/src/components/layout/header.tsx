@@ -22,18 +22,31 @@ import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import {
+	PLAN_REQUEST_COUNT_KEY,
+	PLAN_REQUEST_EXCLUDES,
+	PR_DETACH_COUNT_KEY,
+} from "@/hooks/use-sidebar-badges";
 import { fetchPendingCount } from "@/services/admin-request";
 
 /** Where the bell opens, and the count that page will show. */
 export function bellTarget(
 	pendingRequests: number,
 	pendingPlanChanges: number,
+	pendingPrDetach = 0,
 ): {
-	to: "/admin/service/requests" | "/admin/service/plan-changes";
+	to:
+		| "/admin/service/requests"
+		| "/admin/service/plan-changes"
+		| "/admin/service/pr-detach";
 	count: number;
 } {
 	if (pendingRequests <= 0 && pendingPlanChanges > 0) {
 		return { to: "/admin/service/plan-changes", count: pendingPlanChanges };
+	}
+	// Last in line, with its own page and count — see PR_DETACH_COUNT_KEY.
+	if (pendingRequests <= 0 && pendingPlanChanges <= 0 && pendingPrDetach > 0) {
+		return { to: "/admin/service/pr-detach", count: pendingPrDetach };
 	}
 	return { to: "/admin/service/requests", count: Math.max(0, pendingRequests) };
 }
@@ -50,8 +63,15 @@ function NotificationBell() {
 	 * Request while anything waits there, else Plan Change.
 	 */
 	const requestsQuery = useQuery({
-		queryKey: ["admin-requests", "pending-count", "without-plan-changes"],
-		queryFn: () => fetchPendingCount(logout, { excludeType: "plan_change" }),
+		queryKey: PLAN_REQUEST_COUNT_KEY,
+		queryFn: () =>
+			fetchPendingCount(logout, { excludeType: PLAN_REQUEST_EXCLUDES }),
+		staleTime: 30_000,
+		refetchInterval: 60_000,
+	});
+	const prDetachQuery = useQuery({
+		queryKey: PR_DETACH_COUNT_KEY,
+		queryFn: () => fetchPendingCount(logout, { type: "pr_detach" }),
 		staleTime: 30_000,
 		refetchInterval: 60_000,
 	});
@@ -64,6 +84,7 @@ function NotificationBell() {
 	const target = bellTarget(
 		requestsQuery.data?.pending ?? 0,
 		planChangesQuery.data?.pending ?? 0,
+		prDetachQuery.data?.pending ?? 0,
 	);
 	const count = target.count;
 

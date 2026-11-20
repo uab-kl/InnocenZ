@@ -7,6 +7,7 @@ import {
 	FileQuestion,
 	Repeat2,
 	Store,
+	UserMinus,
 	Wrench,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -42,6 +43,7 @@ type Row = {
 		| "/admin/user-management/outlet"
 		| "/admin/service/plan-changes"
 		| "/admin/service/requests"
+		| "/admin/service/pr-detach"
 		| "/admin/service/other";
 	icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 	title: (t: PortalTranslations) => string;
@@ -82,6 +84,16 @@ const ROWS: Row[] = [
 		title: (t) => t.todo.adminPlanRequestsTitle,
 		meta: (t) => t.todo.adminPlanRequestsMeta,
 		cta: (t) => t.todo.adminPlanRequestsCta,
+	},
+	// A PR's membership is not money, so it follows the money rows — but it is
+	// still somebody's livelihood waiting on an answer, so it is not last.
+	{
+		key: "prDetach",
+		to: "/admin/service/pr-detach",
+		icon: UserMinus,
+		title: (t) => t.todo.adminPrDetachTitle,
+		meta: (t) => t.todo.adminPrDetachMeta,
+		cta: (t) => t.todo.adminPrDetachCta,
 	},
 	{
 		key: "jobs",

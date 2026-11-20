@@ -599,6 +599,25 @@ const leaveDecided: Resolver = (ctx) => {
 	return null;
 };
 
+/** pr-detach-request.ts `tellAgency` — the admin's answer, rebuilt from its payload. */
+const prDetachDecided: Resolver = (ctx) => {
+	const decision = text(ctx.payload, "decision");
+	const pr = text(ctx.payload, "prName") ?? ctx.t.srvPrDetachThisPr;
+	if (decision === "approved") {
+		return {
+			title: ctx.t.srvPrDetachApprovedTitle,
+			body: fill(ctx.t.srvPrDetachApprovedBody, { pr }),
+		};
+	}
+	if (decision === "declined") {
+		return {
+			title: ctx.t.srvPrDetachDeclinedTitle,
+			body: fill(ctx.t.srvPrDetachDeclinedBody, { pr }),
+		};
+	}
+	return null;
+};
+
 /** shift-assignment.controller `notifyPrOvertimeDecided` — rebuilt from its payload. */
 const overtimeDecided: Resolver = (ctx) => {
 	const decision = text(ctx.payload, "decision");
@@ -807,6 +826,7 @@ const RESOLVERS: Record<NotificationKind, Resolver> = {
 	shift_released_early: releasedEarly,
 	agency_join_resolved: joinResolved,
 	agency_broadcast: agencyBroadcast,
+	pr_detach_decided: prDetachDecided,
 };
 
 /**

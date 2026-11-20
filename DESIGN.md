@@ -3,49 +3,57 @@ version: alpha
 name: InnocenZ
 description: >-
   The working consoles of a PR-staffing platform — admin, agency and outlet on the web, the
-  PR app on the phone. A calm plum-ink dark canvas, one lavender accent for the thing you act
-  on, and a strict three-step type ladder. The design has one job: every page must answer
+  PR app on the phone. Since 20 Nov 2026 the look is AFTERGLOW VIVID (owner's choice): a
+  near-black night canvas with a faint glow in two corners, warm off-white text, soft
+  CHAMPAGNE gold on the one thing you act on (it replaced the first build's pink-to-orange
+  neon the same day — "too bright"), Sora for text and Newsreader for page titles,
+  and the strict three-step type ladder. The design has one job: every page must answer
   "where am I, what can I do here, and what is waiting for my decision" before the reader
   has to think. Plain beats clever; a page that looks quieter but works is always the win.
 
+# Values below are Afterglow Vivid, set in apps/web/src/styles/afterglow.css (step 1 of its
+# build, 20 Nov 2026). The previous plum values are in git history (DESIGN.md before 20 Nov).
 colors:
-  canvas: "#191622"          # page background (--iz-bg / --background)
-  panel: "#231f2e"           # cards, panels, sheets (--iz-panel / --card)
-  panel-2: "#292433"         # one step up: inputs at rest, hovered rows (--iz-panel2)
-  rail: "#14111c"            # admin sidebar (--sidebar)
-  hairline: "#373141"        # 1px borders and dividers (--iz-line / --border)
-  hairline-strong: "#4c435a" # input borders, focused edges (--iz-line2 / --input)
-  ink: "#eee9f5"             # body text and titles (--iz-txt / --iz-title)
-  ink-muted: "#c0b6cd"       # secondary text, helper lines (--iz-muted)
-  ink-subtle: "#ada4b9"      # tertiary text, meta (--iz-muted2)
-  accent: "#baa4d6"          # lavender: focus ring, selected state, links (--iz-violet / --primary)
-  accent-light: "#d5c5e5"    # accent hover on text
-  act: "#68517f"             # fill of the button that DOES the thing (save, pay, approve)
-  act-border: "#9274ad"
-  act-hover: "#795f93"
-  on-act: "#ffffff"
-  settled: "#8dc9a9"         # green — settled, verified, signed, paid
-  settled-bg: "#24392f"
-  waiting: "#e8c66a"         # amber — waiting on someone (portal --iz-amber; admin --signal-warn #ddbd7b)
-  disputed: "#e5a1a6"        # red — disputed, refused, deductions, stopped
-  disputed-bg: "#3c282f"
+  canvas: "#0b0a0d"          # page background (--iz-bg / --background); faint champagne + violet corner glow
+  panel: "#121116"           # cards, panels, sheets (--iz-panel / --card)
+  panel-2: "#1a181e"         # one step up: inputs at rest, hovered rows (--iz-panel2)
+  rail: "#0b0a0d"            # sidebars sit on the canvas (--sidebar)
+  hairline: "#26232c"        # 1px borders and dividers (--iz-line / --border)
+  hairline-strong: "#34303b" # input borders, focused edges (--iz-line2 / --input)
+  ink: "#ebe6df"             # warm off-white — never pure white at night (--iz-txt / --iz-title)
+  ink-muted: "#bdb6ad"       # secondary text, helper lines (--iz-muted)
+  ink-subtle: "#a39c93"      # tertiary text, meta (--iz-muted2)
+  accent: "#d9c09a"          # champagne text: focus ring, selected icon, links, outline buttons (--iz-violet / --primary)
+  accent-light: "#e8d6b8"    # accent hover on text
+  act: "#cbb089"             # champagne, solid — the button that DOES the thing (--iz-neon and --iz-act)
+  act-hover: "#d6bd99"
+  on-act: "#1c160e"          # dark ink on champagne, 8.6:1 (--iz-neon-ink / --iz-act-ink)
+  tab-selected: "#3e3732"    # a SOFT champagne tint, not a fill (--iz-tab-selected-bg)
+  on-tab-selected: "#e2cba6" # champagne text on it, 7.4:1 (--iz-tab-selected-ink)
+  todo-tile: "linear-gradient(135deg, #ff5f9e, #ff8a4c)"  # To do icons keep a neon per kind (owner: "icon can remain")
+  settled: "#5ee0a0"         # green — settled, verified, signed, paid
+  settled-bg: "#13271e"
+  waiting: "#ffb35c"         # amber — waiting on someone
+  disputed: "#ff6b7a"        # red — disputed, refused, deductions, stopped
+  disputed-bg: "#33161b"
   wordmark: "#e0be73"        # the logo wordmark only — never a button, never text
 
 typography:
-  family-portal: "Arial, Helvetica, sans-serif"   # agency + outlet (--iz-font, SL 22 Oct 2026)
-  family-admin: "Manrope"                          # admin console's approved face
+  family-portal: "Sora"                            # all three portals' text (--iz-font, admin --font-sans), owner 20 Nov 2026
+  family-title: "Newsreader"                       # page titles, the one <h1> (--iz-font-title)
   family-wordmark: "Georgia, serif"                # the logo only
   body:  { fontSize: 16px, fontWeight: 400, lineHeight: 1.5 }   # --iz-fs-micro…body
   title: { fontSize: 20px, fontWeight: 600, lineHeight: 1.3 }   # --iz-fs-title: section titles
   head:  { fontSize: 24px, fontWeight: 600, lineHeight: 1.25 }  # --iz-fs-head/display: the page <h1>
   numbers: { fontFeature: tnum, className: iz-nums }            # every money / count column
 
-rounded:
-  chip: 5px      # .iz-pill / .iz-chip
-  tab: 7px       # payroll tabs, filter chips
-  control: 8px   # buttons, inputs, selects
-  panel: 13px    # portal panels and cards (admin cards 12–14px)
-  pill: 999px    # count badges only
+rounded:          # measured on every lane 19 Nov 2026 — the steps of styles/portal-interaction.css
+  chip: 6px      # --iz-radius-s: status chips, rail items, tabs, code
+  tab: 6px       # --iz-radius-s
+  control: 10px  # --iz-radius-m: buttons, inputs, selects
+  panel: 14px    # --iz-radius-l: panels, cards, alerts, To do rows
+  sheet: 20px    # --iz-radius-xl: the largest surfaces
+  pill: 999px    # count badges only; avatars are circles
 
 spacing:
   xs: 4px
@@ -72,6 +80,62 @@ components:
 > looks. Read it before touching CSS or layout. `CLAUDE.md` holds the enforced rules
 > (typography ratchet, status colours, no demo data); this file explains the look and the
 > patterns that sit on top of them. When the two disagree, `CLAUDE.md` wins.
+
+## 0. The current look — Afterglow Vivid (owner, 20 Nov 2026)
+
+Owner: *"can try conbine this 2 ? make nice Look and feel because client use this to work
+night , improve UIUX"* — then, from the preview gallery, *"Afterglow Vivid"*. It combines
+Gallery Night (near-black, serif titles, hairline frames) with Neon Night (pink-to-orange
+action, a colour per kind of job, corner glow), built with unslop, Huashu Design and
+awesome-design-md tokens. It **replaces**, by the owner's decision: the plum canvas and
+lavender accent (§3), Arial / Manrope as the portal faces (§4 and CLAUDE.md), the ban on
+gradients and glow in the consoles (§2) — now allowed ONLY on the To do kind icons and the
+two faint corner glows (the act button and the selected tab were neon until the Champagne
+change below) — and the tracked capitals on menu
+headings (now sentence case). Everything else in this file still holds: the safety rule
+(§2), the 16 · 20 · 24 ladder, the status colour code, the page anatomy and motion caps.
+
+**Night comfort rules:** text is warm off-white, never pure white; every text role is at
+least 4.5:1 on its surface (measured); colour only on what you act on; status by colour AND
+shape (the urgent ring on a To do icon, from step 2).
+
+**Champagne, not neon (owner, 20 Nov 2026, the same day):** the pink-to-orange was *"too
+bright"*. From a preview of the real pages the owner picked *"A · Champagne"* for the
+selected tab — as a **soft tint**, not a fill — then *"all the button looks change colour
+to A · Champagne"*, and *"for the icon can remain"*. So: every act button is solid
+champagne `#cbb089` with dark ink; outline buttons and links take champagne text; a
+selected tab (and the rail's "you are here") is the soft tint `#3e3732` with champagne
+text, beside a solid champagne bar on the rail; the **To do icons keep their neon colour
+per kind**. Older fills that hard-code white text read `--iz-act-ink` now, so they carry
+the dark ink too. Status colours (green / amber / red) are unchanged.
+
+**The colour rule, as the owner settled it the same evening** — *"only the button A ·
+Champagne colour"* · *"the graph, icon can be neon and more colourful"* · *"all selectable
+all Champagne colour"* · *"the border all colour can change to Champagne"* · *"the money
+RM make more obvious colour"*:
+
+| What it is | Colour |
+|---|---|
+| Anything you **interact** with — buttons, select boxes, date pickers, dropdown options, tabs, links, collapsible sections, focus rings, ticks, coloured borders | **Champagne** — solid `#cbb089` + dark ink for the one action; outlined (champagne edge + champagne text) for every other; soft tint `#3e3732` for what is selected |
+| **Icons and charts** — rail icons (one neon per destination), To do tiles (one per kind), admin page icons, the Reports chart (gains neon green, losses neon red) | **Neon** |
+| Money **with a state** | green settled · amber waiting · red late (the status code) |
+| Money **without** one — a price, a total not yet due | **Sky** `#7dd3fc` (`--iz-money`), which carries no status meaning |
+| Labels, chips, unselected options | Neutral |
+
+The accent tokens (`--iz-gold`, `--iz-violet`, `--iz-accent`, `--primary`, `--ring`,
+`--gold-light`…) are champagne because ~90 borders, focus edges and links read them;
+icons and charts get neon from explicit rules. Watch-outs found on the way: a global
+`main a, p a` rule colours every portal link with `--gold-light`; the prototype theme's
+`:root` lavender `--iz-*` tokens leak into admin unless afterglow re-points them; and an
+accent token used as a FILL under white text fails once it is light (five rules found by
+scanning — fixed with dark ink).
+
+**Build steps:** 1 colours, fonts and finish — `styles/afterglow.css`, every selector
+prefixed with `html` because Vite's dev server loaded `admin-design.css` after it (measured):
+an override that relies on load order silently loses. 2 To do rows (neon icon per kind,
+urgent ring). 3 Today figures and the voucher beside Pending payout. 4 admin dashboard
+(review panel, breakdown bar + list, the gold "System operational" pill). Preview of all of
+it: the "InnocenZ Look Gallery" artifact.
 
 ## 1. The three questions
 
@@ -200,10 +264,10 @@ never scroll sideways (wide tables scroll inside their own container).
 
 ## 6. Components
 
-- **Buttons** — 46px minimum height (touch-safe), 8px corners, rounded rectangles (never
-  pills). `button-act` once per area; `button-soft` for secondary; `button-danger` for
+- **Buttons** — 46px minimum height (touch-safe), 10px corners (`--iz-radius-m`), rounded
+  rectangles (never pills). `button-act` once per area; `button-soft` for secondary; `button-danger` for
   destructive, always behind a confirm.
-- **Status chips** — 5px corners, the status colour code, the status WORD inside (colour is
+- **Status chips** — 6px corners (`--iz-radius-s`), the status colour code, the status WORD inside (colour is
   never the only signal).
 - **To do rows** — one row per kind of waiting work: what it is, how many, why it matters,
   one link straight to the right tab. Red rows first, then amber. Shows "Checking…" while
@@ -361,7 +425,23 @@ products move 5-6px; only their homepages travel 24px or more.
   allowed and land at once under reduced motion (`agency-portal/lib/motion-scroll.ts`), as
   Back to top already did.
 - **Confirmation bar** — drops 10px into place in 160 ms (`iz-m-drop`), replacing the legacy
-  0.4 s pop, so exactly one arrival plays; nothing on leaving.
+  0.4 s pop, so exactly one arrival plays; nothing on leaving. **Admin's** confirmation is
+  sonner's toast, now held to the same rule (`admin-design.css`, 19 Nov 2026): it travels 10px
+  at the fast step instead of a whole toast height in 400 ms, its height no longer animates,
+  and it is gone on the frame it is dismissed. Measured live: 10 → 0 px in ~170 ms, no
+  overshoot; under reduced motion it lands and leaves at once.
+
+**Motion per page pattern (§7)** — what a reader sees move, and the question it answers.
+Nothing on this list is decoration; a pattern with no row has no motion of its own.
+
+| Pattern | Moves | Answers |
+|---|---|---|
+| Today / Dashboard | M1 arrival; To do rows rise together, top row's button rings once (M3); a rail count that changes pops (M4) | What is waiting for me |
+| Queue | the queue settles in one beat; a picked row's edge slides in; the detail head rises (M6); the tab you clicked brightens (M5) | What did I just pick |
+| List | M1 arrival; a sheet opens from its edge / a dialog grows in place (M8); clickable rows lift for a real pointer (M7) | Where did the detail open |
+| Money | M5 on week tabs; underlined amounts fade their underline (M7); the confirmation bar / toast after sign or pay | Did it save |
+| Settings | the confirmation after each Save; nothing else | Did it save |
+| Signed-out pages | colour fades on controls at 160 ms; the sign-in ambience loops (owner's — §12) | — |
 
 **Guards:** every new animation sits inside `@media screen and (prefers-reduced-motion:
 no-preference)`. Under reduced motion, G in `portal-motion.css` also:
@@ -460,5 +540,43 @@ A design change is done only when all of these hold (Fix Rules in `CLAUDE.md`):
 | Type ladder check | `tools/scripts/check-portal-typography.mjs` + its baseline |
 
 **Not yet on this system:** the public homepage, login and sign-up pages, and the "this link
-needs the right portal" screen. The PR phone app (`apps/mobile`) has its own layout rules
+needs the right portal" screen. **Partly, since 19 Nov 2026:** sign in, sign up, forgot and
+reset password now keep every text at 16px or more as drawn (they render at zoom 0.9 on a
+17px root, so the floor is 1.0625rem), use weights 400 / 600 / 700 (the logo excepted) and
+time every control at 160 ms — the block at the end of `styles.css`. Still their own: the
+display sizes, the rem-based corners, the gold gradient button and glass card, and the six
+infinite ambience loops behind sign in / sign up (ui-ux-pro-max: loops are for loading only)
+— **owner's call** whether those pages join the console look. The PR phone app (`apps/mobile`) has its own layout rules
 (`innocenz-mobile-flexible-ui` memory) and shares only the colour code.
+
+## 13. The four design tools — how to install and run them
+
+Owner, 19 Nov 2026: *"download all"* — the four GitHub tools this guide was built from, now
+installed so any session can run them, not only read their earlier findings. Every one is
+MIT. **They advise; this file decides** — nothing a tool emits is applied to the code
+directly.
+
+| Tool | The question it answers | Install (any device) | Run |
+|---|---|---|---|
+| [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) | What do mature products write in their DESIGN.md? 84 brands. Read, never copy (§10) | `git clone --depth 1 https://github.com/VoltAgent/awesome-design-md` **outside the repo** | read `design-md/<brand>/DESIGN.md` |
+| [ui-ux-pro-max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | The rules by priority — accessibility, touch, performance, style, layout, type, **motion** — with do / don't | clone the repo, copy its `.claude/skills/ui-ux-pro-max` into `~/.claude/skills/` (Python 3 needed). ⚠️ Not `npm i ui-ux-pro-max-cli`: that package lists no repository, so its origin cannot be checked | `python ~/.claude/skills/ui-ux-pro-max/scripts/search.py "<query>" --domain ux` (also `style`, `typography`, …) |
+| [design-extract](https://github.com/Manavarya09/design-extract) (`designlang`) | What a page REALLY uses — colours, type, spacing, radii, motion, contrast pairs | `npm i -g designlang` | `designlang <url> -o <dir outside the repo> --wait 3000 --no-prompts`; `--motion-runtime` for measured durations |
+| [dembrandt](https://github.com/dembrandt/dembrandt) | A second opinion on the same — tokens, breakpoints, every `@keyframes` with its length | `npm i -g dembrandt` | see the Chromium trap below |
+
+**Traps found on the day they were installed — read before trusting a report:**
+
+- **A portal report can be of the sign-in page.** Neither page tool carries the portal
+  session, which lives in browser storage — designlang's `--cookie-file` (Playwright
+  storageState) did NOT carry it: the "admin dashboard" run recorded `title: "Sign in —
+  InnocenZ"` and scored the LOGIN page "100% WCAG". **Check the `title` / `url` in the
+  output first.** For signed-in pages, measure in Playwright with minted read-only sessions
+  and every write aborted (`TEST_SCRIPT.md` §10 2026-11-19 (xxi)), or run the tools on saved,
+  locally served snapshots of the signed-in pages.
+- **dembrandt's own Chromium is unsigned and this PC refuses to run it** ("Permission
+  denied"). Do not change the security policy: start the signed system Chrome headless with a
+  throwaway profile (`chrome --headless=new --remote-debugging-port=9333 --user-data-dir=<tmp>`)
+  and run `BROWSER_CDP_ENDPOINT=http://127.0.0.1:9333 dembrandt http://localhost:3001/en`.
+- **dembrandt turns a bare `localhost:3001` into `https://`** — always type `http://`.
+- **Never `designlang apply`** — it writes extracted tokens straight into the project, and the
+  tokens here are decided in this file.
+- Reports are scratch output: keep them out of the repo.

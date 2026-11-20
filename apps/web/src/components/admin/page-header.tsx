@@ -62,13 +62,13 @@ export function PageHeader({
 		<div className="iz-admin-page-heading flex flex-wrap items-end justify-between gap-5">
 			<div className="flex min-w-0 items-start gap-3.5">
 				{Icon && (
-					<span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[color:var(--lavender-soft)] text-lavender">
+					<span className="iz-admin-page-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[color:var(--lavender-soft)] text-lavender">
 						<Icon className="h-6 w-6" />
 					</span>
 				)}
 				<div className="min-w-0">
 					{eyebrow && (
-						<div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[color:var(--royal-gold-line)] bg-[color:var(--royal-gold-soft)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--royal-gold)]">
+						<div className="iz-admin-page-eyebrow mb-3 inline-flex items-center gap-2 rounded-full border border-[color:var(--royal-gold-line)] bg-[color:var(--royal-gold-soft)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--royal-gold)]">
 							<span
 								className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_8px_currentColor]"
 								aria-hidden

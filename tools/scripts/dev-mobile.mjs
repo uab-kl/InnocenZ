@@ -80,6 +80,10 @@ const expo = spawnProc(children, process.execPath, [expoCli, 'start'], {
   env: {
     ...(apiUrl ? { EXPO_PUBLIC_API_URL: apiUrl } : {}),
     ...(r2PublicUrl ? { EXPO_PUBLIC_R2_PUBLIC_URL: r2PublicUrl } : {}),
+    // Metro's port (Expo reads RCT_METRO_PORT, default 8081). Set it in .env.local
+    // when another project holds 8081: Windows lets two servers share it, and
+    // localhost then reaches the OTHER project's Metro while the LAN IP reaches ours.
+    ...(rootEnv.RCT_METRO_PORT ? { RCT_METRO_PORT: rootEnv.RCT_METRO_PORT } : {}),
   },
 });
 

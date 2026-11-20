@@ -4,6 +4,7 @@ import axios from "axios";
 import { Check, Loader2, MailWarning } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/landing/BrandLogo";
+import { inviteReturnPath } from "@/lib/auth/invite-return-path";
 import { resumeSession } from "@/lib/auth/token-refresh";
 import { fetchProfile } from "@/lib/auth/use-profile";
 import { getClient, getPublicClient } from "@/lib/axios-v1";
@@ -355,7 +356,13 @@ function OrgMemberInvitePage() {
 									 */}
 									<Link
 										to="/login"
-										search={preview.email ? { email: preview.email } : {}}
+										/* `next` brings the person BACK here after signing in, for every role
+										   (lib/auth/invite-return-path.ts) — without it the sign-in landed on their
+										   home and the invitation was never accepted. */
+										search={{
+											...(preview.email ? { email: preview.email } : {}),
+											next: inviteReturnPath(token ?? ""),
+										}}
 										className="iz-btn-solid inline-flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-3 text-sm font-semibold text-background"
 									>
 										{t.invitePages.signInToAccept}

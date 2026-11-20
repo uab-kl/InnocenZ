@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -12,10 +12,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const mockCan = vi.fn<(perm: string) => boolean>();
+// Read at call time, so a test can swap in a claim with shifts behind it.
+let mockDisputes: unknown[] = [];
 
 vi.mock("@agency-portal/hooks/use-agency-disputes", () => ({
 	useAgencyDisputes: () => ({
-		disputes: [OPEN_DISPUTE],
+		disputes: mockDisputes,
 		isLoading: false,
 		resolve: vi.fn(),
 		isResolving: false,
@@ -99,13 +101,44 @@ function renderPanel() {
 	);
 }
 
+/** The card's folded header — the button that names the PR. */
+function cardHeader(): HTMLElement {
+	const button = screen.getByText(/Victoria Tan/).closest("button");
+	if (!button) throw new Error("dispute card header not found");
+	return button;
+}
+
+/** Every claim starts collapsed (owner, 20 Nov 2026), so open it first. */
+function openCard() {
+	fireEvent.click(cardHeader());
+}
+
 describe("DisputeQueuePanel decision gate", () => {
-	beforeEach(() => mockCan.mockReset());
+	beforeEach(() => {
+		mockCan.mockReset();
+		mockDisputes = [OPEN_DISPUTE];
+	});
+
+	it("starts every claim collapsed, the figures still on the header", () => {
+		mockCan.mockImplementation((perm) => perm === "raisePv");
+		renderPanel();
+		// Owner, 20 Nov 2026: "the dispute and the receipt part normally collapse it".
+		expect(cardHeader().getAttribute("aria-expanded")).toBe("false");
+		expect(screen.queryByText("adminService.accept")).toBeNull();
+		expect(screen.queryByText(/Missing tips/)).toBeNull();
+		// Folded, it still says it is open and how much it is about.
+		expect(within(cardHeader()).getByText("payroll.open")).toBeTruthy();
+		expect(within(cardHeader()).getByText("RM 40.00")).toBeTruthy();
+		expect(within(cardHeader()).getByText("RM 80.00")).toBeTruthy();
+		openCard();
+		expect(cardHeader().getAttribute("aria-expanded")).toBe("true");
+	});
 
 	it("offers Accept, Reject and the note box to a lane that may resolve", () => {
 		mockCan.mockImplementation((perm) => perm === "raisePv");
 		renderPanel();
 		expect(screen.getByText(/Victoria Tan/)).toBeTruthy();
+		openCard();
 		expect(screen.getByText("adminService.accept")).toBeTruthy();
 		expect(screen.getByText("common.reject")).toBeTruthy();
 		expect(
@@ -119,6 +152,7 @@ describe("DisputeQueuePanel decision gate", () => {
 	it("shows a read-only lane the claim but none of the decision controls", () => {
 		mockCan.mockReturnValue(false);
 		renderPanel();
+		openCard();
 		// Still SEES the dispute and its figures…
 		expect(screen.getByText(/Victoria Tan/)).toBeTruthy();
 		expect(screen.getByText(/Missing tips/)).toBeTruthy();
@@ -137,5 +171,57 @@ describe("DisputeQueuePanel decision gate", () => {
 		mockCan.mockReturnValue(false);
 		renderPanel();
 		expect(mockCan).toHaveBeenCalledWith("raisePv");
+	});
+});
+
+/** A shift behind the claim, in the shape the queue's `shifts` carry. */
+const shiftAt = (assignmentId: string, outletName: string | null) => ({
+	assignmentId,
+	outletName,
+	eventName: null,
+	eventKind: "normal",
+	shiftDate: "2026-10-20",
+	slot: "22:00 - 04:00",
+	checkInAt: null,
+	checkOutAt: null,
+	overtimeMinutes: null,
+	coverImage: null,
+});
+
+describe("DisputeQueuePanel header names the outlet", () => {
+	beforeEach(() => {
+		mockCan.mockReturnValue(false);
+	});
+
+	it("puts the claim's outlet between the PR and the bucket", () => {
+		// Owner, 20 Nov 2026: "need show from what outlet when she dispute".
+		mockDisputes = [{ ...OPEN_DISPUTE, shifts: [shiftAt("a1", "UAB Emhub")] }];
+		renderPanel();
+		expect(cardHeader().textContent).toContain(
+			"Victoria Tan · UAB Emhub · money.tips",
+		);
+	});
+
+	it("names every distinct venue of a whole-day claim, never just the first", () => {
+		mockDisputes = [
+			{
+				...OPEN_DISPUTE,
+				shifts: [
+					shiftAt("a1", "UAB Emhub"),
+					shiftAt("a2", "JK House"),
+					shiftAt("a3", "UAB Emhub"),
+				],
+			},
+		];
+		renderPanel();
+		expect(cardHeader().textContent).toContain(
+			"Victoria Tan · UAB Emhub / JK House · money.tips",
+		);
+	});
+
+	it("reads as before when no shift is linked", () => {
+		mockDisputes = [OPEN_DISPUTE];
+		renderPanel();
+		expect(cardHeader().textContent).toContain("Victoria Tan · money.tips");
 	});
 });

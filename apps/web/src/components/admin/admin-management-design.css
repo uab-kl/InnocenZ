@@ -202,6 +202,28 @@ body[data-admin-design] .iz-admin-detail-field {
 body[data-admin-design] .iz-admin-detail-field > div {
 	min-width: 0;
 }
+/* An e-mail is read and copied whole, so it never takes the field's `anywhere`
+   wrap (owner, 20 Nov 2026: shown whole, not broken mid-address). One line, "…"
+   if the sheet is too narrow, the full address in its `title`. */
+body[data-admin-design] .iz-admin-detail-field .iz-admin-email-value {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	overflow-wrap: normal;
+}
+/* On the member page the fields are two 240px columns — too narrow for a whole
+   address, which then ended in "…" with the page half empty. The e-mail takes the
+   full row, and so does the field before it (Name), so the order reads the same
+   and no hole opens beside Name. */
+body[data-admin-design] .iz-admin-member-detail
+	:is(
+		.iz-admin-detail-field:has(.iz-admin-email-value),
+		.iz-admin-detail-field:has(+ .iz-admin-detail-field .iz-admin-email-value)
+	) {
+	grid-column: 1 / -1;
+}
 body[data-admin-design] .iz-admin-create-account-form {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));

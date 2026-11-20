@@ -548,7 +548,7 @@ export function SignupForm() {
 														form.setFieldValue("packageId", "");
 													}}
 													className={cn(
-														"flex flex-col items-center gap-2 rounded-xl border px-4 py-5 text-center transition-all",
+														"auth-choice flex flex-col items-center gap-2 rounded-xl border px-4 py-5 text-center transition-all",
 														selected
 															? "border-royal-gold/60 bg-royal-gold/10 shadow-glow-gold"
 															: "border-royal-gold/20 bg-background/40 hover:border-royal-gold/35",
@@ -630,7 +630,7 @@ export function SignupForm() {
 												</p>
 												<Link
 													to="/signup-member"
-													className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-royal-gold/40 bg-royal-gold/10 px-3 py-2 font-semibold text-gold-bright transition-colors hover:border-royal-gold/60 hover:bg-royal-gold/15"
+													className="auth-outline mt-3 inline-flex items-center gap-1.5 rounded-lg border border-royal-gold/40 bg-royal-gold/10 px-3 py-2 font-semibold text-gold-bright transition-colors hover:border-royal-gold/60 hover:bg-royal-gold/15"
 												>
 													{copy.memberSignup.linkAction}
 													<ArrowRight className="size-4" />
@@ -1334,7 +1334,7 @@ export function SignupForm() {
 																			<label
 																				htmlFor="signup-logo"
 																				className={cn(
-																					"inline-flex cursor-pointer items-center justify-center rounded-md border border-royal-gold/35 bg-royal-gold/10 px-3.5 py-2 text-sm font-medium text-gold-bright transition-colors hover:border-royal-gold/55 hover:bg-royal-gold/15",
+																					"auth-outline inline-flex cursor-pointer items-center justify-center rounded-md border border-royal-gold/35 bg-royal-gold/10 px-3.5 py-2 text-sm font-medium text-gold-bright transition-colors hover:border-royal-gold/55 hover:bg-royal-gold/15",
 																					form.state.isSubmitting &&
 																						"pointer-events-none opacity-60",
 																				)}
@@ -1367,7 +1367,7 @@ export function SignupForm() {
 															<label
 																htmlFor="signup-logo"
 																className={cn(
-																	"flex min-h-44 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-10 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
+																	"auth-drop flex min-h-44 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-10 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
 																	form.state.isSubmitting &&
 																		"pointer-events-none opacity-60",
 																)}
@@ -1620,7 +1620,7 @@ function SignupChoiceField({
 							disabled={disabled}
 							onClick={() => onChange(option.value)}
 							className={cn(
-								"rounded-xl border px-4 py-3 text-center text-sm font-medium transition-all",
+								"auth-choice rounded-xl border px-4 py-3 text-center text-sm font-medium transition-all",
 								selected
 									? "border-royal-gold/60 bg-royal-gold/10 text-foreground shadow-glow-gold"
 									: "border-royal-gold/20 bg-background/40 text-muted-foreground hover:border-royal-gold/35",

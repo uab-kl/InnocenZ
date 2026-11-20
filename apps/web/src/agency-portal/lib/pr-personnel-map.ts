@@ -161,6 +161,12 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		suspended: pr.status === "suspended" || pr.status === "inactive",
 		detached: false,
 		agencyId: pr.agencyId,
+		// When the membership became approved (0171) — the one-year tie rule's
+		// date. Before this, real PRs carried no date and the flag fell back to
+		// "400 days ago", so every real PR read as tied over a year and Detach
+		// was always offered. `createdAt` (the membership row's) is the same
+		// fallback the server and the back-fill use: the earliest it can be.
+		tiedSince: pr.approvedAt ?? pr.createdAt,
 		// Only `true` locks the editor's Mobile / Email; absent stays editable.
 		hasPassword: pr.hasPassword === true,
 	};

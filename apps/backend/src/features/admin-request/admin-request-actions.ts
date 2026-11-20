@@ -18,6 +18,11 @@ import {
 } from './plan-change-rules.js';
 import { isAwaitingAnswer, refusalBody } from './admin-request-rules.js';
 import { type AdminRequestLedger, SwitchNotAppliedError } from './admin-request-ledger.js';
+import type { DetachOutcome, PrDetachRequestService } from '@/features/pr-personnel/pr-detach-request.js';
+import {
+  ANSWER_WITH_APPROVE_OR_DECLINE,
+  FILE_FROM_MANAGE_PR,
+} from '@/features/pr-personnel/pr-detach-rules.js';
 
 /**
  * The admin's actions on one request: mark contacted, edit, resolve, approve
@@ -28,7 +33,27 @@ export class AdminRequestActionHandlers {
   constructor(
     private readonly repository: AdminRequestRepositoryClass,
     private readonly ledger: AdminRequestLedger,
+    /**
+     * A `pr_detach` request is answered on a MEMBERSHIP, not on billing: yes
+     * ends the agency's `agency_pr` row ('left'), no leaves it. Both go through
+     * this service, which the agency's filing uses too.
+     */
+    private readonly prDetach?: PrDetachRequestService,
   ) {}
+
+  /** A detach answer, sent as the service worded it. */
+  private sendDetach(res: Response, outcome: DetachOutcome) {
+    return res
+      .status(outcome.status)
+      .json({ success: outcome.ok, message: outcome.message, data: outcome.data ?? null });
+  }
+
+  private detachService(): PrDetachRequestService {
+    if (!this.prDetach) {
+      throw new globalThis.Error('AdminRequestActionHandlers was built without the PR detach service');
+    }
+    return this.prDetach;
+  }
 
   async markContacted(req: Request, res: Response) {
     try {
@@ -99,6 +124,17 @@ export class AdminRequestActionHandlers {
        * changes: an admin annotating an old request must not be blocked by it.
        */
       const nextType = payload.type ?? existing.type;
+      // A detach request names a PR (`subject_user_id`); no other type does. So
+      // re-typing INTO it would make a contact request approvable as a
+      // detach, and re-typing OUT of it would strand the PR it is about.
+      if (nextType !== existing.type && (nextType === 'pr_detach' || existing.type === 'pr_detach')) {
+        return res.status(400).json({
+          success: false,
+          message:
+            existing.type === 'pr_detach' ? ANSWER_WITH_APPROVE_OR_DECLINE : FILE_FROM_MANAGE_PR,
+          data: null,
+        });
+      }
       const nextSubscriberType =
         payload.subscriberType !== undefined ? payload.subscriberType : existing.subscriberType;
       if (nextType !== existing.type || nextSubscriberType !== existing.subscriberType) {
@@ -156,6 +192,12 @@ export class AdminRequestActionHandlers {
        */
       if (existing.type === 'plan_change') {
         return await this.approvePlanChange(res, existing, parsed.data.quotedAmount, actor);
+      }
+      // Resolve would mark it answered and detach nobody.
+      if (existing.type === 'pr_detach') {
+        return res
+          .status(400)
+          .json({ success: false, message: ANSWER_WITH_APPROVE_OR_DECLINE, data: null });
       }
 
       // The early answer for a stale screen; the claim below is what actually
@@ -267,6 +309,11 @@ export class AdminRequestActionHandlers {
       }
       const existing = await this.repository.getById(paramId(req.params.id));
       if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // A PR detach request (owner, 20 Nov 2026): yes ends that agency's
+      // membership, in the same transaction as the claim.
+      if (existing.type === 'pr_detach') {
+        return this.sendDetach(res, await this.detachService().approve(existing, getActor(req)));
+      }
       if (existing.type !== 'plan_change') {
         return res.status(400).json({ success: false, message: 'Only plan changes can be approved', data: null });
       }
@@ -371,6 +418,11 @@ export class AdminRequestActionHandlers {
     try {
       const existing = await this.repository.getById(paramId(req.params.id));
       if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // A PR detach request: no leaves the membership as it is, and the agency
+      // is told — the claim is the same atomic one every answer takes.
+      if (existing.type === 'pr_detach') {
+        return this.sendDetach(res, await this.detachService().decline(existing, getActor(req)));
+      }
       if (!AdminRequestActionHandlers.DECLINABLE.includes(existing.type)) {
         return res.status(400).json({
           success: false,

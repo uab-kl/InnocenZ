@@ -50,6 +50,12 @@ export type PrType = {
   phone: string | null;
   email: string | null;
   icNo: string | null;
+  /**
+   * When the membership above became approved (`agency_pr.approved_at`) — the
+   * one-year tie rule's date. Null for a membership never approved. The
+   * website shows "tied since" from this, not from a guess.
+   */
+  approvedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -129,6 +135,19 @@ export const AgencyPrTable = MainSchema.table(
     kpiTier: varchar('kpi_tier', { length: 8 }),
     /** 'basic' | 'commission_only' — validated in UpdatePrSchema. */
     payClass: varchar('pay_class', { length: 32 }),
+    /**
+     * When THIS membership last became approved (migration 0171) — the date
+     * the one-year tie rule counts from (`pr-detach-rules.ts`).
+     *
+     * ⚠️ WRITTEN BY A DATABASE TRIGGER, not by this code:
+     * `agency_pr_stamp_approved_at` stamps `now()` whenever a row becomes
+     * 'approved' from pending / rejected / left (or is inserted approved), and
+     * keeps it for approved → approved and leave_pending → approved (a refused
+     * departure — the PR never stopped being tied). Seven code paths approve a
+     * membership; the trigger is what stops the eighth forgetting. Never set it
+     * by hand. Back-filled from `created_at` for the rows live on 20 Nov 2026.
+     */
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

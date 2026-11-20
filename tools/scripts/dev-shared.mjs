@@ -132,29 +132,72 @@ function backendLockAgeMs() {
 // through its bootstrap before crashing with EADDRINUSE at `.listen()`. Checking
 // the application layer instead — does anything actually answer HTTP here? — isn't
 // fooled by that OS-level ambiguity.
-async function isBackendResponding(port, timeoutMs = 2000) {
+//
+// "Something answers" is not "OUR backend answers" (19 Nov 2026). Another project
+// built from the same template can sit on 7777 with its own /api/v1/health — on
+// the owner's PC a WSL project held 3000, 7777 and 8081 at once, answered 200, and
+// this probe used to call that "InnocenZ is already running, reuse it": the
+// portals would then have logged in and written against the other project's API.
+// So read the body: InnocenZ's health is `{ success: true, data: { status:
+// 'healthy' } }` (features/health/health.controller.ts); anything else is foreign.
+/**
+ * @param {number | string} target a port on 127.0.0.1, or an origin/URL
+ * @returns {Promise<'innocenz' | 'foreign' | 'none'>}
+ */
+export async function probeBackend(target, timeoutMs = 2000) {
+  const origin =
+    typeof target === 'number' ? `http://127.0.0.1:${target}` : new URL(target).origin;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Use /api/v1/health — a bare GET /graphql trips Apollo CSRF prevention
+    // (no content-type / apollo-require-preflight) and logs a scary 400.
+    const res = await fetch(`${origin}/api/v1/health`, { signal: controller.signal });
     try {
-      // Use /api/v1/health — a bare GET /graphql trips Apollo CSRF prevention
-      // (no content-type / apollo-require-preflight) and logs a scary 400.
-      await fetch(`http://127.0.0.1:${port}/api/v1/health`, {
-        signal: controller.signal,
-      });
-      return true;
-    } finally {
-      clearTimeout(timer);
+      const body = await res.json();
+      return body?.success === true && body?.data?.status === 'healthy' ? 'innocenz' : 'foreign';
+    } catch {
+      return 'foreign'; // answered HTTP, but not with our JSON
     }
   } catch {
-    return false;
+    return 'none';
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+async function isBackendResponding(port, timeoutMs = 2000) {
+  return (await probeBackend(port, timeoutMs)) === 'innocenz';
+}
+
+/**
+ * Stop here when another project's server answers where the InnocenZ backend
+ * should be. Reusing it sends logins and writes to the wrong API; killing it
+ * takes down someone else's work. Neither is ours to do, so say so and exit.
+ */
+export async function refuseForeignBackend(target) {
+  if ((await probeBackend(target)) !== 'foreign') return;
+  const where = typeof target === 'number' ? `port ${target}` : new URL(target).origin;
+  console.error(`
+[dev] ${where} is answered by ANOTHER project's server, not the InnocenZ backend.
+      InnocenZ will not reuse it (the portals would talk to the wrong API) and
+      will not kill it. Either stop that project first, or give InnocenZ its own
+      backend port in .env.local: BACKEND_PORT plus every URL that names the old
+      port (VITE_API_URL, VITE_GRAPHQL_ENDPOINT, NEXT_PUBLIC_API_URL, API_URL,
+      EXPO_PUBLIC_API_URL, VITE_API_PROXY_TARGET).
+`);
+  // Let the probe's socket finish closing first: exiting mid-close trips a libuv
+  // assertion on Windows (Node 25: "UV_HANDLE_CLOSING", exit 127 instead of 1).
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  process.exit(1);
 }
 
 // Claims backend ownership, then verifies the port isn't already serving — covers
 // a backend started outside our lock (left over from before this file existed, or
 // launched by hand), which the lock alone can't see.
 export async function claimBackendOwnership(backendPort) {
+  // Before the lock: a foreign server on our port must never be reused or killed.
+  await refuseForeignBackend(backendPort);
   let ownsBackend = acquireBackendLock();
   if (ownsBackend && (await isBackendResponding(backendPort))) {
     releaseBackendLock();
@@ -234,33 +277,89 @@ export function killChild(child) {
 }
 
 /**
- * Force-free TCP listen ports we claimed. Catches Windows orphans where pnpm →
- * cmd → vite left a node process outside the tracked child.pid tree.
+ * True when a process command line runs from THIS checkout — a path inside the
+ * repo root, either slash style, followed by a separator or the end of a token.
+ * The separator check keeps `…/InnocenZ` from matching `…/InnocenZ-proto`.
  */
-export function killPortListeners(ports) {
+export function isRepoCommandLine(cmd, repoRoot = root, caseInsensitive = isWin) {
+  if (!cmd) return false;
+  const norm = (s) => {
+    const forward = String(s).replace(/\\/g, '/');
+    return caseInsensitive ? forward.toLowerCase() : forward;
+  };
+  const rootNorm = norm(repoRoot).replace(/\/+$/, '');
+  const escaped = rootNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escaped}(?:/|["'\\s]|$)`).test(norm(cmd));
+}
+
+/**
+ * Every process LISTENING on `ports`, with its command line and whether it
+ * belongs to this repo. Read-only — killPortListeners acts on it, and it can be
+ * run alone to see what a cleanup would touch.
+ * @returns {{ port: number, pid: number, name: string, cmd: string, owned: boolean }[]}
+ */
+export function listPortListeners(ports) {
   const unique = [...new Set(ports.filter((p) => Number.isInteger(p) && p > 0))];
-  if (!unique.length) return;
+  if (!unique.length) return [];
+  const rows = [];
 
   if (isWin) {
-    const list = unique.join(',');
-    spawnSync(
+    const ps = spawnSync(
       'powershell.exe',
       [
         '-NoProfile',
         '-ExecutionPolicy',
         'Bypass',
         '-Command',
-        `foreach ($p in @(${list})) { Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }`,
+        `$rows = foreach ($p in @(${unique.join(',')})) { Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | ForEach-Object { $pr = Get-CimInstance Win32_Process -Filter "ProcessId=$($_.OwningProcess)" -ErrorAction SilentlyContinue; [pscustomobject]@{ port = $p; pid = [int]$_.OwningProcess; name = [string]$pr.Name; cmd = [string]$pr.CommandLine } } }; ConvertTo-Json -Compress -InputObject @($rows)`,
       ],
-      { stdio: 'ignore', windowsHide: true },
+      { encoding: 'utf8', windowsHide: true },
     );
-    return;
+    try {
+      rows.push(...[].concat(JSON.parse(ps.stdout || '[]') ?? []));
+    } catch {
+      return []; // Unreadable answer: list nothing, so nothing gets killed.
+    }
+  } else {
+    for (const port of unique) {
+      const found = spawnSync(
+        'sh',
+        ['-c', `lsof -nP -t -iTCP:${port} -sTCP:LISTEN 2>/dev/null || fuser ${port}/tcp 2>/dev/null`],
+        { encoding: 'utf8' },
+      );
+      for (const pid of (found.stdout || '').match(/\d+/g) ?? []) {
+        const cmd = spawnSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf8' });
+        rows.push({ port, pid: Number(pid), name: '', cmd: (cmd.stdout || '').trim() });
+      }
+    }
   }
 
-  for (const port of unique) {
-    spawnSync('sh', ['-c', `fuser -k ${port}/tcp >/dev/null 2>&1 || true`], {
-      stdio: 'ignore',
-    });
+  const seen = new Set();
+  return rows
+    .filter((r) => Number.isInteger(r?.pid) && r.pid > 0)
+    .filter((r) => !seen.has(`${r.port}:${r.pid}`) && seen.add(`${r.port}:${r.pid}`))
+    .map((r) => ({ ...r, owned: isRepoCommandLine(r.cmd) }));
+}
+
+/**
+ * Force-free TCP listen ports we claimed. Catches Windows orphans where pnpm →
+ * cmd → vite left a node process outside the tracked child.pid tree.
+ *
+ * ⚠️ Only processes started from THIS repo are killed (19 Nov 2026). This used to
+ * Stop-Process whatever held the port. On a PC that also runs a WSL project,
+ * the Windows-side holder of 8081/7777/3000 is `wslrelay` — the bridge every
+ * WSL server is reached through — so starting or stopping InnocenZ cut the
+ * other project off. A holder we did not start is left alone; the cost is a
+ * busy port (the web port then moves up, Expo offers 8082), never a kill.
+ */
+export function killPortListeners(ports) {
+  for (const { pid, owned } of listPortListeners(ports)) {
+    if (!owned || pid === process.pid) continue;
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Already gone, or not ours to signal.
+    }
   }
 }
 
@@ -309,8 +408,9 @@ export async function clearStaleDevPorts({
   for (let p = webPortStart + 1; p <= webPortStart + 5; p++) ports.push(p);
 
   if (clearBackend && Number.isInteger(backendPort)) {
-    // Keep a healthy backend (reused by claimBackendOwnership); only clear dead holds.
-    if (!(await isBackendResponding(backendPort))) ports.push(backendPort);
+    // Keep a healthy backend (reused by claimBackendOwnership); only clear dead
+    // holds. A FOREIGN answer is not dead — claimBackendOwnership refuses it.
+    if ((await probeBackend(backendPort)) === 'none') ports.push(backendPort);
   }
 
   killPortListeners(ports);

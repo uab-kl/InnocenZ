@@ -7,6 +7,7 @@ import {
   isNotNull,
   ne,
   not,
+  notInArray,
   or,
   sql,
   SQL,
@@ -101,6 +102,15 @@ export function notAwaitingAGoneOrg(): SQL {
   ) as SQL;
 }
 
+/** `?excludeType=` — one type, or a list (`plan_change,pr_detach`). */
+function excludeTypeClause(excludeType: AdminRequestFilter['excludeType']): SQL | undefined {
+  if (!excludeType) return undefined;
+  if (Array.isArray(excludeType)) {
+    return excludeType.length > 0 ? notInArray(AdminRequestTable.type, excludeType) : undefined;
+  }
+  return ne(AdminRequestTable.type, excludeType);
+}
+
 export class AdminRequestRepositoryClass {
   /**
    * "Lands on a negotiated arrangement" — the POS add-on or the Custom tier.
@@ -165,8 +175,8 @@ export class AdminRequestRepositoryClass {
       const clause = this.negotiatedClause();
       conditions.push(filter.negotiated === 'only' ? clause : not(clause));
     }
-    if (filter?.excludeType)
-      conditions.push(ne(AdminRequestTable.type, filter.excludeType));
+    const excluded = excludeTypeClause(filter?.excludeType);
+    if (excluded) conditions.push(excluded);
     if (filter?.status)
       conditions.push(eq(AdminRequestTable.status, filter.status));
     if (filter?.search)
@@ -461,8 +471,8 @@ export class AdminRequestRepositoryClass {
             : eq(AdminRequestTable.type, filter.type),
         );
       }
-      if (filter?.excludeType)
-        conditions.push(ne(AdminRequestTable.type, filter.excludeType));
+      const excluded = excludeTypeClause(filter?.excludeType);
+      if (excluded) conditions.push(excluded);
       const [row] = await db
         .select({ value: sql<number>`count(*)::int` })
         .from(AdminRequestTable)

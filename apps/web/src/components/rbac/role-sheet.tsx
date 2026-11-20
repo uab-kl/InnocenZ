@@ -401,7 +401,7 @@ export function RoleSheet({
 											<SelectTrigger id="role-portal" className="w-full">
 												<SelectValue placeholder={t.rbac.selectPortal} />
 											</SelectTrigger>
-											<SelectContent>
+											<SelectContent position="popper" align="start">
 												{(portalsQuery.data ?? []).map((p) => (
 													<SelectItem key={p.id} value={p.id}>
 														{p.name}

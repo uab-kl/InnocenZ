@@ -71,6 +71,16 @@ export type AppTranslations = {
     wrongEmailOrPassword: string;
     /** Backend: "Wrong phone number or password" — the same answer for a phone sign-in. */
     wrongPhoneOrPassword: string;
+    /**
+     * Owner, 19 Nov 2026 — reverses 29 Sep for SIGN-IN: a missing account and a
+     * wrong password are told apart (account-answers.ts). The two sentences above
+     * are kept for an older server that still sends them.
+     */
+    accountNotFoundEmail: string;
+    /** Backend: "Account not found — please sign up first" (phone sign-in). */
+    accountNotFoundPhone: string;
+    /** Backend: "Wrong password" — the account exists. */
+    wrongPassword: string;
     /** Backend: "This account is inactive." — said only once the password is right. */
     accountInactive: string;
     /** Backend lockout — `{m}` = minutes */
@@ -1834,6 +1844,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signInFailed: 'Sign in failed — please try again.',
       wrongEmailOrPassword: 'Wrong email or password',
       wrongPhoneOrPassword: 'Wrong phone number or password',
+      accountNotFoundEmail: 'Account not found — please sign up as an Outlet or PR Agency',
+      accountNotFoundPhone: 'Account not found — please sign up first',
+      wrongPassword: 'Wrong password',
       accountInactive: 'This account is inactive.',
       tooManyAttempts: 'Too many failed attempts. Try again in {m} minutes.',
       newHere: 'New here?',
@@ -3063,6 +3076,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signInFailed: '登录失败，请重试。',
       wrongEmailOrPassword: '邮箱或密码错误',
       wrongPhoneOrPassword: '手机号码或密码错误',
+      accountNotFoundEmail: '找不到该账户——请注册为门店或 PR 经纪公司',
+      accountNotFoundPhone: '找不到该账户——请先注册',
+      wrongPassword: '密码错误',
       accountInactive: '此账号已停用。',
       tooManyAttempts: '尝试次数过多。请在 {m} 分钟后再试。',
       newHere: '还没有账号？',
@@ -4280,6 +4296,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signInFailed: '登入失敗，請重試。',
       wrongEmailOrPassword: '電子郵箱或密碼錯誤',
       wrongPhoneOrPassword: '手機號碼或密碼錯誤',
+      accountNotFoundEmail: '找不到該帳戶——請註冊為門店或 PR 經紀公司',
+      accountNotFoundPhone: '找不到該帳戶——請先註冊',
+      wrongPassword: '密碼錯誤',
       accountInactive: '此帳號已停用。',
       tooManyAttempts: '嘗試次數過多。請在 {m} 分鐘後再試。',
       newHere: '還沒有帳號？',
@@ -5470,6 +5489,11 @@ export function localizeLoginError(
   login: AppTranslations['login'],
 ): string {
   const trimmed = message.trim();
+  if (trimmed === 'Account not found — please sign up as an Outlet or PR Agency') {
+    return login.accountNotFoundEmail;
+  }
+  if (trimmed === 'Account not found — please sign up first') return login.accountNotFoundPhone;
+  if (trimmed === 'Wrong password') return login.wrongPassword;
   if (trimmed === 'Wrong email or password') return login.wrongEmailOrPassword;
   if (trimmed === 'Wrong phone number or password') return login.wrongPhoneOrPassword;
   if (trimmed === 'This account is inactive.') return login.accountInactive;

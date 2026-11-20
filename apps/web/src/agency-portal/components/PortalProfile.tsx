@@ -1,6 +1,5 @@
 import { AppHeader } from "@agency-portal/components/Nav";
-import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
-import { LogOut, type LucideIcon, Shield } from "lucide-react";
+import { type LucideIcon, Shield } from "lucide-react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /** The shield line's colour, per the standing code: green settled, amber waiting, red stopped. */
@@ -66,14 +65,9 @@ export function PortalProfile({
 						</div>
 					))}
 				</div>
-
-				<button
-					type="button"
-					onClick={signOutToWelcome}
-					className="mt-6 flex w-full items-center justify-center gap-2 rounded-full border border-destructive/40 py-3 text-sm text-destructive"
-				>
-					<LogOut className="h-4 w-4" /> {t.shell.signOut}
-				</button>
+				{/* No Sign out here (owner, 20 Nov 2026): the rail's Sign out — in
+				    the phone drawer too — is the one, and a second copy on this
+				    page sat stacked on "Outlet settings". */}
 			</div>
 		</div>
 	);

@@ -11,9 +11,13 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import {
+	fetchMyPrDetachRequests,
 	fetchPrPersonnel,
+	type PrDetachRequest,
 	removePrPersonnel,
+	requestPrDetach,
 	type UpdatePrPersonnelInput,
 	updatePrPersonnel,
 } from "@/services/pr-personnel";
@@ -81,6 +85,24 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 		[prsQuery.data],
 	);
 
+	// This agency's detach requests still waiting for the InnocenZ admin
+	// (owner, 20 Nov 2026), keyed by the PR they are about — so a PR with one
+	// reads "Detach requested" instead of offering a second request the server
+	// would refuse.
+	const detachRequestsQuery = useQuery({
+		queryKey: ["roster", "pr-detach-requests"],
+		queryFn: () => fetchMyPrDetachRequests(logout),
+		enabled,
+		staleTime: 30_000,
+	});
+	const detachRequestByPr = useMemo(() => {
+		const byPr = new Map<string, PrDetachRequest>();
+		for (const row of detachRequestsQuery.data ?? []) {
+			if (row.subjectUserId) byPr.set(row.subjectUserId, row);
+		}
+		return byPr;
+	}, [detachRequestsQuery.data]);
+
 	/*
 	 * ⚠️ ALL THREE WRITES ON A PR'S PROFILE USED TO BE FIRE-AND-FORGET.
 	 *
@@ -127,6 +149,13 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 	const removeMut = useMutation({
 		mutationFn: (id: string) => removePrPersonnel(id, logout),
 		onSuccess: invalidate,
+	});
+	const requestDetachMut = useMutation({
+		mutationFn: (id: string) => requestPrDetach(id, logout),
+		onSuccess: () =>
+			queryClient.invalidateQueries({
+				queryKey: ["roster", "pr-detach-requests"],
+			}),
 	});
 
 	/**
@@ -214,9 +243,42 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 			onError: failed(t.managePr.couldNotDetach),
 		});
 
+	/**
+	 * Tied under a year: ask the InnocenZ admin (`POST /pr/:id/detach-request`).
+	 * This was a toast and nothing else — no request reached anyone. The toast
+	 * is now the SERVER's sentence on success, and its refusal in words on
+	 * failure (already waiting, tied a year, not on the roster); the sheet
+	 * closes on success only.
+	 */
+	const requestDetach = (prId: string, prName: string, onDone?: () => void) =>
+		requestDetachMut.mutate(prId, {
+			// Only on the server's success: the English line IS the server's
+			// sentence ("Detach request sent for … — the InnocenZ admin will
+			// review it."), and other languages read the same fact in theirs.
+			onSuccess: () => {
+				toast(
+					fill(t.managePr.detachRequestSentNamed, { name: prName }),
+					"success",
+				);
+				onDone?.();
+			},
+			onError: (error) => {
+				// A refusal can mean the list is stale (someone else filed it):
+				// re-read, so the screen shows what the server knows.
+				queryClient.invalidateQueries({
+					queryKey: ["roster", "pr-detach-requests"],
+				});
+				failed(t.managePr.couldNotRequestDetach)(error);
+			},
+		});
+
 	return {
 		prs,
 		isLoading: prsQuery.isLoading,
+		/** This agency's waiting detach request for a PR, if there is one. */
+		detachRequestFor: (prId: string) => detachRequestByPr.get(prId) ?? null,
+		requestDetach,
+		requestingDetach: requestDetachMut.isPending,
 		// A failed roster fetch and an agency with no PRs both come out as `[]`,
 		// and the home tile then reads "0 PRs" in the same confident type it uses
 		// for a real zero. See the note on `use-agency-pvs`.

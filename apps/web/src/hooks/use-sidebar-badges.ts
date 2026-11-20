@@ -1,13 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { AGENCY_SERVICES_ENABLED } from "@/agency-portal/lib/phase-flags";
 import { useAuth } from "@/lib/auth-context";
-import { fetchPendingCount } from "@/services/admin-request";
+import {
+	type AdminRequestType,
+	fetchPendingCount,
+} from "@/services/admin-request";
 import { fetchAgencies } from "@/services/agency";
 import { fetchOutlets } from "@/services/outlet";
 import { fetchAdminPendingJobs } from "@/services/special-service";
 
 /**
- * The admin's five work queues, fetched ONCE and read by two surfaces: the
+ * The Plan Request badge's question, shared with the header bell (one cache):
+ * every pending request EXCEPT the two types that have pages of their own.
+ */
+export const PLAN_REQUEST_EXCLUDES: AdminRequestType[] = [
+	"plan_change",
+	"pr_detach",
+];
+export const PLAN_REQUEST_COUNT_KEY = [
+	"admin-requests",
+	"pending-count",
+	"without-plan-changes-or-detach",
+] as const;
+export const PR_DETACH_COUNT_KEY = [
+	"admin-requests",
+	"pending-count",
+	"pr-detach",
+] as const;
+
+/**
+ * The admin's six work queues, fetched ONCE and read by two surfaces: the
  * sidebar badges (`useSidebarBadges`) and the dashboard's To do panel
  * (`useAdminTodoCounts`). Same query keys, one cache — a panel row and the
  * badge beside its page cannot disagree, which is the rule the agency and
@@ -34,15 +56,27 @@ function useAdminQueueQueries() {
 	// them and the Plan Change badge counts only pending outlet switches. Keyed
 	// under "admin-requests" — the prefix both pages invalidate after a decision
 	// — so the badges (and the header bell, which shares them) drop at once.
+	// ⚠️ PR detach requests (0171) have their own page too, so they are
+	// excluded here as well — counted, a waiting detach would light the Plan
+	// Request badge over a page that never lists it. The key changed with the
+	// question, so the header bell (which shares it) must use the same one.
 	const pendingRequests = useQuery({
-		queryKey: ["admin-requests", "pending-count", "without-plan-changes"],
-		queryFn: () => fetchPendingCount(logout, { excludeType: "plan_change" }),
+		queryKey: PLAN_REQUEST_COUNT_KEY,
+		queryFn: () =>
+			fetchPendingCount(logout, { excludeType: PLAN_REQUEST_EXCLUDES }),
 		staleTime: 30_000,
 	});
 
 	const pendingPlanChanges = useQuery({
 		queryKey: ["admin-requests", "pending-count", "plan-change"],
 		queryFn: () => fetchPendingCount(logout, { type: "plan_change" }),
+		staleTime: 30_000,
+	});
+
+	// An agency asking to detach a PR tied under a year — Service → PR Detach.
+	const pendingPrDetach = useQuery({
+		queryKey: PR_DETACH_COUNT_KEY,
+		queryFn: () => fetchPendingCount(logout, { type: "pr_detach" }),
 		staleTime: 30_000,
 	});
 
@@ -58,6 +92,7 @@ function useAdminQueueQueries() {
 		pendingOutlets,
 		pendingRequests,
 		pendingPlanChanges,
+		pendingPrDetach,
 		pendingJobs,
 	};
 }
@@ -70,6 +105,7 @@ export function useSidebarBadges(): Record<string, number> {
 		"sidebar-user-outlet": q.pendingOutlets.data?.pagination.totalCount ?? 0,
 		"sidebar-service-requests": q.pendingRequests.data?.pending ?? 0,
 		"sidebar-service-plan-changes": q.pendingPlanChanges.data?.pending ?? 0,
+		"sidebar-service-pr-detach": q.pendingPrDetach.data?.pending ?? 0,
 		"sidebar-service-other": AGENCY_SERVICES_ENABLED
 			? (q.pendingJobs.data?.pagination.totalCount ?? 0)
 			: 0,
@@ -81,6 +117,7 @@ export type AdminTodoCounts = {
 	outlets: number;
 	planRequests: number;
 	planChanges: number;
+	prDetach: number;
 	jobs: number;
 };
 
@@ -106,6 +143,7 @@ export function useAdminTodoCounts(): {
 		q.pendingOutlets,
 		q.pendingRequests,
 		q.pendingPlanChanges,
+		q.pendingPrDetach,
 		...(AGENCY_SERVICES_ENABLED ? [q.pendingJobs] : []),
 	];
 	return {
@@ -114,6 +152,7 @@ export function useAdminTodoCounts(): {
 			outlets: q.pendingOutlets.data?.pagination.totalCount ?? 0,
 			planRequests: q.pendingRequests.data?.pending ?? 0,
 			planChanges: q.pendingPlanChanges.data?.pending ?? 0,
+			prDetach: q.pendingPrDetach.data?.pending ?? 0,
 			jobs: AGENCY_SERVICES_ENABLED
 				? (q.pendingJobs.data?.pagination.totalCount ?? 0)
 				: 0,

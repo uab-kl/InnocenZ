@@ -6,6 +6,37 @@ import { Error } from '@/error/index.js';
 import { paramId } from '@/util/params.js';
 import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
+import { inArray, eq } from 'drizzle-orm';
+import { db } from '@/db/index.js';
+import { UserTable } from '@/features/user/user.model.js';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model.js';
+
+/** `?type=` / `?excludeType=` — one value, or a comma-separated list. */
+function typeListParam(raw: unknown): AdminRequestType | AdminRequestType[] | undefined {
+  if (typeof raw !== 'string' || raw.trim() === '') return undefined;
+  return raw.includes(',') ? (raw.split(',') as AdminRequestType[]) : (raw as AdminRequestType);
+}
+
+/**
+ * A `pr_detach` request is ABOUT a PR (`subject_user_id`, migration 0171). The
+ * admin needs that person's name to answer it, and the name lives on the
+ * person — read through the foreign key here, never copied onto the request.
+ */
+async function withSubjectName<T extends AdminRequest>(
+  records: T[],
+): Promise<(T & { subjectName?: string | null })[]> {
+  const ids = [...new Set(records.map((r) => r.subjectUserId).filter((id): id is string => !!id))];
+  if (ids.length === 0) return records;
+  const rows = await db
+    .select({ id: UserTable.id, fullName: UserProfileTable.fullName, username: UserTable.username })
+    .from(UserTable)
+    .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
+    .where(inArray(UserTable.id, ids));
+  const names = new Map(rows.map((row) => [row.id, row.fullName?.trim() || row.username || null]));
+  return records.map((record) =>
+    record.subjectUserId ? { ...record, subjectName: names.get(record.subjectUserId) ?? null } : record,
+  );
+}
 
 /**
  * The admin's queue — the inbox list, its pending badge, one row, and the
@@ -24,12 +55,9 @@ export class AdminRequestQueueHandlers {
       const pageSize = Number(req.query.pageSize ?? 10);
       // ?type= accepts one value or a comma-separated whitelist
       // (e.g. pos_integration_quote,custom_renegotiation for the Plan Request inbox).
-      const rawType = req.query.type as string | undefined;
       const filter: AdminRequestFilter = {
-        type: rawType?.includes(',')
-          ? (rawType.split(',') as AdminRequestType[])
-          : (rawType as AdminRequestType | undefined),
-        excludeType: req.query.excludeType as AdminRequestType | undefined,
+        type: typeListParam(req.query.type),
+        excludeType: typeListParam(req.query.excludeType),
         status: req.query.status as AdminRequestStatus | undefined,
         subscriberType: req.query.subscriberType as 'outlet' | 'agency' | undefined,
         dates: parseDatesQuery(req.query.dates),
@@ -53,8 +81,10 @@ export class AdminRequestQueueHandlers {
         page,
         pageSize,
       });
-      const records = await this.withLivePlan(
-        await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan(rawRecords)),
+      const records = await withSubjectName(
+        await this.withLivePlan(
+          await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan(rawRecords)),
+        ),
       );
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
@@ -74,8 +104,8 @@ export class AdminRequestQueueHandlers {
   async pendingCount(req: Request, res: Response) {
     try {
       const count = await this.repository.countPending({
-        type: req.query.type as AdminRequestType | undefined,
-        excludeType: req.query.excludeType as AdminRequestType | undefined,
+        type: typeListParam(req.query.type),
+        excludeType: typeListParam(req.query.excludeType),
       });
       res.status(200).json({ success: true, message: 'OK', data: { pending: count } });
     } catch (error) {
@@ -88,8 +118,10 @@ export class AdminRequestQueueHandlers {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      const [enriched] = await this.withLivePlan(
-        await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan([record])),
+      const [enriched] = await withSubjectName(
+        await this.withLivePlan(
+          await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan([record])),
+        ),
       );
       res.status(200).json({ success: true, message: 'OK', data: enriched ?? record });
     } catch (error) {

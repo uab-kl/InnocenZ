@@ -25,7 +25,8 @@ export function AuthCardShell({
 	footer?: ReactNode;
 }) {
 	return (
-		<div className="login-page flex min-h-svh w-full flex-col">
+		/* `auth-night`: the portals' night look, as on /login (styles.css). */
+		<div className="login-page auth-night flex min-h-svh w-full flex-col">
 			<main className="relative flex min-h-svh w-full flex-1 flex-col justify-center px-6 py-14 lg:px-14">
 				<Link
 					to="/login"
@@ -37,7 +38,12 @@ export function AuthCardShell({
 
 				<div className="mx-auto w-full max-w-120">
 					<div className="mb-6 flex justify-center">
-						<BrandLogo variant="stacked" size="md" showTagline />
+						<BrandLogo
+							variant="stacked"
+							size="md"
+							showTagline
+							className="auth-brand"
+						/>
 					</div>
 
 					<div className="mb-6">

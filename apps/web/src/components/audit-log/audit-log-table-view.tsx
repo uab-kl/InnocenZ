@@ -262,7 +262,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 									<SelectTrigger className="w-[180px]">
 										<SelectValue placeholder={t.adminAudit.allActions} />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="all">
 											{t.adminAudit.allActions}
 										</SelectItem>
@@ -284,7 +284,7 @@ export function AuditLogTableView({ role }: AuditLogTableViewProps) {
 									<SelectTrigger className="w-[180px]">
 										<SelectValue placeholder={t.adminAudit.allTables} />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										<SelectItem value="all">
 											{t.adminAudit.allTables}
 										</SelectItem>

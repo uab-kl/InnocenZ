@@ -189,7 +189,7 @@ function PendingApprovalsPage() {
 								{row.date}
 							</div>
 							<div className="md:text-right">
-								<Button asChild variant="outline" size="sm">
+								<Button asChild variant="default" size="sm" className="iz-queue-action">
 									<Link to={row.href} search={{ focus: row.rawId }}>
 										{t.rbac.review} <span aria-hidden>→</span>
 									</Link>

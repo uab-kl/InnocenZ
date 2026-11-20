@@ -122,7 +122,7 @@ export function SignupEmailCodeBox({
 							type="button"
 							onClick={onSend}
 							disabled={disabled || !state.canSend}
-							className="mt-3 inline-flex items-center gap-2 rounded-lg bg-royal-gold px-4 py-2 text-sm font-semibold text-[#1a1726] disabled:opacity-50"
+							className="auth-outline mt-3 inline-flex items-center gap-2 rounded-lg bg-royal-gold px-4 py-2 text-sm font-semibold text-[#1a1726] disabled:opacity-50"
 						>
 							{state.sending ? (
 								<Loader2 className="size-4 animate-spin" aria-hidden />

@@ -16,6 +16,20 @@ describe("the bell's count matches the page it opens", () => {
 		});
 	});
 
+	it("opens PR Detach with its own count when only detach requests wait", () => {
+		expect(bellTarget(0, 0, 3)).toEqual({
+			to: "/admin/service/pr-detach",
+			count: 3,
+		});
+	});
+
+	it("still opens Plan Request first when both wait", () => {
+		expect(bellTarget(1, 0, 3)).toEqual({
+			to: "/admin/service/requests",
+			count: 1,
+		});
+	});
+
 	it("reads zero on Plan Request when nothing waits", () => {
 		expect(bellTarget(0, 0)).toEqual({
 			to: "/admin/service/requests",

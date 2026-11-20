@@ -203,7 +203,7 @@ export function SubscriptionsTable({
 								>
 									<SelectValue placeholder={t.adminSubscription.allCycles} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">
 										{t.adminSubscription.allCycles}
 									</SelectItem>
@@ -231,7 +231,7 @@ export function SubscriptionsTable({
 								>
 									<SelectValue placeholder={t.admin.filterByStatus} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 									<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
 									<SelectItem value="inactive">

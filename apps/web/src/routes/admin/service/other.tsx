@@ -450,7 +450,7 @@ function SpecialServicesPage() {
 								>
 									<SelectValue />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">
 										{t.adminService.allOrders}
 									</SelectItem>
@@ -476,7 +476,7 @@ function SpecialServicesPage() {
 										>
 											<SelectValue placeholder={t.adminService.allCategories} />
 										</SelectTrigger>
-										<SelectContent>
+										<SelectContent position="popper" align="start">
 											<SelectItem value="all">
 												{t.adminService.allCategories}
 											</SelectItem>
@@ -501,7 +501,7 @@ function SpecialServicesPage() {
 										>
 											<SelectValue placeholder={t.admin.allStatus} />
 										</SelectTrigger>
-										<SelectContent>
+										<SelectContent position="popper" align="start">
 											<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 											{STATUSES.map((status) => (
 												<SelectItem key={status} value={status}>
@@ -1026,7 +1026,7 @@ function OrderEditForm({
 						<SelectTrigger id="order-category">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent position="popper" align="start">
 							{CATEGORIES.map((option) => (
 								<SelectItem key={option} value={option}>
 									{categoryLabels[option](t)}
@@ -1078,7 +1078,7 @@ function OrderEditForm({
 							<SelectTrigger id="order-status">
 								<SelectValue />
 							</SelectTrigger>
-							<SelectContent>
+							<SelectContent position="popper" align="start">
 								{STATUSES.map((option) => (
 									<SelectItem key={option} value={option}>
 										{statusLabels[option](t)}
