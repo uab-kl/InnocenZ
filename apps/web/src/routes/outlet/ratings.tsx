@@ -9,13 +9,26 @@ import {
 } from "@agency-portal/hooks/use-outlet-ratings";
 import { useStore } from "@agency-portal/lib/store";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Star } from "lucide-react";
 import { useMemo, useState } from "react";
 
 // The outlet's own ratings, which until now it could write but never read back.
 // The Calendar that used to answer to this path moved to `/outlet/calendar`.
 export const Route = createFileRoute("/outlet/ratings")({
+	/*
+	 * HIDDEN for every lane — `canAccessOutletPath` has no branch for this path,
+	 * so it answers false whoever asks. The layout's guard only runs AFTER a page
+	 * has mounted, so a typed URL painted this page first, and on a slow load it
+	 * stayed on screen under "Today" while the redirect waited (review, 20 Nov
+	 * 2026). Leaving here, before anything renders, is the same answer without
+	 * the flash; `/outlet` then forwards any lane that cannot see Today, exactly
+	 * as `/outlet/dashboard` does. Re-enable the page by deleting this together
+	 * with un-commenting its nav entry and its line in `canAccessOutletPath`.
+	 */
+	beforeLoad: () => {
+		throw redirect({ to: "/outlet", replace: true });
+	},
 	component: RatingsPage,
 });
 

@@ -299,7 +299,7 @@ export function SubscriptionFormSheet({
 														placeholder={t.adminSubscription.selectAudience}
 													/>
 												</SelectTrigger>
-												<SelectContent>
+												<SelectContent position="popper" align="start">
 													<SelectItem value="agency">
 														{planAudienceLabel("agency", t)}
 													</SelectItem>
@@ -332,7 +332,7 @@ export function SubscriptionFormSheet({
 														placeholder={t.adminSubscription.selectBillingCycle}
 													/>
 												</SelectTrigger>
-												<SelectContent>
+												<SelectContent position="popper" align="start">
 													<SelectItem value="weekly">
 														{t.subscription.billedWeekly}
 													</SelectItem>
@@ -396,7 +396,7 @@ export function SubscriptionFormSheet({
 													>
 														<SelectValue />
 													</SelectTrigger>
-													<SelectContent>
+													<SelectContent position="popper" align="start">
 														{/* "PRs" and "PV" are composed into the stored
 														    coverage string, so both the value and the
 														    label stay English in every locale. */}
@@ -418,7 +418,7 @@ export function SubscriptionFormSheet({
 													>
 														<SelectValue />
 													</SelectTrigger>
-													<SelectContent>
+													<SelectContent position="popper" align="start">
 														{COVERAGE_PERIODS.map((option) => (
 															<SelectItem
 																key={option.value}

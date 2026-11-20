@@ -50,7 +50,8 @@ function SignupPageContent() {
 	const copy = t.signup;
 
 	return (
-		<div className="login-page signup-page relative flex min-h-svh w-full flex-col lg:flex-row">
+		/* `auth-night`: the portals' night look, as on /login (styles.css). */
+		<div className="login-page signup-page auth-night relative flex min-h-svh w-full flex-col lg:flex-row">
 			{/*
 			 * The same moving field as /login — sweep, drifting pools, rays,
 			 * grain, vignette. CSS pins it with `position: fixed` (see
@@ -89,7 +90,12 @@ function SignupPageContent() {
 					{/* Vertically centred, matching /login — the owner's call. */}
 					<div className="relative z-10 flex flex-1 flex-col items-center justify-center text-center">
 						{/* Tagline off + short rule, matching /login's brand block. */}
-						<BrandLogo variant="stacked" size="auth" showMotto />
+						<BrandLogo
+							variant="stacked"
+							size="auth"
+							showMotto
+							className="auth-brand"
+						/>
 
 						<div className="mt-9 max-w-[34ch]">
 							<p className="login-aside-lede text-foreground/75">
@@ -123,7 +129,7 @@ function SignupPageContent() {
 				{/* The brand mark the hidden aside would otherwise carry, on its own
 				    row so it does not compete with the toolbar — as on /login. */}
 				<div className="mb-6 flex justify-center lg:hidden">
-					<BrandLogo variant="horizontal" size="sm" />
+					<BrandLogo variant="horizontal" size="sm" className="auth-brand" />
 				</div>
 
 				{/* `2xl:max-w-5xl` is room for the step rail beside the form, not a

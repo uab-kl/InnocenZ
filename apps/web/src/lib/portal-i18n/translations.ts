@@ -43,6 +43,8 @@ const en = {
 		organizationProfile: "Organization profile",
 		identityContact: "Your organization identity and contact details.",
 		address: "Address",
+		/** The title above the Subscription summary card, agency and outlet. */
+		yourPlan: "Your plan",
 		currentPlan: "Current plan",
 		nextBilling: "Next billing date",
 		shiftsThisMonth: "Shifts this month",
@@ -403,6 +405,13 @@ const en = {
 		srvShiftCancelledTitle: "A shift was cancelled",
 		srvShiftRemovedTitle: "You were removed from a shift",
 		srvShiftCancelledBody: "You are no longer booked for the shift on {date}.",
+		srvPrDetachApprovedTitle: "Detach approved",
+		srvPrDetachApprovedBody:
+			"The InnocenZ admin approved your request — {pr} is off your roster.",
+		srvPrDetachDeclinedTitle: "Detach declined",
+		srvPrDetachDeclinedBody:
+			"The InnocenZ admin declined your request — {pr} stays on your roster.",
+		srvPrDetachThisPr: "the PR",
 		srvLeaveApprovedTitle: "MC / leave approved",
 		srvLeaveApprovedBody:
 			"Your agency approved the request — you are excused from this shift with no penalty.",
@@ -598,6 +607,10 @@ const en = {
 		adminPlanRequestsTitle: "Plan requests to answer",
 		adminPlanRequestsMeta: "Each one waits for your reply.",
 		adminPlanRequestsCta: "Open plan requests",
+		adminPrDetachTitle: "PR detach requests to decide",
+		adminPrDetachMeta:
+			"An agency asked to let go of a PR it has had under a year. The PR stays until you decide.",
+		adminPrDetachCta: "Decide detach requests",
 		adminJobsTitle: "Service jobs waiting",
 		adminJobsMeta: "An agency submitted them and they wait for you.",
 		adminJobsCta: "Open service jobs",
@@ -1531,6 +1544,21 @@ const en = {
 		couldNotSuspend: "Could not suspend this PR — try again",
 		couldNotDetach: "Could not remove this PR from your roster — try again",
 		/**
+		 * The request-detach path (owner, 20 Nov 2026) — a PR tied under a year
+		 * is detached only by the InnocenZ admin. The first is the success line
+		 * and equals the SERVER's sentence word for word in English; the three
+		 * after it are the server's fixed refusals (pr-detach-rules.ts), mapped
+		 * in `PR_WRITE_SENTENCES`.
+		 */
+		detachRequestSentNamed:
+			"Detach request sent for {name} — the InnocenZ admin will review it.",
+		couldNotRequestDetach: "Could not send the detach request — try again",
+		detachAlreadyRequested:
+			"A detach request for this PR is already waiting for the InnocenZ admin.",
+		detachNoRequestNeeded:
+			"This PR has been with your agency for a year or more — Detach removes them directly, no admin request needed.",
+		detachNotOnRoster: "This PR is no longer on your agency roster.",
+		/**
 		 * Under the editable Mobile and Email. They are the PR's SIGN-IN contacts:
 		 * once the PR has set a password the server refuses any change made here
 		 * (403 "Only the PR can change their sign-in email or phone"), and only
@@ -1653,6 +1681,8 @@ const en = {
 		agencyActions: "Agency actions",
 		discipline: "Discipline",
 		requestDetach: "Request detach",
+		/** The Detach button while this PR's request waits for the admin. */
+		detachRequested: "Detach requested",
 		detach: "Detach",
 		changePayClass: "Change pay class?",
 		allLanguages: "All languages",
@@ -2113,9 +2143,12 @@ const en = {
 		 */
 		overdueWarning:
 			"{amount} is past its due date across {n} billing period(s). The oldest was due {date} — {days} days ago.",
-		/** Under "Next billing date" on the Subscription hero when past periods are unpaid. {amount} carries RM. */
-		heroOverdueOne: "Overdue — {amount} from 1 past week is unpaid",
-		heroOverdueMany: "Overdue — {amount} from {n} past weeks is unpaid",
+		/**
+		 * Under "Next billing date" on the Subscription hero when past periods are
+		 * unpaid. {amount} carries RM. Short on purpose (owner, 20 Nov 2026): the
+		 * red banner over the payment history already says how many weeks.
+		 */
+		heroOverdue: "{amount} overdue",
 		noAccess: "You do not have access to subscription billing.",
 		financeReadOnly: "Finance view — read-only · contact owner to update card",
 		/** Every other non-owner lane — Ops Head, Director, anything added later. */
@@ -2126,8 +2159,7 @@ const en = {
 		pvIssuedMany: "{n} PVs issued",
 		customPricedByAdmin:
 			"Custom is priced by InnocenZ admin — PV volume does not change it",
-		tierAutoSelected:
-			"Tier auto-selected from weekly PV volume — no plan changes needed",
+		tierAutoSelected: "Set by your weekly PV count",
 		nextWeeklyCharge: "Next weekly charge {date}",
 		atAgreedPrice: " · at the price agreed with InnocenZ admin",
 		basedOnPvOne: " · {price} based on {n} PV",
@@ -3515,6 +3547,7 @@ const en = {
 		navPlanRequest: "Plan Request",
 		navPlanChange: "Plan Change",
 		navPlanPayment: "Plan Payment",
+		navPrDetach: "PR Detach",
 		navPaymentVouchers: "Payment Vouchers",
 		navPlan: "Plan",
 		navCurrentPlan: "Current Plan",
@@ -3647,6 +3680,7 @@ const en = {
 		reqPlanChange: "Plan change",
 		reqContact: "Contact",
 		reqOther: "Other",
+		reqPrDetach: "PR detach",
 
 		kpiPendingAgencies: "Pending PR Agencies",
 		kpiPendingAgenciesHint: "Signups awaiting approval",
@@ -3669,6 +3703,10 @@ const en = {
 		todoFinishQuote: "Finish quote: {name}",
 		todoFinishQuoteDetail: "{type} · contacted — set negotiated price",
 		todoReviewJob: "Review job: {title}",
+		/** A waiting PR detach request (0171): who, and the agency asking. */
+		todoDecidePrDetach: "Decide detach: {pr}",
+		todoDecidePrDetachDetail: "{agency} · pending · {date}",
+		badgePrDetach: "PR detach",
 		todoAgencyFallback: "Agency",
 		badgeOrgApproval: "Org approval",
 		badgePlanRequest: "Plan request",
@@ -5118,6 +5156,8 @@ const en = {
 			"Auto-flag · {n} consecutive shifts below {stars}★ — consider suspend",
 		tiedDetachNeedsAdmin:
 			"Tied {duration} · detach requires InnocenZ admin approval",
+		detachRequestWaiting:
+			"Detach request sent {date} — waiting for the InnocenZ admin",
 		tiedMonths: "{n} mo",
 		tiedYears: "{n} yr",
 		lastNofM: "Last {n} of {total}",
@@ -5188,6 +5228,40 @@ const en = {
 		breachMcCapExceeded: "MC cap exceeded",
 		/** Demo penalty-breach heading for the stored rule id `latePerWeek`. */
 		breachLateTooOften: "Late too often",
+	},
+	/**
+	 * Admin → Service → PR Detach (owner, 20 Nov 2026). An agency asks here to
+	 * detach a PR it has had for less than a year; only the admin's Approve
+	 * ends that membership. Every sentence the server answers with is shown as
+	 * it was sent — these are the page's own words and fallbacks.
+	 */
+	prDetachAdmin: {
+		pageDescription:
+			"Agencies ask here to detach a PR they have had for less than a year. Approve takes the PR off that agency's roster; Decline keeps them on it. Either way the agency is told.",
+		cardTitle: "Detach requests",
+		cardHint: "Open a request to approve or decline it.",
+		colPr: "PR",
+		colAgency: "Agency",
+		colNote: "Note",
+		colStatus: "Status",
+		colRequested: "Requested",
+		colAction: "Action",
+		empty: "No detach requests",
+		failedToLoad: "Could not load the detach requests",
+		sheetTitle: "Detach request",
+		noNote: "No note from the agency",
+		approveDetach: "Approve detach",
+		decline: "Decline",
+		approveConsequence:
+			"Approve — {pr} leaves {agency}'s roster. Money already owed between them is not affected, and the agency can add the PR again later.",
+		declineConsequence: "Decline — {pr} stays on {agency}'s roster.",
+		answered: "This request has been answered.",
+		toastApproved: "Detach approved.",
+		toastDeclined: "Detach request declined.",
+		toastFailed: "Could not answer this request — try again",
+		filterWaiting: "Waiting",
+		filterAll: "All",
+		unknownPr: "PR",
 	},
 	adminRequests: {
 		/** Admin → Service → Plan Request: the page header blurb. */
@@ -7640,6 +7714,13 @@ const en = {
 		errorWrongPhoneOrPassword: "Wrong phone number or password",
 		/** Display side of the backend's "This account is inactive." — said only once the password is right. See errorWrongEmailOrPassword. */
 		errorAccountInactive: "This account is inactive.",
+		/** Owner, 19 Nov 2026 (reverses 29 Sep for sign-in): the backend's LOGIN_EMAIL_ACCOUNT_NOT_FOUND — no account for that email. login.tsx adds a sign-up link under it. */
+		errorAccountNotFoundEmail:
+			"Account not found — please sign up as an Outlet or PR Agency",
+		/** The phone sign-in's version (LOGIN_PHONE_ACCOUNT_NOT_FOUND) — phone sign-in is the PR app's, so no organisation door. */
+		errorAccountNotFoundPhone: "Account not found — please sign up first",
+		/** The backend's LOGIN_WRONG_PASSWORD — the account exists, the password is wrong. */
+		errorWrongPassword: "Wrong password",
 		/** First line of the /forgot-password h1; forgotHeadingAccent finishes it. */
 		forgotHeading: "Forgot your",
 		/** Gradient second line of the /forgot-password h1 — one sentence with forgotHeading. */
@@ -7958,6 +8039,7 @@ const zh: PortalTranslations = {
 		organizationProfile: "机构资料",
 		identityContact: "您的机构身份及联系方式。",
 		address: "地址",
+		yourPlan: "您的方案",
 		currentPlan: "当前方案",
 		nextBilling: "下次账单日期",
 		shiftsThisMonth: "本月班次",
@@ -8244,6 +8326,13 @@ const zh: PortalTranslations = {
 		srvShiftCancelledTitle: "班次已取消",
 		srvShiftRemovedTitle: "你已被移出一个班次",
 		srvShiftCancelledBody: "你已不再被安排 {date} 的班次。",
+		srvPrDetachApprovedTitle: "解除关联已批准",
+		srvPrDetachApprovedBody:
+			"InnocenZ 管理员已批准你的申请 —— {pr} 已移出你的名单。",
+		srvPrDetachDeclinedTitle: "解除关联被拒绝",
+		srvPrDetachDeclinedBody:
+			"InnocenZ 管理员拒绝了你的申请 —— {pr} 仍在你的名单中。",
+		srvPrDetachThisPr: "该 PR",
 		srvLeaveApprovedTitle: "病假 / 请假已批准",
 		srvLeaveApprovedBody:
 			"经纪公司已批准你的申请 —— 你免于出勤这个班次，且不会被扣款。",
@@ -8404,6 +8493,10 @@ const zh: PortalTranslations = {
 		adminPlanRequestsTitle: "待回复的方案申请",
 		adminPlanRequestsMeta: "每个申请都在等你回复。",
 		adminPlanRequestsCta: "打开方案申请",
+		adminPrDetachTitle: "待决定的 PR 解除关联申请",
+		adminPrDetachMeta:
+			"经纪公司申请解除与绑定不足一年的 PR 的关联，在你决定之前该 PR 仍在名单中。",
+		adminPrDetachCta: "决定解除关联申请",
 		adminJobsTitle: "等待处理的服务工作",
 		adminJobsMeta: "经纪公司已提交，等你处理。",
 		adminJobsCta: "打开服务工作",
@@ -9133,6 +9226,14 @@ const zh: PortalTranslations = {
 		couldNotSaveProfile: "无法保存此资料 — 请重试",
 		couldNotSuspend: "无法停用此 PR — 请重试",
 		couldNotDetach: "无法将此 PR 移出名单 — 请重试",
+		detachRequestSentNamed:
+			"已提交 {name} 的解除关联申请 —— InnocenZ 管理员将进行审核。",
+		couldNotRequestDetach: "无法提交解除关联申请 —— 请重试",
+		detachAlreadyRequested:
+			"此 PR 的解除关联申请已在等待 InnocenZ 管理员处理。",
+		detachNoRequestNeeded:
+			"此 PR 已在你的经纪公司满一年 —— 可直接解除关联，无需管理员申请。",
+		detachNotOnRoster: "此 PR 已不在你的经纪公司名单中。",
 		signInContactHint:
 			"手机号和邮箱是此 PR 的登录方式。PR 设置密码后，只有其本人可以在自己的应用中修改。",
 		signInContactLockedHint:
@@ -9229,6 +9330,7 @@ const zh: PortalTranslations = {
 		agencyActions: "经纪公司操作",
 		discipline: "纪律处理",
 		requestDetach: "申请解除关联",
+		detachRequested: "已申请解除关联",
 		detach: "解除关联",
 		changePayClass: "确认更改薪资级别？",
 		allLanguages: "全部语言",
@@ -9556,8 +9658,7 @@ const zh: PortalTranslations = {
 		currentPeriodNotDue: "本期",
 		overdueWarning:
 			"{n} 个计费周期共 {amount} 已逾期。最早一笔到期日为 {date}，已逾期 {days} 天。",
-		heroOverdueOne: "已逾期 —— 过去 1 周共 {amount} 尚未付款",
-		heroOverdueMany: "已逾期 —— 过去 {n} 周共 {amount} 尚未付款",
+		heroOverdue: "{amount} 已逾期",
 		agingDueSoon: "即将到期",
 		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
@@ -9568,7 +9669,7 @@ const zh: PortalTranslations = {
 		pvIssuedMany: "已开具 {n} 张薪资单",
 		customPricedByAdmin:
 			"定制方案由 InnocenZ 管理员定价 —— 薪资单数量不会改变价格",
-		tierAutoSelected: "等级依据每周薪资单数量自动选择 —— 无需手动更改方案",
+		tierAutoSelected: "由每周薪资单数量决定",
 		nextWeeklyCharge: "下次周扣费 {date}",
 		atAgreedPrice: " · 按与 InnocenZ 管理员议定的价格",
 		basedOnPvOne: " · {price}，依据 {n} 张薪资单",
@@ -10650,6 +10751,7 @@ const zh: PortalTranslations = {
 		navOutletTeam: "门店成员",
 		navPlanRequest: "套餐申请",
 		navPlanChange: "套餐变更",
+		navPrDetach: "PR 解除关联",
 		navPlanPayment: "套餐付款",
 		navPaymentVouchers: "付款凭证",
 		navPlan: "套餐",
@@ -10775,6 +10877,7 @@ const zh: PortalTranslations = {
 		reqPlanChange: "套餐变更",
 		reqContact: "联系",
 		reqOther: "其他",
+		reqPrDetach: "PR 解除关联",
 
 		kpiPendingAgencies: "待审公关公司",
 		kpiPendingAgenciesHint: "等待批准的注册申请",
@@ -10797,6 +10900,9 @@ const zh: PortalTranslations = {
 		todoFinishQuote: "完成报价：{name}",
 		todoFinishQuoteDetail: "{type} · 已联系 — 请设定议定价格",
 		todoReviewJob: "审核工作：{title}",
+		todoDecidePrDetach: "决定解除关联：{pr}",
+		todoDecidePrDetachDetail: "{agency} · 待处理 · {date}",
+		badgePrDetach: "PR 解除关联",
 		todoAgencyFallback: "公司",
 		badgeOrgApproval: "机构审批",
 		badgePlanRequest: "套餐请求",
@@ -11825,6 +11931,8 @@ const zh: PortalTranslations = {
 		autoFlagConsiderSuspend:
 			"自动标记 · 连续 {n} 场班次评分低于 {stars}★ —— 建议停用",
 		tiedDetachNeedsAdmin: "已绑定 {duration} · 解除关联需 InnocenZ 管理员批准",
+		detachRequestWaiting:
+			"已于 {date} 提交解除关联申请 —— 等待 InnocenZ 管理员处理",
 		tiedMonths: "{n} 个月",
 		tiedYears: "{n} 年",
 		lastNofM: "最近 {n} 条，共 {total} 条",
@@ -11882,6 +11990,34 @@ const zh: PortalTranslations = {
 		breachBelowMinShifts: "低于每周最少班次",
 		breachMcCapExceeded: "超出每月病假上限",
 		breachLateTooOften: "迟到次数过多",
+	},
+	prDetachAdmin: {
+		pageDescription:
+			"经纪公司在此申请解除与绑定不足一年的 PR 的关联。批准后该 PR 将移出该经纪公司名单；拒绝则保留。两种结果都会通知经纪公司。",
+		cardTitle: "解除关联申请",
+		cardHint: "打开申请即可批准或拒绝。",
+		colPr: "PR",
+		colAgency: "经纪公司",
+		colNote: "备注",
+		colStatus: "状态",
+		colRequested: "申请时间",
+		colAction: "操作",
+		empty: "暂无解除关联申请",
+		failedToLoad: "无法载入解除关联申请",
+		sheetTitle: "解除关联申请",
+		noNote: "经纪公司未留备注",
+		approveDetach: "批准解除关联",
+		decline: "拒绝",
+		approveConsequence:
+			"批准 —— {pr} 将移出 {agency} 的名单。双方之间已有的款项不受影响，经纪公司之后可以重新加入此 PR。",
+		declineConsequence: "拒绝 —— {pr} 将继续留在 {agency} 的名单中。",
+		answered: "此申请已处理。",
+		toastApproved: "已批准解除关联。",
+		toastDeclined: "已拒绝解除关联申请。",
+		toastFailed: "无法处理此申请 —— 请重试",
+		filterWaiting: "待处理",
+		filterAll: "全部",
+		unknownPr: "PR",
 	},
 	adminRequests: {
 		pageDescription:
@@ -13425,6 +13561,9 @@ const zh: PortalTranslations = {
 		errorWrongEmailOrPassword: "邮箱或密码错误",
 		errorWrongPhoneOrPassword: "手机号码或密码错误",
 		errorAccountInactive: "该账户已停用。",
+		errorAccountNotFoundEmail: "找不到该账户——请注册为门店或 PR 经纪公司",
+		errorAccountNotFoundPhone: "找不到该账户——请先注册",
+		errorWrongPassword: "密码错误",
 		forgotHeading: "忘记您的",
 		forgotHeadingAccent: "密码？",
 		forgotSubheading:

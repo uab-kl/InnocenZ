@@ -12,6 +12,7 @@ import { logger } from '@/util/logger.js';
 import { PlanChangeRefusedError } from './plan-change-rules.js';
 import { refusalBody } from './admin-request-rules.js';
 import type { AdminRequestLedger } from './admin-request-ledger.js';
+import { FILE_FROM_MANAGE_PR } from '@/features/pr-personnel/pr-detach-rules.js';
 
 /**
  * The subscriber's own side of the inbox: filing a request, reading back its
@@ -33,6 +34,17 @@ export class AdminRequestSubscriberHandlers {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
       const actor = getActor(req);
+
+      /*
+       * A detach request is filed from Manage PR (`POST /pr/:id/detach-request`)
+       * and nowhere else. This door is gated on `settings:update`, not on
+       * Detach's `workforce:update`, and checks neither the PR's roster nor
+       * the one-year rule nor a waiting duplicate — so filing one here would
+       * skip every rule the real door applies.
+       */
+      if (parsed.data.type === 'pr_detach') {
+        return res.status(400).json({ success: false, message: FILE_FROM_MANAGE_PR, data: null });
+      }
 
       /**
        * ⚠️ THE SUBSCRIBER IN THE BODY MUST BE ONE OF THE CALLER'S OWN.

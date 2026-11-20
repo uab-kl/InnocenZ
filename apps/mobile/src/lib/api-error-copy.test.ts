@@ -329,6 +329,15 @@ describe('localizeSignInError — what the sign-in screen can receive', () => {
       t.login.wrongPhoneOrPassword,
     );
     expect(localizeSignInError('Wrong email or password', t)).toBe(t.login.wrongEmailOrPassword);
+    // Owner, 19 Nov 2026: a missing account and a wrong password are told apart.
+    expect(
+      localizeSignInError('Account not found — please sign up as an Outlet or PR Agency', t),
+    ).toBe(t.login.accountNotFoundEmail);
+    expect(localizeSignInError('Account not found — please sign up first', t)).toBe(
+      t.login.accountNotFoundPhone,
+    );
+    expect(localizeSignInError('Wrong password', t)).toBe(t.login.wrongPassword);
+    expect(t.login.accountNotFoundPhone).not.toMatch(/Account not found/); // really translated
     expect(localizeSignInError('This account is inactive.', t)).toBe(t.login.accountInactive);
     const lockout = localizeSignInError('Too many failed attempts. Try again in 7 minutes.', t);
     expect(lockout).toBe(formatMessage(t.login.tooManyAttempts, { m: '7' }));

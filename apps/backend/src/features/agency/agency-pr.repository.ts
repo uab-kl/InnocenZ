@@ -75,6 +75,8 @@ export type AgencyPrEnriched = {
    * it cannot disagree. Never stored, never settable.
    */
   age: number | null;
+  /** When this membership became approved (0171) — the one-year tie date. */
+  approvedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -246,6 +248,7 @@ export class AgencyPrRepository {
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
           idNo: UserProfileTable.idNo,
+          approvedAt: AgencyPrTable.approvedAt,
           createdAt: AgencyPrTable.createdAt,
           updatedAt: AgencyPrTable.updatedAt,
           createdBy: AgencyPrTable.createdBy,

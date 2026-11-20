@@ -1,3 +1,4 @@
+import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
 import {
 	calendarNavBounds,
 	HistDateCalendar,
@@ -24,6 +25,7 @@ import {
 	ShiftHoursLine,
 } from "@agency-portal/components/outlet/outlet-history-ui";
 import { ShiftHistoryExpandableMoneyBlock } from "@agency-portal/components/outlet/ShiftHistoryExpandableMoneyBlock";
+import { useAgencyOutletLogos } from "@agency-portal/hooks/use-agency-outlet-logos";
 import { useAgencyRatings } from "@agency-portal/hooks/use-agency-ratings";
 import { useOutletHistory } from "@agency-portal/hooks/use-outlet-history";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
@@ -1186,11 +1188,23 @@ function VenueHistoryCard({
 }) {
 	const { t } = usePortalLocale();
 	const { latest, prSummary } = venueLatestMeta(rollup, t);
+	// The venue's own logo (owner, 20 Nov 2026: "outlet picture ?"), the same
+	// tile Roster's demand rows use. Only the agency's By-outlet tab renders this
+	// card; the lookup reads the portal's cached outlet list (the same query key
+	// as Manage Outlet), so every card shares one GET.
+	const logoFor = useAgencyOutletLogos();
 
 	const body = (
 		<>
 			<div className="iz-between items-start gap-2">
-				<div className="iz-venue-hist-card__name">{rollup.venue}</div>
+				<div className="flex min-w-0 items-center gap-2.5">
+					<OutletLogoTile
+						logo={logoFor(rollup.venue)}
+						className="iz-roster-demand-outlet-logo"
+						iconClassName="h-5 w-5"
+					/>
+					<div className="iz-venue-hist-card__name">{rollup.venue}</div>
+				</div>
 				<div className="flex shrink-0 items-center gap-1.5">
 					<div className="text-right">
 						<div className="iz-heading text-sm font-bold text-[var(--iz-gold-l)]">

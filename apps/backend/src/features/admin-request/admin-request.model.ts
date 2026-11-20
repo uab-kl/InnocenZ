@@ -2,6 +2,7 @@ import { MainSchema } from '@/db/db.schema';
 import { numeric, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
 import { subscriberTypeEnum } from '@/features/member-subscription/member-subscription.model.js';
+import { UserTable } from '@/features/user/user.model.js';
 
 // 'pos_integration_quote' = outlet "Integrate with POS → Request admin quote";
 // 'custom_renegotiation' = agency Custom (151+ PV) "Renegotiate Price".
@@ -12,6 +13,15 @@ export const adminRequestTypeValues = [
   'plan_change',
   'contact',
   'other',
+  /**
+   * An agency asking the InnocenZ admin to detach a PR it has had for less
+   * than a year (migration 0171; owner, 20 Nov 2026). `subscriber_*` is the
+   * agency; `subject_user_id` is the PR. Filed ONLY by
+   * `POST /pr/:id/detach-request` — the generic create refuses it — and
+   * answered with Approve (membership → 'left') or Decline. Its own admin
+   * page, Service → PR Detach; the Plan Request inbox never lists it.
+   */
+  'pr_detach',
 ] as const;
 export type AdminRequestType = (typeof adminRequestTypeValues)[number];
 export const adminRequestTypeEnum = MainSchema.enum('admin_request_type', adminRequestTypeValues);
@@ -57,6 +67,13 @@ export const AdminRequestTable = MainSchema.table('admin_request', {
   requestedPlanId: uuid('requested_plan_id').references(() => SubscriptionTable.id, {
     onDelete: 'set null',
   }),
+  /**
+   * `pr_detach` only (migration 0171): the PR the request is about — a foreign
+   * key to the person, so the admin's list reads their name through it and no
+   * name is copied here. Null on every other type. SET NULL on delete: the
+   * request is history and outlives the account.
+   */
+  subjectUserId: uuid('subject_user_id').references(() => UserTable.id, { onDelete: 'set null' }),
   message: text('message'),
   // Admin-authored notes about the request so other admins can refer to what was asked.
   remarks: text('remarks'),
@@ -78,8 +95,11 @@ export type AdminRequestInsertType = typeof AdminRequestTable.$inferInsert;
 export type AdminRequestFilter = {
   /** One type, or a whitelist of types (e.g. the Plan Request inbox pair). */
   type?: AdminRequestType | AdminRequestType[];
-  /** Exclude a single type (e.g. plan_change, which has its own page). */
-  excludeType?: AdminRequestType;
+  /**
+   * Exclude a type, or several (e.g. plan_change and pr_detach, which each
+   * have their own page — the Plan Request badge must count neither).
+   */
+  excludeType?: AdminRequestType | AdminRequestType[];
   status?: AdminRequestStatus;
   subscriberType?: 'outlet' | 'agency';
   /** Match rows requested on any of these calendar days (createdAt). */

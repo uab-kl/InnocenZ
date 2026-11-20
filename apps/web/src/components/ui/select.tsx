@@ -70,11 +70,18 @@ function SelectContent({
 				{...props}
 			>
 				<SelectScrollUpButton />
+				{/*
+				  Popper: the viewport is the trigger's width LESS the content's 1px
+				  border each side, so the open list is exactly as wide as the box it
+				  drops from instead of 2px wider. Only `position="popper"` call sites
+				  (the admin console) take this branch; the item-aligned default is
+				  untouched.
+				*/}
 				<SelectPrimitive.Viewport
 					className={cn(
 						"p-1",
 						position === "popper" &&
-							"h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
+							"h-[var(--radix-select-trigger-height)] w-full min-w-[calc(var(--radix-select-trigger-width)_-_2px)] scroll-my-1",
 					)}
 				>
 					{children}

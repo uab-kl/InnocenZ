@@ -54,7 +54,9 @@ function OutletProfile() {
 					{ icon: MapPin, label: t.today.location, value: card.location },
 				]}
 			/>
-			<div className="px-5 pb-6">
+			{/* `pt-4`: the page's own Sign out used to stand between the venue card
+			    and this link (and touched it); with it gone, the card gap is kept. */}
+			<div className="px-5 pt-4 pb-6">
 				<Link to="/outlet/settings" className="iz-btn iz-btn-soft w-full">
 					<Settings className="h-4 w-4" /> {t.today.outletSettingsTitle}
 				</Link>

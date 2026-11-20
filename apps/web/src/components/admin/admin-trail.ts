@@ -5,6 +5,35 @@ import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
+/** `?from=` on a member page opened from Legacy Member (see `adminNavFilingPath`). */
+export const MEMBER_PAGE_FROM_LEGACY = "legacy-member";
+
+const MEMBER_PAGE =
+	/^(.*\/user-management)\/(agency|outlet)\/[^/]+\/member\/[^/]+$/;
+
+/**
+ * The path a page is FILED under in the rail, for the rail's prefix match and
+ * for the trail below — the one place both ask.
+ *
+ * ⚠️ The member page lives at `/user-management/agency/<org>/member/<user>`,
+ * NESTED under the Agency Organisations href, so both prefix matches lit
+ * "Agency Organisations" and crumbed it "Operation › Agency Organisations" —
+ * yet nothing on that list opens it. Its only doorways are Agency / Outlet
+ * Members and Legacy Member, so the reader who pressed View lost their place
+ * (design review, 20 Nov 2026). It is now filed under the list it is opened
+ * from: Legacy Member when the link says `?from=legacy-member`, otherwise its
+ * own kind's Members list. Every other path comes back unchanged, with or
+ * without the `/en/admin` prefix.
+ */
+export function adminNavFilingPath(pathname: string, from?: unknown): string {
+	const match = MEMBER_PAGE.exec(pathname.replace(/\/$/, ""));
+	if (!match) return pathname;
+	const [, base, kind] = match;
+	return from === MEMBER_PAGE_FROM_LEGACY
+		? `${base}/legacy-member`
+		: `${base}/${kind}-team`;
+}
+
 /**
  * WHERE THE READER IS, as one answer both the header and the page head use.
  *
@@ -17,9 +46,11 @@ import type { PortalTranslations } from "@/lib/portal-i18n/translations";
  * Pure, so every branch can be tested without a router.
  */
 export function resolveAdminTrail(
-	pathname: string,
+	path: string,
 	t: PortalTranslations,
+	from?: unknown,
 ): string[] {
+	const pathname = adminNavFilingPath(path, from);
 	if (pathname === "/profile") return [t.admin.navProfile];
 
 	/*
@@ -114,8 +145,9 @@ function withoutRepeats(segments: string[]): string[] {
 export function useAdminTrail(): string[] {
 	const { t } = usePortalLocale();
 	const location = useLocation();
+	const from = (location.search as Record<string, unknown> | undefined)?.from;
 	return withoutRepeats(
-		resolveAdminTrail(portalRelative(location.pathname), t),
+		resolveAdminTrail(portalRelative(location.pathname), t, from),
 	);
 }
 
@@ -138,6 +170,12 @@ export function useAdminSection(): string | null {
 	const { t } = usePortalLocale();
 	const pathname =
 		typeof window === "undefined" ? "" : window.location.pathname;
-	const trail = withoutRepeats(resolveAdminTrail(portalRelative(pathname), t));
+	const from =
+		typeof window === "undefined"
+			? null
+			: new URLSearchParams(window.location.search).get("from");
+	const trail = withoutRepeats(
+		resolveAdminTrail(portalRelative(pathname), t, from),
+	);
 	return trail.length > 1 ? trail.slice(0, -1).join(" › ") : null;
 }

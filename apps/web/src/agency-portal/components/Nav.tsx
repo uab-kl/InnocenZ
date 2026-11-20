@@ -30,14 +30,28 @@ export interface NavItem {
 	icon: LucideIcon;
 }
 
+/** A portal's own root — its Today. Only that exact page is "Today". */
+const NAV_HUBS = ["/host", "/outlet", "/agency"];
+
 export function navIsActive(pathname: string, to: string) {
 	if (pathname === to || pathname === `${to}/`) return true;
 
-	const hubs = ["/host", "/outlet", "/agency"];
-
-	if (hubs.includes(to)) return false;
+	if (NAV_HUBS.includes(to)) return false;
 
 	return pathname.startsWith(`${to}/`);
+}
+
+/**
+ * The router's OWN "active" test for a nav link, made to say what `navIsActive`
+ * says. TanStack's `<Link>` matches by PREFIX by default and then writes
+ * `class="active"` and `aria-current="page"` itself, over the prop we pass — so
+ * Today (`/outlet`, a prefix of every outlet page) announced itself as the
+ * current page everywhere, beside the real one (review, 20 Nov 2026). A hub is
+ * matched exactly; the rest keep their prefix match (a detail page lights its
+ * list). The query string never decides it, as it never does for `.on`.
+ */
+export function navLinkActiveOptions(to: string) {
+	return { exact: NAV_HUBS.includes(to), includeSearch: false };
 }
 
 export function BottomNav({
@@ -77,6 +91,7 @@ export function BottomNav({
 					<Link
 						key={i.to}
 						to={i.to}
+						activeOptions={navLinkActiveOptions(i.to)}
 						className={isActive ? "on" : ""}
 						data-active={isActive ? "true" : undefined}
 						aria-label={`${i.label}${navAlertAriaSuffix(alert?.count, t.shell.navAlertWaiting)}`}

@@ -8,6 +8,7 @@ import {
 	Search,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
+import { EmailLine } from "@/components/admin/email-line";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,7 +136,7 @@ export function AgenciesTable({
 								>
 									<SelectValue placeholder={t.admin.filterByStatus} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 									{ORG_STATUSES.map((status) => (
 										<SelectItem key={status} value={status}>
@@ -234,15 +235,33 @@ export function AgenciesTable({
 														"—"}
 												</div>
 											</TableCell>
-											<TableCell data-label={t.adminUsers.colContact}>
+											<TableCell
+												data-label={t.adminUsers.colContact}
+												className="max-md:col-span-full"
+											>
 												<div className="text-base">
 													{agency.contactName || "—"}
 												</div>
-												<div className="text-sm text-muted-foreground">
-													{[agency.contactEmail, agency.contactPhone]
-														.filter(Boolean)
-														.join(" · ") || "—"}
-												</div>
+												{/* E-mail and phone one per line: joined with " · " the
+												    line broke after the dot (a "·" hanging at the end)
+												    and, in a narrower column, inside the address. */}
+												{agency.contactEmail || agency.contactPhone ? (
+													<>
+														{agency.contactEmail && (
+															<EmailLine
+																email={agency.contactEmail}
+																className="text-sm text-muted-foreground"
+															/>
+														)}
+														{agency.contactPhone && (
+															<div className="text-sm text-muted-foreground">
+																{agency.contactPhone}
+															</div>
+														)}
+													</>
+												) : (
+													<div className="text-sm text-muted-foreground">—</div>
+												)}
 											</TableCell>
 											<TableCell data-label={t.admin.colStatus}>
 												<StatusPill

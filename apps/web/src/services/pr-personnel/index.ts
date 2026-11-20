@@ -112,6 +112,12 @@ export interface PrPersonnel {
 	 * have the last word.
 	 */
 	hasPassword?: boolean;
+	/**
+	 * When this agency's membership became approved (`agency_pr.approved_at`,
+	 * migration 0171) — the date the one-year tie rule counts from. Null for a
+	 * membership never approved; absent on an older backend.
+	 */
+	approvedAt?: string | null;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;
@@ -254,4 +260,43 @@ export async function removePrPersonnel(
 ): Promise<void> {
 	const client = getClient(onRefreshFail);
 	await client.delete(`/pr/${id}`);
+}
+
+/** One of this agency's detach requests still waiting for the admin. */
+export interface PrDetachRequest {
+	id: string;
+	status: "pending" | "contacted";
+	/** The PR it is about — the same id as `PrPersonnel.id`. */
+	subjectUserId: string | null;
+	createdAt: string;
+	createdBy: string;
+}
+
+/**
+ * Ask the InnocenZ admin to detach a PR tied to this agency for less than a
+ * year (owner, 20 Nov 2026). The server refuses in words — a request already
+ * waiting, a PR tied a year (Detach works directly), a PR not on the roster —
+ * and answers success with the sentence the screen shows.
+ */
+export async function requestPrDetach(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{ success: boolean; message: string }>(
+		`/pr/${id}/detach-request`,
+		{},
+	);
+	return response.data;
+}
+
+/** This agency's detach requests still waiting — "Detach requested" per PR. */
+export async function fetchMyPrDetachRequests(
+	onRefreshFail: () => void,
+): Promise<PrDetachRequest[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{ data: PrDetachRequest[] | null }>(
+		"/pr/detach-requests",
+	);
+	return response.data.data ?? [];
 }

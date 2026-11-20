@@ -1,9 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { validateMemberPageSearch } from "@/components/organization/member-page-target";
 import { OrgMemberPage } from "@/components/organization/org-member-page";
 
 export const Route = createFileRoute(
 	"/admin/user-management/agency/$agencyId/member/$userId",
 )({
+	/* ?from=legacy-member — which list opened the page, so the rail, the trail
+	   and Back all name that list. Absent means the Agency Members list. */
+	validateSearch: validateMemberPageSearch,
 	component: AgencyMemberPage,
 	/*
 	 * Document title stays ENGLISH, for the same reason the list pages give:
@@ -18,5 +22,13 @@ export const Route = createFileRoute(
 
 function AgencyMemberPage() {
 	const { agencyId, userId } = Route.useParams();
-	return <OrgMemberPage orgKind="agency" orgId={agencyId} userId={userId} />;
+	const { from } = Route.useSearch();
+	return (
+		<OrgMemberPage
+			orgKind="agency"
+			orgId={agencyId}
+			userId={userId}
+			from={from}
+		/>
+	);
 }

@@ -77,6 +77,7 @@ import {
 	Bar,
 	BarChart,
 	CartesianGrid,
+	Cell,
 	LabelList,
 	XAxis,
 	YAxis,
@@ -673,6 +674,17 @@ export function OutletSalesDashboard() {
 	const sealedDayCount = dayRows.filter(
 		(d) => d.dateIso <= todayIso && (d.earned > 0 || d.sales > 0),
 	).length;
+	// The chart's scale: zero always on it, plus ~28% of the span beyond the
+	// highest and the lowest bar, so each bar's two-line figure has room.
+	// A plain calculation, not a hook: this line sits below an early return.
+	const netValues = dayRows.map((d) => d.earned);
+	const netHi = Math.max(0, ...netValues);
+	const netLo = Math.min(0, ...netValues);
+	const netRoom = (netHi - netLo || 1) * 0.28;
+	const netChartDomain: [number, number] = [
+		netLo < 0 ? netLo - netRoom : 0,
+		netHi > 0 ? netHi + netRoom : 0,
+	];
 	// null = the prior window has no positive baseline to divide by. Rendered as
 	// "no prior data" rather than 0% (reads as flat) or an invented 100%.
 	const hasGrowth = typeof wowGrowthPct === "number";
@@ -991,6 +1003,26 @@ export function OutletSalesDashboard() {
 									margin={{ top: 24, right: 16, left: 16, bottom: 0 }}
 									barCategoryGap="20%"
 								>
+									{/* Night look (owner, 20 Nov 2026: "the graph … can be neon
+									    and more colourful"): a night you keep money is neon green,
+									    a night that lost money is neon red — the owner's green =
+									    good / red = deduction code, drawn as a glow. */}
+									<defs>
+										<linearGradient id="iz-net-up" x1="0" y1="0" x2="0" y2="1">
+											<stop offset="0%" stopColor="#5ee0a0" />
+											<stop offset="100%" stopColor="#1fb2c9" />
+										</linearGradient>
+										<linearGradient
+											id="iz-net-down"
+											x1="0"
+											y1="0"
+											x2="0"
+											y2="1"
+										>
+											<stop offset="0%" stopColor="#ff9a62" />
+											<stop offset="100%" stopColor="#ff5f7e" />
+										</linearGradient>
+									</defs>
 									<CartesianGrid
 										vertical={false}
 										strokeDasharray="3 3"
@@ -1004,14 +1036,12 @@ export function OutletSalesDashboard() {
 										interval={0}
 									/>
 									{/* Zero stays on the axis at both ends, so a loss night
-									    draws DOWN from it instead of vanishing below a 0 floor. */}
-									<YAxis
-										hide
-										domain={[
-											(dataMin: number) => Math.min(0, dataMin),
-											(dataMax: number) => Math.max(0, dataMax),
-										]}
-									/>
+									    draws DOWN from it instead of vanishing below a 0 floor.
+									    Each end gets headroom for its bar's figure: the scale used
+									    to stop at the deepest bar, so a loss night's figure fell on
+									    the day name (Fri vanished under "-RM 2.6k") and the tallest
+									    bar's figure was cut off at the top (20 Nov 2026). */}
+									<YAxis hide domain={netChartDomain} />
 									<ChartTooltip
 										cursor={{ fill: "rgba(217, 185, 122, 0.08)" }}
 										content={<EarningsTooltip />}
@@ -1019,11 +1049,21 @@ export function OutletSalesDashboard() {
 									/>
 									<Bar
 										dataKey="earned"
-										fill="var(--iz-gold)"
+										fill="url(#iz-net-up)"
 										radius={[6, 6, 0, 0]}
 										maxBarSize={40}
 										isAnimationActive={false}
 									>
+										{dayRows.map((row) => (
+											<Cell
+												key={row.dateIso}
+												fill={
+													row.earned < 0
+														? "url(#iz-net-down)"
+														: "url(#iz-net-up)"
+												}
+											/>
+										))}
 										{/* The figure over each bar opens nothing, so it is ink, not
 										    the lavender kept for links; the bar keeps its colour.
 										    Its size is the ladder token, passed as the SVG

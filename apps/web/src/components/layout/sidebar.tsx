@@ -5,6 +5,7 @@ import {
 	useAdminNavSections,
 } from "@/components/admin/admin-design-chrome";
 import { adminConsoleRoleLabel } from "@/components/admin/admin-role-label";
+import { adminNavFilingPath } from "@/components/admin/admin-trail";
 import { Button } from "@/components/ui/button";
 import {
 	SidebarContent,
@@ -50,7 +51,13 @@ export function Sidebar() {
 	const isActive = (href: string) => {
 		const cleanPathname = location.pathname.replace(/^\/en/, "");
 		const cleanHref = href.replace(/^\/en/, "");
-		const pathnameWithoutQuery = cleanPathname.split("?")[0];
+		// A member page is lit under the list it was opened from, not the
+		// Organisations entry its path happens to be nested under — the same
+		// filing the breadcrumb uses (admin-trail.ts).
+		const pathnameWithoutQuery = adminNavFilingPath(
+			cleanPathname.split("?")[0],
+			(location.search as Record<string, unknown> | undefined)?.from,
+		);
 		const hrefWithoutQuery = cleanHref.split("?")[0];
 
 		// The sidebar's one RBAC entry links to Role, but Module and Pending are
@@ -260,6 +267,14 @@ function SidebarSectionGroup({
 							<Link
 								to={item.href}
 								onClick={onNavigate}
+								/*
+								  TanStack stamps its OWN `aria-current="page"` on any link
+								  whose path prefixes the URL, over the one passed here — so
+								  a member page announced Agency Organisations as current
+								  beside Agency Members. Exact-only, its stamp can only land
+								  where `isActive` already says so.
+								*/
+								activeOptions={{ exact: true, includeSearch: false }}
 								aria-current={isActive(item.href) ? "page" : undefined}
 								// Collapsed to icons, the label and its pill are gone: the
 								// tooltip names the count and a corner dot says "work here"

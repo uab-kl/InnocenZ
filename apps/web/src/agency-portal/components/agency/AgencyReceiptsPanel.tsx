@@ -1,6 +1,9 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
 import { PayrollKindDayFilter } from "@agency-portal/components/agency/PayrollKindDayFilter";
-import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
+import {
+	isRenderablePhoto,
+	ProofPhotos,
+} from "@agency-portal/components/agency/ProofPhotoViewer";
 import { ShiftFactsBlock } from "@agency-portal/components/agency/ShiftFactsBlock";
 import {
 	formatRM,
@@ -50,8 +53,10 @@ import { useEffect, useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import { fillNodes } from "@/lib/portal-i18n/fill-nodes";
 import type { PortalLocale } from "@/lib/portal-i18n/locale-prefs";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
+import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import type {
 	AgencyReceipt,
 	PaymentVoucherReceiptStatus,
@@ -252,13 +257,13 @@ function ReceiptRow({
 	const claims = openDisputesFor(receipt);
 	const tag = receiptStatusTag(receipt);
 	const reviewerName = useAgencyMemberName()(receipt.reviewedBy);
-	// Pending rows open themselves: the whole point of the row is the decision,
-	// and a decision behind a click is one the reviewer can walk past. A DISPUTED
-	// row opens for the same reason — somebody is waiting on an answer, and the
-	// claim is worth less folded away than the approval it is arguing with.
-	const [open, setOpen] = useState(
-		receipt.status === "pending" || claims.length > 0,
-	);
+	// Every receipt starts COLLAPSED — the owner's call (20 Nov 2026: "the
+	// dispute and the receipt part normally collapse it"). Pending and disputed
+	// rows used to open themselves; a week of them made the list a wall of open
+	// cards. The folded header still says what needs someone — the tag (an open
+	// claim owns it) and the total in its status colour — so nothing waiting is
+	// hidden, only its detail.
+	const [open, setOpen] = useState(false);
 	// The enlarge overlay that lived here is gone — ProofPhotoViewer owns it now,
 	// with zoom and pan this one never had.
 	// Closed by default. The editor states what a correction costs and carries
@@ -268,6 +273,13 @@ function ReceiptRow({
 
 	const total = sumLines(receipt);
 	const photos = receipt.proofPhotos ?? [];
+	// The paper's FIRST photo as the header thumbnail — the picture slot of the
+	// Overtime card. Resolved exactly as the shared viewer resolves it (an R2 key
+	// becomes a URL) and drawn only when certainly renderable, so a legacy path
+	// never puts a torn icon beside money. The full set still opens below.
+	const firstPhotoUrl = photos[0] ? resolveProofPhotoUrl(photos[0]) : null;
+	const thumb =
+		firstPhotoUrl && isRenderablePhoto(firstPhotoUrl) ? firstPhotoUrl : null;
 	// Approve/withdraw stop at VERIFIED — the server refuses to re-decide it.
 	// EDITING no longer stops there (owner's rule, 23 Aug 2026): scans verify
 	// at creation and a correction verifies the receipt, so verified means
@@ -291,111 +303,177 @@ function ReceiptRow({
 	const canEdit = canReview && !signedOff;
 
 	return (
-		<div className="rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)]/40">
+		<div className="rounded-xl border border-[var(--iz-line)] p-3">
+			{/*
+			 * THE OVERTIME CARD'S SHAPE (owner, 20 Nov 2026: "the receipt and the
+			 * dispute design like the overtime style") — the paper's picture, "PR ·
+			 * Outlet" in bold, one muted line, the tags on the right, then the
+			 * figures under their own labels. The whole header is the fold button;
+			 * every word it carried before is still on the card.
+			 */}
 			<button
 				type="button"
-				className="w-full px-3 py-2.5 text-left"
+				className="w-full text-left"
 				onClick={() => setOpen((v) => !v)}
 				aria-expanded={open}
 			>
-				<div className="flex flex-wrap items-start justify-between gap-2">
-					<div className="min-w-0">
-						<div className="flex flex-wrap items-center gap-1.5">
-							<ScanLine className="h-3.5 w-3.5 shrink-0" />
-							<span className="iz-nums text-sm font-bold">
-								{receipt.receiptNo}
-							</span>
-							<IzPill
-								variant={receipt.source === "scan" ? "violet" : "amber"}
-								className="!text-[10px]"
-							>
-								{t.receipts[SOURCE_LABEL[receipt.source]]}
-							</IzPill>
-							{/* ONE tag, and an open claim owns it — see `receiptStatusTag`. */}
-							<IzPill variant={tag.variant} className="!text-[10px]">
-								{t.receipts[tag.labelKey]}
-							</IzPill>
-						</div>
-						<p className="iz-tiny iz-muted mt-1">
-							{/* The feed has carried prNickname since the receipt review shipped;
-							    this row simply never read it. Shared formatter, so all three
-							    payee surfaces say the same thing. */}
-							{formatPayeeLabel(receipt.prNickname, receipt.prName) ||
-								t.receipts.unknownPr}{" "}
-							· {receiptOutlet(receipt)}
-							{receipt.orderNo
-								? ` · ${fill(t.agencyReceipts.orderNoInline, {
-										no: receipt.orderNo,
-									})}`
-								: ""}
-						</p>
-						{/* THE SHIFT THE OUTLET POSTED — without it a stack of receipts from
-						    one venue is indistinguishable and the reviewer cannot tell which
-						    night's money they are approving.
-						    THE SAME block the dispute queue draws — one component, not a
-						    second spelling. The agency reads both screens while deciding
-						    the same money, and a one-liner here beside a block there is
-						    how they drift. */}
-						{receipt.shift && (
-							<div className="mt-1.5">
-								<ShiftFactsBlock shift={receipt.shift} />
+				{/* The tags stay on the RIGHT from `sm` up — a half-width card wraps
+				    them onto two right-aligned lines rather than dropping them under
+				    the name. Below `sm` the whole row wraps, as the Overtime card's
+				    does on a phone. */}
+				<div className="flex flex-wrap items-start justify-between gap-2 sm:flex-nowrap">
+					<div className="flex min-w-0 gap-2.5 sm:flex-1">
+						{thumb ? (
+							<img
+								src={thumb}
+								// Evidence, not decoration — named the way the viewer below
+								// names the same scan, never an empty alt.
+								alt={fill(t.agencyReceipts.receiptScanLabel, {
+									receiptNo: receipt.receiptNo,
+								})}
+								className="h-12 w-16 shrink-0 rounded border border-[var(--iz-line)] object-cover"
+								loading="lazy"
+								onError={(e) => {
+									e.currentTarget.style.display = "none";
+								}}
+							/>
+						) : null}
+						<div className="min-w-0">
+							<div className="text-sm font-semibold">
+								{/* The feed has carried prNickname since the receipt review
+								    shipped; this row simply never read it. Shared formatter, so
+								    all three payee surfaces say the same thing. */}
+								{formatPayeeLabel(receipt.prNickname, receipt.prName) ||
+									t.receipts.unknownPr}{" "}
+								·{" "}
+								{/* Champagne for the venue, the receipt no and the order no
+								    (owner, 20 Nov 2026: "the receipt no order no and the outlet
+								    name can chanpagne colour ?"); the PR's name stays ink. */}
+								<span className="text-[#d9c09a]">{receiptOutlet(receipt)}</span>
 							</div>
-						)}
-						<p className="iz-tiny iz-muted2 mt-0.5">
-							{fill(t.agencyReceipts.loggedAt, {
-								when: formatLoggedAt(receipt.loggedAt),
-							})}
-							{receipt.receiptTime
-								? ` · ${fill(t.agencyReceipts.printedAt, {
-										time: receipt.receiptTime,
-									})}`
-								: ""}{" "}
-							·{" "}
-							{photos.length > 0
-								? fill(
-										photos.length === 1
-											? t.agencyReceipts.photoCountOne
-											: t.agencyReceipts.photoCountMany,
-										{ n: photos.length },
-									)
-								: t.agencyReceipts.noPhoto}
-						</p>
-					</div>
-					<div className="flex shrink-0 items-center gap-2 text-right">
-						<div>
-							<p className="iz-ledger text-sm font-bold">{formatRM(total)}</p>
-							<p className="iz-tiny iz-muted2">
-								{fill(
-									receipt.lines.length === 1
-										? t.agencyReceipts.itemCountOne
-										: t.agencyReceipts.itemCountMany,
-									{ n: receipt.lines.length },
-								)}
+							<p className="iz-tiny iz-muted mt-0.5">
+								{fill(t.agencyReceipts.loggedAt, {
+									when: formatLoggedAt(receipt.loggedAt),
+								})}
+								{receipt.receiptTime
+									? ` · ${fill(t.agencyReceipts.printedAt, {
+											time: receipt.receiptTime,
+										})}`
+									: ""}{" "}
+								·{" "}
+								{photos.length > 0
+									? fill(
+											photos.length === 1
+												? t.agencyReceipts.photoCountOne
+												: t.agencyReceipts.photoCountMany,
+											{ n: photos.length },
+										)
+									: t.agencyReceipts.noPhoto}
 							</p>
-							{/* WHAT THIS PAPER PUT IN THE SELECTED BUCKET, under its own
-							    total and never instead of it. A receipt is a physical
-							    document that has to reconcile against the printed one, so
-							    the whole figure stays; but a reviewer who asked for tips is
-							    checking the tips figure, and leaving them to derive it from
-							    a mixed RM 190.00 is how RM 190 of drinks-and-tips gets read
-							    as RM 190 of tips. */}
-							{kinds.length > 0 && (
-								<p className="iz-tiny text-[var(--iz-gold-l)]">
-									{kinds.map((k) => t.money[k]).join(" + ")}{" "}
-									{formatRM(receiptKindTotal(receipt, kinds))}
-								</p>
-							)}
 						</div>
+					</div>
+					<div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:max-w-[55%]">
+						{/* Scanned / Self-logged is a LABEL, so it is neutral (owner's rule:
+						    status colours only for status — the tag beside it carries that). */}
+						<IzPill variant="label" className="!text-[10px]">
+							{t.receipts[SOURCE_LABEL[receipt.source]]}
+						</IzPill>
+						{/* ONE tag, and an open claim owns it — see `receiptStatusTag`. */}
+						<IzPill variant={tag.variant} className="!text-[10px]">
+							{t.receipts[tag.labelKey]}
+						</IzPill>
 						<ChevronDown
 							className={`h-4 w-4 text-[var(--iz-muted)] transition-transform${open ? " rotate-180" : ""}`}
 							aria-hidden
 						/>
 					</div>
 				</div>
+
+				<div className="mt-2 flex flex-wrap gap-4 text-sm">
+					<span>
+						<span className="iz-tiny iz-muted block">{t.table.receipt}</span>
+						<span className="iz-nums">
+							<ScanLine
+								className="mr-1 inline h-3.5 w-3.5 align-middle"
+								aria-hidden
+							/>
+							<span className="text-[#d9c09a]">{receipt.receiptNo}</span>
+							{/* The same "order {no}" template, through `fillNodes` so only
+							    the number takes the champagne — the wording is untouched. */}
+							{receipt.orderNo ? (
+								<>
+									{" · "}
+									{fillNodes(t.agencyReceipts.orderNoInline, {
+										no: (
+											<span className="text-[#d9c09a]">{receipt.orderNo}</span>
+										),
+									})}
+								</>
+							) : null}
+						</span>
+					</span>
+					<span>
+						<span className="iz-tiny iz-muted block">{t.reports.colTotal}</span>
+						{/* The total in its status colour (owner, 20 Nov 2026: money with a
+						    state is green / amber / red) — the same variant as the tag. */}
+						<span
+							className={`iz-ledger block font-bold ${
+								tag.variant === "green"
+									? "!text-[var(--iz-green)]"
+									: tag.variant === "red"
+										? "!text-[var(--iz-red)]"
+										: tag.variant === "amber"
+											? "!text-[var(--iz-amber)]"
+											: ""
+							}`}
+						>
+							{formatRM(total)}
+						</span>
+						{/* The line count, in its own words, under the total it adds up to. */}
+						<span className="iz-tiny iz-muted2 block">
+							{fill(
+								receipt.lines.length === 1
+									? t.agencyReceipts.itemCountOne
+									: t.agencyReceipts.itemCountMany,
+								{ n: receipt.lines.length },
+							)}
+						</span>
+					</span>
+					{/* WHAT THIS PAPER PUT IN THE SELECTED BUCKET, beside its own total
+					    and never instead of it. A receipt is a physical document that
+					    has to reconcile against the printed one, so the whole figure
+					    stays; but a reviewer who asked for tips is checking the tips
+					    figure, and leaving them to derive it from a mixed RM 190.00 is
+					    how RM 190 of drinks-and-tips gets read as RM 190 of tips. */}
+					{kinds.length > 0 && (
+						<span>
+							<span className="iz-tiny iz-muted block">
+								{kinds.map((k) => t.money[k]).join(" + ")}
+							</span>
+							<span className="iz-nums text-[var(--iz-gold-l)]">
+								{formatRM(receiptKindTotal(receipt, kinds))}
+							</span>
+						</span>
+					)}
+				</div>
 			</button>
 
 			{open && (
-				<div className="border-t border-[var(--iz-line)] px-3 py-2.5">
+				<div className="mt-2.5 border-t border-[var(--iz-line)] pt-2.5">
+					{/* THE SHIFT THE OUTLET POSTED — without it a stack of receipts from
+					    one venue is indistinguishable and the reviewer cannot tell which
+					    night's money they are approving. First thing the opened card
+					    shows, above the claim and the lines: the folded header names
+					    the venue, this says which night.
+					    THE SAME block the dispute queue draws — one component, not a
+					    second spelling. The agency reads both screens while deciding
+					    the same money, and a one-liner here beside a block there is
+					    how they drift. */}
+					{receipt.shift && (
+						<div className="mb-2">
+							<ShiftFactsBlock shift={receipt.shift} />
+						</div>
+					)}
 					{/* WHAT IS BEING ARGUED, above the figures being argued about.
 					    Correcting the lines below does NOT settle a claim — accepting
 					    or rejecting it is a separate decision, taken in the dispute
@@ -523,35 +601,43 @@ function ReceiptRow({
 						</p>
 					)}
 
-					<div className="mt-2.5 flex flex-wrap gap-2">
+					{/* Side by side as on the Overtime card: the decision filled
+					    champagne, everything else outlined. Same buttons, same order,
+					    same handlers — only the Overtime card's size, in place of the
+					    hand-shrunk 11px ones. Two equal columns, not a wrapping row:
+					    `.iz-btn` is width 100%, so a wrapping row stacked every button
+					    full width. */}
+					<div className="mt-2 grid grid-cols-2 gap-2">
 						{decidable &&
 							(receipt.status === "pending" ? (
 								<button
 									type="button"
-									className="iz-btn iz-btn-primary !h-7 !px-2.5 !text-[11px]"
+									className="iz-btn iz-btn-primary flex items-center gap-1.5"
 									disabled={busy}
 									onClick={() => onReview("approved")}
 								>
-									<Check className="mr-1 h-3 w-3" /> {t.common.approve}
+									<Check className="h-4 w-4" />
+									{t.common.approve}
 								</button>
 							) : (
 								<button
 									type="button"
-									className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
+									className="iz-btn iz-btn-soft flex items-center gap-1.5"
 									disabled={busy}
 									onClick={() => onReview("pending")}
 								>
-									<RotateCcw className="mr-1 h-3 w-3" />{" "}
+									<RotateCcw className="h-4 w-4" />
 									{t.agencyReceipts.withdrawApproval}
 								</button>
 							))}
 						{onOpenPv && (
 							<button
 								type="button"
-								className="iz-btn iz-btn-soft !h-7 !px-2.5 !text-[11px]"
+								className="iz-btn iz-btn-soft flex items-center gap-1.5"
 								onClick={() => onOpenPv(receipt.voucherId)}
 							>
-								<FileText className="mr-1 h-3 w-3" /> {t.agencyReceipts.openPv}
+								<FileText className="h-4 w-4" />
+								{t.agencyReceipts.openPv}
 							</button>
 						)}
 					</div>
@@ -559,17 +645,18 @@ function ReceiptRow({
 					{/*
 					 * Under Approve, not beside it: approving is the common move and
 					 * correcting is the exception, and a row of equal buttons would
-					 * make the two read as alternatives of the same weight.
+					 * make the two read as alternatives of the same weight. Same column
+					 * width as Approve, directly beneath it.
 					 */}
 					{canEdit && (
-						<div className="mt-1.5">
+						<div className="mt-2 grid grid-cols-2 gap-2">
 							<button
 								type="button"
-								className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
+								className="iz-btn iz-btn-soft flex items-center gap-1.5"
 								onClick={() => setEditing((v) => !v)}
 								aria-expanded={editing}
 							>
-								<Pencil className="mr-1 h-3 w-3" />{" "}
+								<Pencil className="h-4 w-4" />
 								{editing ? t.receipts.closeEditor : t.common.edit}
 							</button>
 						</div>
@@ -1186,7 +1273,7 @@ export function AgencyReceiptsPanel({
 									 * half width it would have hidden the very words a reviewer
 									 * checks against the paper.
 									 */}
-									<div className="grid items-start gap-2 xl:grid-cols-2">
+									<div className="iz-receipt-day-grid grid items-start gap-3 xl:grid-cols-2">
 										{rows.map((receipt) => (
 											<div
 												key={receipt.id}

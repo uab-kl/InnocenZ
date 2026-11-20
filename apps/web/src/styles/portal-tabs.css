@@ -180,7 +180,8 @@ html
 	top: 8px;
 	bottom: 8px;
 	width: 3px;
-	background: var(--iz-tab-selected-bg);
+	/* its own token, so a soft-tint selected tab still gets a solid bar */
+	background: var(--iz-rail-here-bar, var(--iz-tab-selected-bg));
 }
 html
 	body:is([data-agency-design], [data-outlet-design])

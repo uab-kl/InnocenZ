@@ -1,6 +1,13 @@
 import { serverMessage } from "@agency-portal/hooks/use-org-members";
 import type { AgencyPenaltyRules } from "@agency-portal/lib/pr-penalties";
 import { cn } from "@agency-portal/lib/utils";
+import {
+	AlarmClock,
+	Ban,
+	CalendarDays,
+	type LucideIcon,
+	Stethoscope,
+} from "lucide-react";
 import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -155,7 +162,8 @@ function Field({
 }
 
 function RuleRow({
-	icon,
+	icon: Icon,
+	iconTone,
 	title,
 	desc,
 	enabled,
@@ -163,7 +171,15 @@ function RuleRow({
 	readOnly,
 	children,
 }: {
-	icon: string;
+	/**
+	 * A line icon, not an emoji (review, 20 Nov 2026): the calendar, stethoscope,
+	 * alarm-clock and no-entry emoji that were here drew differently on every OS,
+	 * beside the line icons used everywhere else, and brought back the retired
+	 * lilac. Same four meanings, one size.
+	 */
+	icon: LucideIcon;
+	/** The icon's neon — icons are neon, never a status colour. */
+	iconTone: string;
 	title: string;
 	desc: string;
 	enabled: boolean;
@@ -179,9 +195,11 @@ function RuleRow({
 			)}
 		>
 			<div className="flex items-start gap-2.5">
-				<span className="mt-0.5 text-base leading-none" aria-hidden>
-					{icon}
-				</span>
+				<Icon
+					className={cn("mt-0.5 h-4 w-4 shrink-0", iconTone)}
+					strokeWidth={1.8}
+					aria-hidden
+				/>
 				<div className="min-w-0 flex-1">
 					<div className="text-sm font-semibold text-[var(--iz-txt)]">
 						{title}
@@ -259,7 +277,8 @@ export function PenaltyRulesEditor({
 	return (
 		<div className="flex flex-col gap-2.5">
 			<RuleRow
-				icon="📅"
+				icon={CalendarDays}
+				iconTone="text-[#5eead4]"
 				title={t.penalties.minShiftsTitle}
 				desc={t.penalties.minShiftsDesc}
 				enabled={rules.minShiftsPerWeek.enabled}
@@ -289,7 +308,8 @@ export function PenaltyRulesEditor({
 			</RuleRow>
 
 			<RuleRow
-				icon="🩺"
+				icon={Stethoscope}
+				iconTone="text-[#f472b6]"
 				title={t.penalties.mcCapTitle}
 				desc={t.penalties.mcCapDesc}
 				enabled={rules.maxMcPerMonth.enabled}
@@ -317,7 +337,8 @@ export function PenaltyRulesEditor({
 			</RuleRow>
 
 			<RuleRow
-				icon="⏰"
+				icon={AlarmClock}
+				iconTone="text-[#facc15]"
 				title={t.penalties.latenessTitle}
 				desc={t.penalties.latenessDesc}
 				enabled={rules.latePerWeek.enabled}
@@ -354,7 +375,8 @@ export function PenaltyRulesEditor({
 			</RuleRow>
 
 			<RuleRow
-				icon="🚫"
+				icon={Ban}
+				iconTone="text-[#60a5fa]"
 				title={t.penalties.cancellationTitle}
 				desc={t.penalties.cancellationDesc}
 				enabled={rules.cancellation.enabled}

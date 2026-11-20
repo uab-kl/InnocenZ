@@ -251,6 +251,15 @@ const SHIFT_OUTCOME_LABELS: Record<string, (t: PortalTranslations) => string> =
  * `tiedMonthsLabel` builds "8 mo" / "1 yr" in English only; the arithmetic is
  * shared through `prTiedSinceMs` so the two cannot drift on the number itself.
  */
+/** A server timestamp as the reader's own calendar day, `YYYY-MM-DD`. */
+function localDay(iso: string): string {
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+	const mm = String(d.getMonth() + 1).padStart(2, "0");
+	const dd = String(d.getDate()).padStart(2, "0");
+	return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 function tiedDurationLabel(
 	pr: AgencyManagedPR,
 	t: PortalTranslations,
@@ -295,6 +304,9 @@ function AgencyManagePRs() {
 		saveProfile: updateAgencyPrProfile,
 		suspend: suspendAgencyPr,
 		detach: detachAgencyPr,
+		requestDetach: requestAgencyPrDetach,
+		detachRequestFor,
+		requestingDetach,
 		saving: savingAgencyPr,
 	} = useAgencyPrs();
 	const shiftHistory = useStore((s) => s.shiftHistory);
@@ -306,7 +318,6 @@ function AgencyManagePRs() {
 	const ratings = backendRatings.backed ? backendRatings.ratings : demoRatings;
 	// Live TODAY status per comcard — on duty / scheduled / unavailable.
 	const liveStatusByPr = useAgencyPrLiveStatus(backendRatings.backed);
-	const requestAgencyPrDetach = useStore((s) => s.requestAgencyPrDetach);
 	// Backend rules when signed in for real; the demo store otherwise. A demo
 	// session must never render another agency's fine schedule.
 	const backendPenalties = useAgencyPenaltyRules();
@@ -503,6 +514,8 @@ function AgencyManagePRs() {
 				onSuspend={suspendAgencyPr}
 				onDetach={detachAgencyPr}
 				onRequestDetach={requestAgencyPrDetach}
+				detachRequestedAt={detachRequestFor(detail.id)?.createdAt ?? null}
+				requestingDetach={requestingDetach}
 				saving={savingAgencyPr}
 			/>
 		);
@@ -1063,6 +1076,8 @@ function AgencyPrDetail({
 	onSuspend,
 	onDetach,
 	onRequestDetach,
+	detachRequestedAt,
+	requestingDetach,
 	saving,
 }: {
 	detail: AgencyManagedPR;
@@ -1097,7 +1112,16 @@ function AgencyPrDetail({
 	) => void;
 	onSuspend: (prId: string, onDone?: () => void) => void;
 	onDetach: (prId: string, onDone?: () => void) => void;
-	onRequestDetach: (prId: string) => void;
+	/** Tied under a year: file a REAL request to the InnocenZ admin (owner, 20 Nov 2026). */
+	onRequestDetach: (prId: string, prName: string, onDone?: () => void) => void;
+	/**
+	 * When this agency's detach request for this PR was filed, while it still
+	 * waits for the admin — or null. A waiting request turns Detach into
+	 * "Detach requested" rather than offering a second the server refuses.
+	 */
+	detachRequestedAt: string | null;
+	/** A detach request is in flight — Submit must not fire a second. */
+	requestingDetach: boolean;
 	/** A save or suspension is in flight. */
 	saving: boolean;
 }) {
@@ -1315,10 +1339,13 @@ function AgencyPrDetail({
 		});
 	};
 
+	// Closes on SUCCESS only, like the two above: a refused request (one
+	// already waiting, a PR no longer on the roster) keeps the sheet open
+	// under the server's sentence.
 	const requestAdminDetach = () => {
-		onRequestDetach(detail.id);
-		setDetachOpen(false);
+		onRequestDetach(detail.id, detail.name, () => setDetachOpen(false));
 	};
+	const detachRequested = detachRequestedAt !== null;
 
 	return (
 		<div className="iz-screen">
@@ -1837,9 +1864,13 @@ function AgencyPrDetail({
 					{tiedUnderOneYear && (
 						<IzCard flat className="mt-2.5 border-[var(--iz-violet)]">
 							<p className="iz-tiny text-[var(--iz-violet-l)]">
-								{fill(t.agencyPrs.tiedDetachNeedsAdmin, {
-									duration: tiedDurationLabel(detail, t),
-								})}
+								{detachRequestedAt
+									? fill(t.agencyPrs.detachRequestWaiting, {
+											date: formatPayrollDay(localDay(detachRequestedAt), t),
+										})
+									: fill(t.agencyPrs.tiedDetachNeedsAdmin, {
+											duration: tiedDurationLabel(detail, t),
+										})}
 							</p>
 						</IzCard>
 					)}
@@ -1969,12 +2000,17 @@ function AgencyPrDetail({
 							<button
 								type="button"
 								className="iz-btn iz-btn-soft !text-xs"
+								// A request already waiting: nothing to press until the
+								// admin answers — the note above says when it was sent.
+								disabled={detachRequested}
 								onClick={() => setDetachOpen(true)}
 							>
 								<UserMinus className="h-3 w-3" />{" "}
-								{tiedUnderOneYear
-									? t.managePr.requestDetach
-									: t.managePr.detach}
+								{detachRequested
+									? t.managePr.detachRequested
+									: tiedUnderOneYear
+										? t.managePr.requestDetach
+										: t.managePr.detach}
 							</button>
 						</div>
 					</OutletSection>
@@ -2068,6 +2104,8 @@ function AgencyPrDetail({
 							type="button"
 							className="iz-btn iz-btn-primary"
 							onClick={requestAdminDetach}
+							disabled={requestingDetach}
+							aria-busy={requestingDetach || undefined}
 						>
 							{t.agencyPrs.submitAdminRequest}
 						</button>

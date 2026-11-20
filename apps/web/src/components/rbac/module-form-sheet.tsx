@@ -232,7 +232,7 @@ export function ModuleFormSheet({
 											>
 												<SelectValue placeholder={t.rbac.selectPortal} />
 											</SelectTrigger>
-											<SelectContent>
+											<SelectContent position="popper" align="start">
 												{(portalsQuery.data ?? []).map((p) => (
 													<SelectItem key={p.id} value={p.id}>
 														{p.name} ({p.code})

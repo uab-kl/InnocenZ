@@ -7,6 +7,8 @@ import "@/components/admin/admin-design.css";
 import "@/styles/portal-interaction.css";
 // One selected-tab look (gold, dark ink) for all three portals.
 import "@/styles/portal-tabs.css";
+// The night look, Afterglow Vivid (owner, 20 Nov 2026) — last, so it wins.
+import "@/styles/afterglow.css";
 import { Header } from "@/components/layout/header";
 import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
 import { Sidebar } from "@/components/layout/sidebar";

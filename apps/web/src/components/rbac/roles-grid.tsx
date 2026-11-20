@@ -139,7 +139,7 @@ export function RolesGrid({
 						<SelectTrigger className="w-36" aria-label={t.rbac.filterByStatus}>
 							<SelectValue placeholder={t.rbac.statusPlaceholder} />
 						</SelectTrigger>
-						<SelectContent>
+						<SelectContent position="popper" align="start">
 							<SelectItem value="all">{t.rbac.allStatus}</SelectItem>
 							<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
 							<SelectItem value="inactive">{t.rbac.statusInactive}</SelectItem>

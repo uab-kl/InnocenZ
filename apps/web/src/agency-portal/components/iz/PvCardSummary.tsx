@@ -7,7 +7,6 @@ import {
 	parsePvIssuedMs,
 } from "@agency-portal/lib/pr-demo";
 import { pvDisplayDates } from "@agency-portal/lib/pv-display-dates";
-import { voucherPayeeIc } from "@agency-portal/lib/pv-roster-pr";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dayMonthLabel } from "@/lib/portal-i18n/date-label";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
@@ -75,7 +74,6 @@ export function PvCardSummary({
 }) {
 	const { t } = usePortalLocale();
 	const voucherNo = pv.voucherNo?.trim();
-	const payeeIc = voucherPayeeIc(pv, agencyPRs);
 	const weekLabel = pvOwnWeekLabel(pv, t);
 	const dates = pvDisplayDates(pv, t);
 	const isLatest =
@@ -97,22 +95,15 @@ export function PvCardSummary({
 			<p
 				className={
 					voucherNo
-						? "iz-tiny iz-muted mt-0.5"
+						? "iz-tiny mt-0.5 font-semibold text-[var(--iz-txt)]"
 						: "iz-heading break-words text-base font-bold"
 				}
 			>
 				{resolvePvPrLabel(pv, agencyPRs)} · {pv.outlet}
 			</p>
-			{/* The PR's own IC, through the voucher's FK — not the voucher's copy,
-			    which goes stale when the profile is corrected (`voucherPayeeIc`). */}
-			{payeeIc && (
-				<p className="iz-tiny iz-muted2">
-					{t.outletSettings.ic} {payeeIc}
-				</p>
-			)}
-			<p className="iz-tiny iz-muted2 mt-0.5">
-				{t.history.cycleLabel}: {pv.cycle}
-			</p>
+			{/* No IC and no cycle line on the card (owner, 20 Nov 2026: "no need to
+			    see IC, Cycle"). Payroll's search still finds a voucher by the PR's
+			    IC, and the voucher detail still prints it. */}
 			{/* A backend voucher's own week runs Mon–Sun while the payroll tabs are
 			    Sun–Sat, so a tab heading is one day out from the week the voucher
 			    actually covers. Print the voucher's range rather than letting any
@@ -135,7 +126,9 @@ export function PvCardSummary({
 					</span>
 				)}
 			</p>
-			<p className="iz-tiny text-[var(--iz-gold-l)] mt-0.5">
+			{/* Money in the money colour (owner, 20 Nov 2026: "the important thing
+			    colour obvious"); the PR and outlet line above is now ink, not muted. */}
+			<p className="iz-tiny iz-nums mt-0.5 font-semibold text-[var(--iz-money,var(--iz-gold-l))]">
 				{t.history.sales} {formatRM(getPvSalesTotal(pv))}
 			</p>
 		</div>

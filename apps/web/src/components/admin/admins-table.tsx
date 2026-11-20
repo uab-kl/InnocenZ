@@ -7,6 +7,7 @@ import {
 	Shield,
 } from "lucide-react";
 import { AdminFilters } from "@/components/admin/admin-filters";
+import { EmailLine } from "@/components/admin/email-line";
 import { StatusPill } from "@/components/admin/status-pill";
 import { Button } from "@/components/ui/button";
 import {
@@ -122,7 +123,7 @@ export function AdminsTable({
 								>
 									<SelectValue placeholder={t.admin.filterByStatus} />
 								</SelectTrigger>
-								<SelectContent>
+								<SelectContent position="popper" align="start">
 									<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 									<SelectItem value="active">{t.admin.statusActive}</SelectItem>
 									<SelectItem value="inactive">
@@ -195,9 +196,10 @@ export function AdminsTable({
 									<TableRow key={admin.id}>
 										<TableCell>
 											{admin.displayName}
-											<div className="iz-admin-record-secondary">
-												{admin.email}
-											</div>
+											<EmailLine
+												email={admin.email}
+												className="iz-admin-record-secondary"
+											/>
 										</TableCell>
 										<TableCell data-label={t.admin.colStatus}>
 											<StatusPill

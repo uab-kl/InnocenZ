@@ -59,6 +59,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import { fillNodes } from "@/lib/portal-i18n/fill-nodes";
 import {
 	planCapacityLabel,
 	planDescription,
@@ -493,7 +494,12 @@ function AgencySubscription() {
 				)}
 			</header>
 
-			<IzSectionLabel>{t.agencyMisc.usageBasedWeekly}</IzSectionLabel>
+			{/* The card's own title (owner, 20 Nov 2026); how it is billed stays
+			    right under it, laid out as the Rate card's own line is. */}
+			<IzSectionLabel>{t.approvedDesign.yourPlan}</IzSectionLabel>
+			<p className="iz-tiny iz-muted2 -mt-1 mb-2">
+				{t.agencyMisc.usageBasedWeekly}
+			</p>
 			<section className="iz-approved-subscription-summary">
 				<div>
 					<p>{t.approvedDesign.currentPlan}</p>
@@ -527,17 +533,14 @@ function AgencySubscription() {
 					{heroOverdue && heroOverdue.count > 0 && (
 						// `!` because the card's own `p { color: muted }` is unlayered
 						// and would otherwise win over the utility — red is the
-						// owner's colour for money that is late.
-						<p className="!text-[var(--iz-red)]">
-							{fill(
-								heroOverdue.count === 1
-									? t.subscription.heroOverdueOne
-									: t.subscription.heroOverdueMany,
-								{
-									amount: formatRM(heroOverdue.amountRm),
-									n: heroOverdue.count,
-								},
-							)}
+						// owner's colour for money that is late. `!block w-fit`: the
+						// tag is drawn inline-block, and now that it is short ("RM X
+						// overdue") the period line flowed up beside it; it keeps
+						// its own line, still hugging its words.
+						<p className="!block w-fit !text-[var(--iz-red)]">
+							{fill(t.subscription.heroOverdue, {
+								amount: formatRM(heroOverdue.amountRm),
+							})}
 						</p>
 					)}
 					<p>{agencyWindowLabel}</p>
@@ -548,11 +551,19 @@ function AgencySubscription() {
 								? t.agencyMisc.contactAdminCustomPricing
 								: heroPvCount === null
 									? ""
-									: fill(
+									: fillNodes(
 											heroPvCount === 1
 												? t.subscription.basedOnPvOne
 												: t.subscription.basedOnPvMany,
-											{ price: billedPriceLabel, n: heroPvCount },
+											{
+												// the price in the money colour (owner, 20 Nov 2026)
+												price: (
+													<strong className="iz-nums !text-[var(--iz-money,var(--iz-txt))]">
+														{billedPriceLabel}
+													</strong>
+												),
+												n: heroPvCount,
+											},
 										)}
 					</p>
 				</div>
@@ -790,7 +801,15 @@ function AgencySubscription() {
 						<div className="grid grid-cols-3 gap-2 text-center">
 							<div>
 								<p className="iz-tiny iz-muted2">{t.agencyMisc.outstanding}</p>
-								<p className="mt-1 iz-heading iz-nums text-base font-semibold text-[var(--iz-txt)]">
+								{/* Money in its state colour (owner, 20 Nov 2026): waiting is
+								    amber, late is red, settled is green. */}
+								<p
+									className={`mt-1 iz-heading iz-nums text-base font-semibold ${
+										collections.totals.outstandingRm > 0
+											? "text-[var(--iz-amber)]"
+											: "text-[var(--iz-txt)]"
+									}`}
+								>
 									{formatRM(collections.totals.outstandingRm)}
 								</p>
 							</div>
@@ -808,7 +827,13 @@ function AgencySubscription() {
 							</div>
 							<div>
 								<p className="iz-tiny iz-muted2">{t.agencyMisc.settled}</p>
-								<p className="mt-1 iz-heading text-base font-bold">
+								<p
+									className={`mt-1 iz-heading iz-nums text-base font-bold ${
+										collections.totals.settledRm > 0
+											? "text-[var(--iz-green)]"
+											: ""
+									}`}
+								>
 									{formatRM(collections.totals.settledRm)}
 								</p>
 							</div>

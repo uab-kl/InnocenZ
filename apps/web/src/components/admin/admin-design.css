@@ -504,8 +504,11 @@ body[data-admin-design] .admin-sidebar-nav-item-active::before {
 	width: 3px;
 	border-radius: 2px;
 	background: var(
-		--iz-tab-selected-bg,
-		linear-gradient(120deg, #f7e6b0 0%, #e8c874 45%, #c69f43 100%)
+		--iz-rail-here-bar,
+		var(
+			--iz-tab-selected-bg,
+			linear-gradient(120deg, #f7e6b0 0%, #e8c874 45%, #c69f43 100%)
+		)
 	);
 }
 /* Collapsed rail: the pill's place is taken by a corner dot (16 Nov 2026). */
@@ -564,10 +567,10 @@ body[data-admin-design]
 	place-items: center;
 	width: 46px;
 	height: 46px;
-	border: 1px solid #b9a3cf;
+	border: 1px solid var(--iz-act-line, #b9a3cf);
 	border-radius: 50%;
 	background: var(--iz-act);
-	color: #fff;
+	color: var(--iz-act-ink, #fff);
 	box-shadow: 0 4px 16px #0003;
 }
 .iz-admin-filters {
@@ -770,6 +773,27 @@ body[data-admin-design] .iz-admin-request-footer > button {
 		min-width: 44px;
 		min-height: 44px;
 	}
+}
+
+/*
+ * A TEXT LINK THAT STANDS ALONE IS STILL A TARGET (WCAG 2.5.8 minimum 24×24,
+ * ui-ux-pro-max priority 2 — the signed-in sweep of every admin page, 19 Nov
+ * 2026). The dashboard's "Review →" and the Plan pages' table-cell links
+ * measured 21px tall; the agency-team name button 13px wide for a two-letter
+ * name. Padding grows the hit area without moving the text. A link inside a
+ * sentence is exempt (2.5.8's inline exception) and is not given this class.
+ */
+body[data-admin-design] .iz-admin-cell-link {
+	display: inline-block;
+	padding-block: 2px;
+	min-height: 24px;
+}
+/* (0,2,2): out-ranks `:is(.grid, .flex) > * { min-width: 0 }` (0,2,1). Every
+   table's name button — PR, agency, outlet, member lists — not only row-open ones. */
+body[data-admin-design] button.iz-admin-record-name {
+	min-width: 24px;
+	min-height: 24px;
+	text-align: start;
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -1176,6 +1200,13 @@ body[data-admin-design] [data-slot="button"].iz-queue-action {
 	white-space: nowrap;
 	max-width: none;
 }
+/* A closed row's quiet "View" is still a control: DESIGN.md §11 3a wants a
+   visible boundary at rest (border, fill or underline). Ghost had none — it read
+   as plain text on Plan Request, Plan Change, Plan Payment and Payment Vouchers. */
+body[data-admin-design] [data-slot="button"][data-variant="ghost"].iz-queue-action {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
 .iz-queue-waiting {
 	position: relative;
 	display: flex;
@@ -1217,5 +1248,85 @@ body[data-admin-design] [data-slot="button"].iz-queue-action {
 	.iz-queue-waiting > button {
 		width: 100%;
 		min-height: 44px;
+	}
+}
+
+/* ── The save confirmation arrives once and leaves at once (19 Nov 2026) ────
+ * Admin's confirmation is sonner's toast. Measured from sonner's own sheet: it
+ * slid in a whole toast height over 400 ms, animated its HEIGHT, and slid out
+ * again over 400-500 ms when it went. DESIGN.md §6/§8 (and the agency/outlet
+ * bar, `iz-m-drop`): it travels 10px into place at the fast step, its size
+ * never animates, and nothing leaves with motion. Admin only — the public
+ * site's toasts keep sonner's defaults. sonner's sheet is unlayered and its
+ * removal rules reach (0,5,0); the exit rule therefore uses !important, as
+ * sonner's own reduced-motion rule does (which still switches all of this off).
+ * Position, lifetime and stacking stay sonner's. */
+body[data-admin-design]
+[data-sonner-toast][data-mounted="false"][data-y-position="bottom"] {
+	--y: translateY(var(--iz-motion-rise, 10px));
+}
+body[data-admin-design]
+	[data-sonner-toast][data-mounted="false"][data-y-position="top"] {
+	--y: translateY(calc(-1 * var(--iz-motion-rise, 10px)));
+}
+/* Not while a finger drags it: sonner switches transitions off then, at (0,2,0). */
+body[data-admin-design] [data-sonner-toast]:not([data-swiping="true"]) {
+	--iz-toast-ease: var(--iz-ease-out, cubic-bezier(0.32, 0.72, 0, 1));
+	transition:
+		transform var(--iz-motion-fast, 160ms) var(--iz-toast-ease),
+		opacity var(--iz-motion-fast, 160ms) var(--iz-toast-ease);
+}
+body[data-admin-design] [data-sonner-toast][data-removed="true"] {
+	opacity: 0 !important;
+	transition: none !important;
+}
+
+/* Dashboard · Latest registrations. Laid out by the SECTION's own width, not the
+   window's: at 1280 the dashboard puts it in a 555px column, where five columns
+   wrapped the type chip onto 2 lines and the date onto 4, and a phone gave every
+   cell a line of its own. Below 56rem of section it is a two-line card — name
+   and Review on the first line, type · date · status on the second; from 56rem
+   it is the table, header and rows on the SAME fixed columns so they line up.
+   Same five cells, same words, same order in the markup. */
+body[data-admin-design] .iz-admin-registrations {
+	container-type: inline-size;
+}
+body[data-admin-design] .iz-admin-reg-head {
+	display: none;
+}
+body[data-admin-design] .iz-admin-reg-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	column-gap: 16px;
+	row-gap: 8px;
+}
+body[data-admin-design] .iz-admin-reg-name {
+	order: 1;
+	/* leaves just the Review link beside it, so type / date / status wrap below */
+	flex: 1 1 calc(100% - 9rem);
+}
+body[data-admin-design] .iz-admin-reg-action {
+	order: 2;
+	flex: 0 0 auto;
+	margin-left: auto;
+	text-align: right;
+}
+body[data-admin-design]
+	.iz-admin-reg-row
+	> :is(.iz-admin-reg-type, .iz-admin-reg-date, .iz-admin-reg-status) {
+	order: 3;
+	white-space: nowrap;
+}
+@container (min-width: 56rem) {
+	body[data-admin-design] :is(.iz-admin-reg-head, .iz-admin-reg-row) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 12.5rem 11.5rem 8rem 96px;
+		align-items: center;
+		column-gap: 12px;
+	}
+	body[data-admin-design] .iz-admin-reg-row > * {
+		order: 0;
+		margin-left: 0;
 	}
 }

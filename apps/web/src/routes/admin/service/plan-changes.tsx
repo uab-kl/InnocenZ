@@ -452,7 +452,7 @@ function PlanChangesPage() {
 								{t.adminRequests.billedRecordHint}{" "}
 								<Link
 									to="/admin/business/history"
-									className="text-lavender underline underline-offset-2"
+									className="iz-admin-cell-link text-lavender underline underline-offset-2"
 								>
 									{t.adminRequests.currentPlanFullHistoryLink}
 								</Link>
@@ -506,7 +506,7 @@ function PlanChangesPage() {
 									<SelectTrigger className="sm:w-40">
 										<SelectValue />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										{/* Values drive the query; only the labels move. */}
 										<SelectItem value="latest">
 											{t.adminRequests.viewLatestOnly}
@@ -530,7 +530,7 @@ function PlanChangesPage() {
 									>
 										<SelectValue placeholder={t.admin.allStatus} />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										{/* Values are the stored status; only the labels move. */}
 										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 										<SelectItem value="direct">
@@ -1023,9 +1023,17 @@ function PlanChangeEditForm({
 								</span>
 								<span className="font-medium">
 									{request.livePlanName}
-									{request.livePlanAmount
-										? ` · RM ${formatPrice(request.livePlanAmount)}`
-										: ""}
+									{request.livePlanAmount ? (
+										<>
+											{" · "}
+											{/* A price with no state is sky, like every other price on
+											    this page (owner, 20 Nov 2026: "the money RM make more
+											    obvious colour"); the plan name stays plain. */}
+											<span className="text-[var(--iz-money,#7dd3fc)]">
+												{`RM ${formatPrice(request.livePlanAmount)}`}
+											</span>
+										</>
+									) : null}
 								</span>
 							</div>
 							{toPlan?.name && request.livePlanName !== toPlan.name && (

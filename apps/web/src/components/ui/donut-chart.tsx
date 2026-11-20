@@ -17,6 +17,9 @@ type DonutChartProps = {
 	size?: number;
 	thickness?: number;
 	className?: string;
+	/** "bar" draws the same slices as one stacked bar (a share reads best left
+	 *  to right) with the total above it; the legend is identical. */
+	variant?: "donut" | "bar";
 };
 
 /**
@@ -31,6 +34,7 @@ export function DonutChart({
 	size = 168,
 	thickness = 18,
 	className,
+	variant = "donut",
 }: DonutChartProps) {
 	const { t } = usePortalLocale();
 	const total = slices.reduce((sum, s) => sum + s.value, 0);
@@ -40,6 +44,87 @@ export function DonutChart({
 	const displayTotal = centerValue ?? total;
 
 	let offsetFraction = 0;
+
+	const ariaLabel =
+		total === 0
+			? t.webUi.chartNoData
+			: slices
+					.filter((s) => s.value > 0)
+					.map((s) => `${s.label}: ${s.value}`)
+					.join(", ");
+
+	const legend = (
+		<ul className="flex w-full min-w-0 flex-col gap-2">
+			{slices.map((slice) => {
+				const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
+				return (
+					<li
+						key={slice.key}
+						// a part with nothing in it steps back, so the counts that
+						// matter lead (owner: "dont be like too messy")
+						className={cn(
+							"flex items-center gap-2.5 text-[13px]",
+							slice.value === 0 && "opacity-55",
+						)}
+					>
+						<span
+							className="h-2.5 w-2.5 shrink-0 rounded-sm"
+							style={{ background: slice.color }}
+							aria-hidden
+						/>
+						<span className="min-w-0 flex-1 truncate text-muted-foreground">
+							{slice.label}
+						</span>
+						<span className="font-semibold text-foreground tabular-nums">
+							{formatNumber(slice.value)}
+						</span>
+						<span className="w-9 shrink-0 text-right text-[11.5px] text-muted-foreground tabular-nums">
+							{pct}%
+						</span>
+					</li>
+				);
+			})}
+		</ul>
+	);
+
+	if (variant === "bar") {
+		return (
+			<div className={cn("flex w-full flex-col gap-4", className)}>
+				<p className="m-0 flex items-baseline gap-2">
+					<span className="font-display text-3xl leading-none text-foreground tabular-nums">
+						{formatNumber(displayTotal)}
+					</span>
+					{centerLabel && (
+						<span className="text-muted-foreground">{centerLabel}</span>
+					)}
+				</p>
+				{/* A slim bar (owner, 20 Nov 2026: the 24px slabs were "ugly"): 8px,
+				    a 2px gap between parts, each part a soft glow of its own colour —
+				    the chart is where the night look may be colourful. */}
+				<div
+					role="img"
+					aria-label={ariaLabel}
+					className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-border/60"
+				>
+					{total > 0 &&
+						slices
+							.filter((s) => s.value > 0)
+							.map((s) => (
+								<span
+									key={s.key}
+									className="h-full rounded-full"
+									style={{
+										flexGrow: s.value,
+										background: s.color,
+										boxShadow: `0 0 10px -2px ${s.color}`,
+									}}
+								/>
+							))}
+				</div>
+				{legend}
+			</div>
+		);
+	}
 
 	return (
 		<div
@@ -54,14 +139,7 @@ export function DonutChart({
 					height={size}
 					viewBox={`0 0 ${size} ${size}`}
 					role="img"
-					aria-label={
-						total === 0
-							? t.webUi.chartNoData
-							: slices
-									.filter((s) => s.value > 0)
-									.map((s) => `${s.label}: ${s.value}`)
-									.join(", ")
-					}
+					aria-label={ariaLabel}
 				>
 					<g transform={`rotate(-90 ${center} ${center})`}>
 						{/* Track */}
@@ -110,32 +188,7 @@ export function DonutChart({
 				</div>
 			</div>
 
-			<ul className="flex w-full min-w-0 flex-col gap-2">
-				{slices.map((slice) => {
-					const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
-					return (
-						<li
-							key={slice.key}
-							className="flex items-center gap-2.5 text-[13px]"
-						>
-							<span
-								className="h-2.5 w-2.5 shrink-0 rounded-sm"
-								style={{ background: slice.color }}
-								aria-hidden
-							/>
-							<span className="min-w-0 flex-1 truncate text-muted-foreground">
-								{slice.label}
-							</span>
-							<span className="font-semibold text-foreground tabular-nums">
-								{formatNumber(slice.value)}
-							</span>
-							<span className="w-9 shrink-0 text-right text-[11.5px] text-muted-foreground tabular-nums">
-								{pct}%
-							</span>
-						</li>
-					);
-				})}
-			</ul>
+			{legend}
 		</div>
 	);
 }

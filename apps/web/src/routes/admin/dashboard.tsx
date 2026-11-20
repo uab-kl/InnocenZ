@@ -57,12 +57,14 @@ const REQUEST_TYPE_LABELS: Record<
 	plan_change: (t) => t.admin.reqPlanChange,
 	contact: (t) => t.admin.reqContact,
 	other: (t) => t.admin.reqOther,
+	pr_detach: (t) => t.admin.reqPrDetach,
 };
 
 type TodoHref =
 	| "/admin/user-management/agency"
 	| "/admin/user-management/outlet"
 	| "/admin/service/requests"
+	| "/admin/service/pr-detach"
 	| "/admin/service/other";
 
 type TodoItem = {
@@ -623,17 +625,36 @@ function DashboardComponent() {
 			}),
 		),
 		...(openRequestsQuery.data?.data ?? []).map(
-			(request: AdminRequest): TodoItem => ({
-				id: `request-${request.id}`,
-				title: fill(t.admin.todoQuoteFor, { name: request.subscriberName }),
-				detail: fill(t.admin.todoQuoteDetail, {
-					type: REQUEST_TYPE_LABELS[request.type](t),
-					date: formatDate(request.createdAt),
-				}),
-				badge: t.admin.badgePlanRequest,
-				href: "/admin/service/requests",
-				priority: "high",
-			}),
+			(request: AdminRequest): TodoItem =>
+				// A PR detach request (0171) is a membership decision on its own
+				// page — never a "quote", and never on Plan Request.
+				request.type === "pr_detach"
+					? {
+							id: `request-${request.id}`,
+							title: fill(t.admin.todoDecidePrDetach, {
+								pr: request.subjectName?.trim() || t.prDetachAdmin.unknownPr,
+							}),
+							detail: fill(t.admin.todoDecidePrDetachDetail, {
+								agency: request.subscriberName,
+								date: formatDate(request.createdAt),
+							}),
+							badge: t.admin.badgePrDetach,
+							href: "/admin/service/pr-detach",
+							priority: "high",
+						}
+					: {
+							id: `request-${request.id}`,
+							title: fill(t.admin.todoQuoteFor, {
+								name: request.subscriberName,
+							}),
+							detail: fill(t.admin.todoQuoteDetail, {
+								type: REQUEST_TYPE_LABELS[request.type](t),
+								date: formatDate(request.createdAt),
+							}),
+							badge: t.admin.badgePlanRequest,
+							href: "/admin/service/requests",
+							priority: "high",
+						},
 		),
 		...(contactedRequestsQuery.data?.data ?? []).map(
 			(request: AdminRequest): TodoItem => ({
@@ -643,7 +664,10 @@ function DashboardComponent() {
 					type: REQUEST_TYPE_LABELS[request.type](t),
 				}),
 				badge: t.admin.badgeReminder,
-				href: "/admin/service/requests",
+				href:
+					request.type === "pr_detach"
+						? "/admin/service/pr-detach"
+						: "/admin/service/requests",
 				priority: "medium",
 			}),
 		),
@@ -753,7 +777,7 @@ function DashboardComponent() {
 			<div className="flex flex-wrap items-end justify-between gap-5">
 				<div>
 					<div
-						className={`mb-3.5 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] ${
+						className={`admin-system-status mb-3.5 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.16em] ${
 							systemOk
 								? "border-[color:var(--royal-gold-line)] bg-[color:var(--royal-gold-soft)] text-[color:var(--royal-gold)]"
 								: "border-[color:var(--signal-warn)]/40 bg-[color:var(--signal-warn-soft)] text-[color:var(--signal-warn)]"
@@ -1019,7 +1043,7 @@ function DashboardComponent() {
 				</section>
 
 				{/* Latest registrations — left column, row 2 */}
-				<section className="overflow-hidden rounded-2xl border bg-card xl:col-start-1 xl:row-start-2">
+				<section className="iz-admin-registrations overflow-hidden rounded-2xl border bg-card xl:col-start-1 xl:row-start-2">
 					<div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-5">
 						<div>
 							<h2 className="text-lg font-extrabold">
@@ -1057,7 +1081,11 @@ function DashboardComponent() {
 						</div>
 					</div>
 
-					<div className="hidden grid-cols-[2fr_1.1fr_1.1fr_1fr_96px] gap-3 border-b px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground md:grid">
+					{/* Table or two-line card, chosen by the SECTION's own width
+					    (admin-design.css, `.iz-admin-registrations`): the dashboard puts
+					    this in a 555px column at 1280, where five columns wrapped the
+					    type chip to 2 lines and the date to 4. */}
+					<div className="iz-admin-reg-head border-b px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
 						<span>{t.admin.colOrganization}</span>
 						<span>{t.admin.colType}</span>
 						<span>{t.admin.colSubmitted}</span>
@@ -1090,9 +1118,9 @@ function DashboardComponent() {
 							return (
 								<div
 									key={r.id}
-									className="grid grid-cols-1 gap-2 border-b px-6 py-4 last:border-b-0 transition-colors hover:bg-[color:var(--lavender-soft)]/20 md:grid-cols-[2fr_1.1fr_1.1fr_1fr_96px] md:items-center md:gap-3"
+									className="iz-admin-reg-row border-b px-6 py-4 last:border-b-0 transition-colors hover:bg-[color:var(--lavender-soft)]/20"
 								>
-									<div className="flex min-w-0 items-center gap-3">
+									<div className="iz-admin-reg-name flex min-w-0 items-center gap-3">
 										<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color:var(--lavender-soft)] text-sm font-extrabold text-lavender">
 											{initialsOf(r.name)}
 										</span>
@@ -1103,17 +1131,17 @@ function DashboardComponent() {
 											</div>
 										</div>
 									</div>
-									<div>
+									<div className="iz-admin-reg-type">
 										<span
 											className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${TONE_CHIP[r.typeTone]}`}
 										>
 											{r.typeLabel}
 										</span>
 									</div>
-									<div className="text-[13px] text-muted-foreground">
+									<div className="iz-admin-reg-date text-[13px] text-muted-foreground">
 										{r.date}
 									</div>
-									<div>
+									<div className="iz-admin-reg-status">
 										<span
 											className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${TONE_CHIP[status.tone]}`}
 										>
@@ -1121,10 +1149,10 @@ function DashboardComponent() {
 											{status.label}
 										</span>
 									</div>
-									<div className="md:text-right">
+									<div className="iz-admin-reg-action">
 										<Link
 											to={href}
-											className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
+											className="iz-admin-cell-link text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
 										>
 											{t.admin.dashReview} →
 										</Link>

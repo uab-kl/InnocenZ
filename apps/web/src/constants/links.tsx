@@ -10,6 +10,7 @@ import {
 	ReceiptText,
 	Settings,
 	Shield,
+	UserMinus,
 	Users,
 	UsersRound,
 } from "lucide-react";
@@ -161,6 +162,15 @@ export const sidebarSections: SidebarSection[] = [
 				title: "Plan Payment",
 				href: "/admin/service/plan-payment",
 				icon: CreditCard,
+				allowedPermission: ["*"],
+			},
+			// An agency asking to detach a PR tied under a year (owner, 20 Nov
+			// 2026). A membership decision, not a price — so not Plan Request.
+			{
+				key: "sidebar-service-pr-detach",
+				title: "PR Detach",
+				href: "/admin/service/pr-detach",
+				icon: UserMinus,
 				allowedPermission: ["*"],
 			},
 			// Hidden on request (30 Jul 2026): Jobs & Special Services no longer

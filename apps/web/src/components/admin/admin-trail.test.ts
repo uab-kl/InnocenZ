@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sidebarSections } from "@/constants/links";
 import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
 import { translations } from "@/lib/portal-i18n/translations";
-import { resolveAdminTrail } from "./admin-trail";
+import { adminNavFilingPath, resolveAdminTrail } from "./admin-trail";
 
 const t = translations.en;
 const rel = (href: string) => href.replace(/^\/en/, "").replace(/^\/admin/, "");
@@ -40,6 +40,58 @@ describe("resolveAdminTrail", () => {
 			t,
 		);
 		expect(trail[0]).toBe(adminNavLabel("operation", "Operation", t));
+	});
+
+	/*
+	 * The member page's path is nested under Agency / Outlet Organisations, but
+	 * nothing on those lists opens it — it is opened from the Members lists and
+	 * from Legacy Member. Before 20 Nov 2026 it crumbed (and lit the rail) as
+	 * "Agency Organisations", so the admin who pressed View lost their place.
+	 */
+	it("files a member page under the list that opened it", () => {
+		const operation = adminNavLabel("operation", "Operation", t);
+		const label = (key: string) =>
+			sidebarSections
+				.flatMap((s) => s.items)
+				.filter((item) => item.key === key)
+				.map((item) => adminNavLabel(item.key, item.title, t))[0];
+		expect(
+			resolveAdminTrail("/user-management/agency/a1/member/u1", t),
+		).toEqual([operation, label("sidebar-team-agency")]);
+		expect(
+			resolveAdminTrail("/user-management/outlet/o1/member/u1", t),
+		).toEqual([operation, label("sidebar-team-outlet")]);
+		expect(
+			resolveAdminTrail(
+				"/user-management/agency/a1/member/u1",
+				t,
+				"legacy-member",
+			),
+		).toEqual([operation, label("sidebar-user-legacy-member")]);
+	});
+
+	it("maps the member path for the rail too, and leaves every other path alone", () => {
+		expect(
+			adminNavFilingPath("/admin/user-management/outlet/o1/member/u1"),
+		).toBe("/admin/user-management/outlet-team");
+		expect(
+			adminNavFilingPath(
+				"/admin/user-management/agency/a1/member/u1",
+				"legacy-member",
+			),
+		).toBe("/admin/user-management/legacy-member");
+		// An unknown `from` is the default list, never a guess.
+		expect(
+			adminNavFilingPath("/admin/user-management/agency/a1/member/u1", "x"),
+		).toBe("/admin/user-management/agency-team");
+		for (const path of [
+			"/admin/user-management/agency",
+			"/admin/user-management/agency-team",
+			"/admin/user-management/legacy-member",
+			"/admin/dashboard",
+		]) {
+			expect(adminNavFilingPath(path, "legacy-member")).toBe(path);
+		}
 	});
 
 	/*

@@ -36,6 +36,22 @@ router.get('/mine/penalties', prController.getMyPenalties.bind(prController));
 
 router.get('/', canRead, redactIdentityDocsForOutlet, prController.list.bind(prController));
 
+// The one-year tie rule (owner, 20 Nov 2026). A PR on the roster less than a
+// year is detached only by the InnocenZ admin: the agency files the request
+// here, behind Detach's own gate, and reads back which are still waiting.
+// Literal paths, so both sit above '/:id', which would swallow them.
+router.get(
+  '/detach-requests',
+  canWrite,
+  prController.listMyDetachRequests.bind(prController),
+);
+router.post(
+  '/:id/detach-request',
+  canWrite,
+  requirePermission('workforce', 'update'),
+  prController.requestDetach.bind(prController),
+);
+
 // Proposed penalty deductions for a PR's week at one outlet. Read-only — it
 // computes what COULD be charged and never touches a voucher; applying it is a
 // deliberate agency act via PUT /payment-voucher/:id. Two segments, so it must

@@ -132,6 +132,9 @@ const requestTypeLabels: Record<
 	plan_change: (t) => t.admin.reqPlanChange,
 	contact: (t) => t.admin.reqContact,
 	other: (t) => t.admin.reqOther,
+	// Never listed here (its own page, Service → PR Detach); the label is for
+	// completeness of the record key.
+	pr_detach: (t) => t.admin.reqPrDetach,
 };
 
 /** Same rule for the stored status: the value is compared, the label is shown. */
@@ -184,8 +187,8 @@ const statusBadgeColors: Record<AdminRequestStatus, string> = {
 
 // Who / Role / Type are a record of the originating request — read-only in admin.
 const roleBadgeColors: Record<SubscriberType, string> = {
-	outlet: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
-	agency: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
+	outlet: "border-border bg-transparent text-foreground",
+	agency: "border-border bg-transparent text-foreground",
 };
 
 const roleLabels: Record<SubscriberType, (t: PortalTranslations) => string> = {
@@ -613,7 +616,7 @@ function RequestsPage() {
 									>
 										<SelectValue placeholder={t.admin.allStatus} />
 									</SelectTrigger>
-									<SelectContent>
+									<SelectContent position="popper" align="start">
 										{/* Values are the stored status; only the labels move. */}
 										<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 										<SelectItem value="pending">

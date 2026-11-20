@@ -62,13 +62,26 @@ export function IzCard({
 	);
 }
 
+/**
+ * A LABEL, not a state: how a receipt was captured ("Scanned", "Self-logged"),
+ * what kind of thing a row is. Green / amber / red say where money stands, so a
+ * label painted in them reads as a status — "Self-logged" in amber beside a
+ * green "Verified" looked like it was still waiting (review, 20 Nov 2026). It is
+ * neutral, the same paint as the portal's other label pills, and `!` because
+ * `.iz-portal-table .iz-pill-*` and friends repaint the coloured variants per
+ * context; none of that may reach a label.
+ */
+export const IZ_LABEL_PILL =
+	"iz-pill-label !bg-[rgba(235,230,223,0.08)] !text-[var(--iz-txt)] !shadow-[inset_0_0_0_1px_var(--iz-line2)]";
+
 export function IzPill({
 	children,
 	variant = "ink",
 	className,
 }: {
 	children: ReactNode;
-	variant?: "violet" | "green" | "red" | "amber" | "gold" | "ink";
+	/** `label` is for static facts; the colours are for states only. */
+	variant?: "violet" | "green" | "red" | "amber" | "gold" | "ink" | "label";
 	className?: string;
 }) {
 	const v = {
@@ -78,6 +91,7 @@ export function IzPill({
 		amber: "iz-pill-amber",
 		gold: "iz-pill-gold",
 		ink: "iz-pill-ink",
+		label: IZ_LABEL_PILL,
 	}[variant];
 	return <span className={cn("iz-pill", v, className)}>{children}</span>;
 }

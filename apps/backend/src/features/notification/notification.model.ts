@@ -148,6 +148,14 @@ export const notificationKindValues = [
    * methodType, reason }`. The org's Subscription page is the destination.
    */
   'subscription_autopay_failed',
+  /**
+   * The InnocenZ admin answered an agency's request to detach a PR tied under
+   * a year (migration 0171) — approved (the PR is off the roster) or declined
+   * (the PR stays). AGENCY-addressed, active members, one kind for both
+   * outcomes like `leave_decided`. Carries `{ requestId, prId, prName, decision }`;
+   * Manage PR is the destination.
+   */
+  'pr_detach_decided',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);

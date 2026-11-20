@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
+import { fillNodes } from "@/lib/portal-i18n/fill-nodes";
 import {
 	isInvoiceOwed,
 	type SubscriptionInvoice,
@@ -365,8 +366,13 @@ function OverduePaymentWarning({
 				{t.subscription.agingOverdue}
 			</p>
 			<p className="iz-tiny iz-muted mt-1">
-				{fill(t.subscription.overdueWarning, {
-					amount: formatRM(summary.amountRm),
+				{fillNodes(t.subscription.overdueWarning, {
+					// the late money in red, inside the same sentence (owner, 20 Nov 2026)
+					amount: (
+						<strong className="iz-nums !text-[var(--iz-red)]">
+							{formatRM(summary.amountRm)}
+						</strong>
+					),
 					n: summary.count,
 					date: formatDueDate(summary.oldestDueIso),
 					days: summary.oldestDaysOverdue,
@@ -426,6 +432,24 @@ function PeriodDueLine({ rows }: { rows: SubscriptionInvoice[] }) {
 			{suffix}
 		</span>
 	);
+}
+
+/**
+ * The period's AMOUNT in the colour of its due state (owner, 20 Nov 2026: "the money
+ * RM make more obvious colour to let people easily know"): red when overdue, amber
+ * when due soon — the same tone as the due line under the dates — and the money
+ * colour while it owes but is not yet due. A period that owes nothing keeps ink: it
+ * may be paid OR voided, and only its rows can say which.
+ */
+function periodAmountTone(rows: SubscriptionInvoice[]): string {
+	const first = rows.filter(isInvoiceOwed)[0];
+	if (!first) return "";
+	const status = dueStatusFor(first, "weekly", new Date());
+	return status.bucket === "overdue"
+		? "text-[var(--iz-red)]"
+		: status.bucket === "due_soon"
+			? "text-amber-300"
+			: "text-[var(--iz-money,var(--iz-txt))]";
 }
 
 function PeriodCard({
@@ -514,7 +538,11 @@ function PeriodCard({
 						</span>
 					</span>
 					<span className="flex shrink-0 items-center gap-2">
-						<span className="iz-sm font-bold">{formatRM(cents / 100)}</span>
+						<span
+							className={`iz-sm iz-nums font-bold ${periodAmountTone(rows)}`}
+						>
+							{formatRM(cents / 100)}
+						</span>
 						<ChevronDown
 							className={`h-4 w-4 text-[var(--iz-muted)] transition-transform ${
 								open ? "rotate-180" : ""

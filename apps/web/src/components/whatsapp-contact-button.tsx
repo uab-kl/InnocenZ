@@ -41,7 +41,7 @@ export function WhatsAppContactButton() {
 				height: TANSTACK_TRIGGER_SIZE,
 				right: `calc(${TANSTACK_OFFSET_RIGHT}px + ${TANSTACK_TRIGGER_SIZE}px + ${TANSTACK_GAP}px - (100vw - 100%))`,
 			}}
-			className="fixed z-[99998] flex items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_4px_20px_rgba(37,211,102,0.45)] motion-safe:transition-transform motion-safe:hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+			className="whatsapp-fab fixed z-[99998] flex items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_4px_20px_rgba(37,211,102,0.45)] motion-safe:transition-transform motion-safe:hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
 		>
 			<WhatsAppIcon className="size-7" />
 		</a>

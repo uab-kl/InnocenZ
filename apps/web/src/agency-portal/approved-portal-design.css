@@ -288,7 +288,7 @@ body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-btn-primary, .iz-btn-violet, .iz-btn-gold) {
 	background: var(--iz-act);
 	border: 1px solid var(--iz-act-line);
-	color: #fff;
+	color: var(--iz-act-ink, #fff);
 }
 body:is([data-outlet-design], [data-agency-design])
 	:is(.iz-btn-primary, .iz-btn-violet, .iz-btn-gold):hover:not(:disabled) {
@@ -743,6 +743,15 @@ body:is([data-outlet-design], [data-agency-design])
 	min-width: 44px;
 	min-height: 44px;
 }
+/* An avatar sits on its row; it does not float above it. The prototype gave
+ * every avatar a 6/18px black drop shadow (prototype-theme.css .iz-avatar),
+ * which the 19 Nov drift sweep found on 59 avatars across Today, Manage PR and
+ * the outlet lists — DESIGN.md §3: surfaces step up, they do not cast shadows.
+ * A hairline keeps the edge on a dark photo. Body scope reaches sheets too;
+ * (0,2,1) beats the prototype's (0,1,0). */
+body:is([data-outlet-design], [data-agency-design]) .iz-avatar {
+	box-shadow: inset 0 0 0 1px var(--iz-line);
+}
 .iz-portal:is([data-portal="outlet"], [data-portal="agency"])
 	.iz-avatar:not(.iz-avatar-photo) {
 	background: #372d45 !important;
@@ -1135,9 +1144,9 @@ body:is([data-outlet-design], [data-agency-design])
 	place-items: center;
 	width: 46px;
 	height: 46px;
-	border: 1px solid #ad91c4;
+	border: 1px solid var(--iz-act-line, #ad91c4);
 	border-radius: 50%;
-	color: white;
+	color: var(--iz-act-ink, #fff);
 	background: var(--iz-act);
 	box-shadow: 0 4px 20px #0003;
 }
@@ -2326,8 +2335,8 @@ body[data-outlet-design]
 }
 .iz-portal .iz-approved-plan-row button:not(:disabled) {
 	background: var(--iz-act);
-	border: 1px solid #a487bd;
-	color: #fff;
+	border: 1px solid var(--iz-act-line, #a487bd);
+	color: var(--iz-act-ink, #fff);
 	font-weight: 600;
 	min-height: 46px;
 }

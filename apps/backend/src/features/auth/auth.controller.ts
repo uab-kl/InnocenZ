@@ -73,8 +73,9 @@ import type { UserType } from '@/features/user/user.model.js';
 import type { PhoneVerification } from './phone-verification.model.js';
 import { env } from '@/env.js';
 import {
-  LOGIN_WRONG_EMAIL_OR_PASSWORD,
-  LOGIN_WRONG_PHONE_OR_PASSWORD,
+  LOGIN_EMAIL_ACCOUNT_NOT_FOUND,
+  LOGIN_PHONE_ACCOUNT_NOT_FOUND,
+  LOGIN_WRONG_PASSWORD,
   SIGNUP_EMAIL_HAS_ACCOUNT,
   SIGNUP_NOT_COMPLETED,
   SIGNUP_PHONE_HAS_ACCOUNT,
@@ -248,8 +249,10 @@ export class AuthControllerClass {
         loginCriteria = parsedBody.phoneNum!;
       }
 
-      const wrongCredentials =
-        loginMethod === 'email' ? LOGIN_WRONG_EMAIL_OR_PASSWORD : LOGIN_WRONG_PHONE_OR_PASSWORD;
+      // Owner, 19 Nov 2026: name the missing account and the wrong password
+      // apart (reverses 29 Sep for sign-in only — see account-answers.ts).
+      const accountNotFound =
+        loginMethod === 'email' ? LOGIN_EMAIL_ACCOUNT_NOT_FOUND : LOGIN_PHONE_ACCOUNT_NOT_FOUND;
       // Every refusal made before the password is known to be right: the same
       // body shape, never sooner than the floor.
       const refuse = async (status: 401 | 429, message: string) => {
@@ -273,7 +276,7 @@ export class AuthControllerClass {
         await comparePassword(parsedBody.password, await dummyPasswordHash());
         this.unknownLoginLockout.recordFailure(key);
         logger.warn('[AuthController.login] No account for that identifier');
-        return refuse(401, wrongCredentials);
+        return refuse(401, accountNotFound);
       }
 
       // Lockout, checked BEFORE the password compare. Checking after would let
@@ -307,7 +310,9 @@ export class AuthControllerClass {
         // It never rejects (see recordFailedLogin), and the floor below gives
         // it time to land before the next guess can arrive.
         void this.recordFailedLogin(user);
-        return refuse(401, wrongCredentials);
+        // A stub with no password yet (a roster row waiting to be claimed) is
+        // "not found" to its holder: signing up is what claims it.
+        return refuse(401, user.passwordHash ? LOGIN_WRONG_PASSWORD : accountNotFound);
       }
 
       /*

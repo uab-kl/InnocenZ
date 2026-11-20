@@ -8,6 +8,11 @@ metadata:
   modified: 2026-09-02T08:35:40.733Z
 ---
 
+> **SUPERSEDED 20 Nov 2026** by [[portal-colour-rule]]: champagne is now EVERY control you can
+> press (the one action solid, the rest outlined), and `--iz-gold` / `--iz-violet` are champagne,
+> not violet, under `styles/afterglow.css`. Read that memory first; the history below still explains
+> why save/pay was the gold one.
+
 Owner's colour code for buttons on the outlet/agency web portal (`apps/web`, theme
 `agency-portal/prototype-theme.css`), fixed on 2 Sep 2026 after three corrections in a row:
 

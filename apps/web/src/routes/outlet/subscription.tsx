@@ -51,6 +51,7 @@ import { useMemo, useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
+import { fillNodes } from "@/lib/portal-i18n/fill-nodes";
 import {
 	addonCopy,
 	planCapacityLabel,
@@ -470,6 +471,24 @@ function OutletSubscriptionPage() {
 			: fill(t.outletSubscription.billedMonthly, {
 					price: formatRM(monthlyBill.planRm),
 				});
+	/** The same sentence for the summary card, its money in the money colour
+	 *  (owner, 20 Nov 2026). `billedLabel` stays a string for the payment card. */
+	const money = (rm: number) => (
+		<strong className="iz-nums !text-[var(--iz-money,var(--iz-txt))]">
+			{formatRM(rm)}
+		</strong>
+	);
+	const billedNode = !monthlyBill
+		? "—"
+		: monthlyBill.addonRm !== null
+			? fillNodes(t.outletSubscription.billedMonthlyWithPos, {
+					total: money(monthlyBill.totalRm),
+					plan: money(monthlyBill.planRm),
+					pos: money(monthlyBill.addonRm),
+				})
+			: fillNodes(t.outletSubscription.billedMonthly, {
+					price: money(monthlyBill.planRm),
+				});
 	/**
 	 * The next billing date, derived from this venue's own subscription row. A
 	 * real session shows a real date; when the ledger has nothing active the
@@ -825,7 +844,7 @@ function OutletSubscriptionPage() {
 	);
 
 	return (
-		<div className="iz-screen">
+		<div className="iz-screen iz-outlet-subscription">
 			<header>
 				<IzPageTitle level={1}>{t.nav.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{outletOwner.orgName}</p>
@@ -843,6 +862,8 @@ function OutletSubscriptionPage() {
 				)}
 			</header>
 
+			{/* The card's own title (owner, 20 Nov 2026) — it had none. */}
+			<IzSectionLabel>{t.approvedDesign.yourPlan}</IzSectionLabel>
 			<section className="iz-approved-subscription-summary">
 				<div>
 					<p>{t.approvedDesign.currentPlan}</p>
@@ -851,7 +872,7 @@ function OutletSubscriptionPage() {
 							? t.common.loading
 							: (backend.activePlanName ?? currentPlan?.label ?? "—")}
 					</h2>
-					<p>{billedLabel}</p>
+					<p>{billedNode}</p>
 				</div>
 				<div>
 					<p>{t.approvedDesign.dailyCapacity}</p>
@@ -905,7 +926,9 @@ function OutletSubscriptionPage() {
 								{planCapacityLabel("outlet", plan.id, plan.capacityLabel, t)}
 								<p>{outletPickerRule(plan, t)}</p>
 							</div>
-							<div>{formatRM(plan.monthlyRm)}</div>
+							<div className="iz-nums font-semibold !text-[var(--iz-money,var(--iz-txt))]">
+								{formatRM(plan.monthlyRm)}
+							</div>
 							<div>
 								{isCurrent && (
 									<IzPill variant="green">

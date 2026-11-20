@@ -1,0 +1,3749 @@
+/* ── AFTERGLOW VIVID — the portals' night look (owner, 20 Nov 2026) ────────────
+ * Owner: "can try conbine this 2 ? make nice Look and feel because client use this
+ * to work night , improve UIUX" → chose "Afterglow Vivid" from the preview gallery
+ * (Gallery Night × Neon Night, built with unslop + Huashu Design + awesome-design-md).
+ *
+ * STEP 1 of the build: colours, fonts and finish only. It re-points the existing
+ * tokens of all three portals and adds a few finish rules; it changes no markup,
+ * no word, no route and no button's job. Imported last by admin-layout.tsx and the
+ * agency / outlet route files, but it does NOT rely on that order: Vite's dev server
+ * injected admin-design.css after it (measured 20 Nov), so every selector here starts
+ * with `html` and outranks the rule it replaces whatever the load order. Remove the
+ * three imports and the portals are exactly as before.
+ *
+ * Night comfort, measured in the preview: warm off-white text (never pure white),
+ * every text role at 4.5:1 or more on its surface.
+ * BUTTONS are CHAMPAGNE since the owner's 20 Nov pick (the first build filled them with
+ * a pink→orange neon, "too bright"; the token is still named --iz-neon), and so is the
+ * selected tab. Everything else — links, icons, charts, glow — stays NEON ("only the
+ * button A · Champagne colour · the graph, icon can be neon and more colourful").
+ * Sizes stay on the owner's 16 / 20 / 24 ladder (the --iz-fs-* tokens are untouched).
+ */
+
+/* ── Shared by all three portals (body scope, so pop-ups see it too) ───────── */
+html
+:is(
+	body[data-admin-design],
+	body[data-agency-design],
+	body[data-outlet-design]
+) {
+	/* CHAMPAGNE is what you act on (owner, 20 Nov 2026: the pink→orange neon was
+	   "too bright"; picked "A · Champagne" from a preview of the real pages, then
+	   "all the button looks change colour to A · Champagne"). One solid soft gold,
+	   no gradient; it matches the gold logo and the warm text. Dark ink on it:
+	   #1c160e on #cbb089 is 8.6:1, on the hover #d6bd99 9.9:1. */
+	--iz-neon: #cbb089;
+	--iz-neon-hover: #d6bd99;
+	--iz-neon-ink: #1c160e;
+	/* The To do tiles keep their neon (owner: "for the icon can remain"): the
+	   base tile for a kind with no colour of its own (see "one colour per kind"). */
+	--iz-todo-tile: linear-gradient(135deg, #ff5f9e 0%, #ff8a4c 100%);
+	--iz-todo-tile-ink: #1a0c12;
+	--iz-font-title: "Newsreader", Georgia, "Times New Roman", serif;
+	/* --iz-act is the same fill on the older buttons (Broadcast, Switch to…, Ask
+	   admin for a price, the pv bulk chip, the boot retry, the back-to-top
+	   buttons); they read their text colour from --iz-act-ink (white by default,
+	   portal-interaction.css), so the champagne carries the same dark ink. */
+	--iz-act: #cbb089;
+	--iz-act-hover: #d6bd99;
+	--iz-act-ink: #1c160e;
+	--iz-act-line: transparent;
+	/* "you are here": a SOFT champagne tint, not a fill (owner chose "Soft tint"),
+	   so a selected tab no longer outshines the one button that acts. Gold text
+	   #e2cba6 on #3e3732 is 7.4:1. The rail keeps a solid gold bar beside its tint. */
+	--iz-tab-selected-bg: #3e3732;
+	--iz-tab-selected-ink: #e2cba6;
+	--iz-rail-here-tint: color-mix(in srgb, #cbb089 14%, transparent);
+	--iz-rail-here-icon: #e2cba6;
+	--iz-rail-here-bar: #cbb089;
+	/* MONEY that has no state yet — a price, a total not yet due — in a neon sky
+	   (owner, 20 Nov 2026: "the money RM make more obvious colour"). Blue carries no
+	   meaning in the owner's status code, so it never reads as paid / late / waiting;
+	   money WITH a state keeps green / amber / red. #7dd3fc on #121116 is 12:1. */
+	--iz-money: #7dd3fc;
+}
+
+/* ── Agency + outlet tokens (same selector as approved-portal-design.css) ──── */
+html body:is([data-outlet-design], [data-agency-design]),
+html .iz-portal:is([data-portal="outlet"], [data-portal="agency"]) {
+	--iz-font: "Sora", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--iz-bg: #0b0a0d;
+	--iz-bg2: #0b0a0d;
+	--iz-panel: #121116;
+	--iz-panel2: #1a181e;
+	--iz-line: #26232c;
+	--iz-line2: #34303b;
+	--iz-txt: #ebe6df;
+	--iz-title: #ebe6df;
+	--iz-muted: #bdb6ad;
+	--iz-muted2: #a39c93;
+	/* THE RULE (owner, 20 Nov 2026, in order: "only the button A · Champagne colour"
+	   · "the graph, icon can be neon and more colourful" · "all selectable all
+	   Champagne colour" · "the border all colour can change to Champagne"):
+	   what you INTERACT with — buttons, selectables, tabs, links, borders, focus,
+	   ticks — is CHAMPAGNE; ICONS and CHARTS are NEON (explicit rules below); money
+	   with a state is green / amber / red, money without one is --iz-money.
+	   So the accent tokens, which ~90 borders and focus edges read, are champagne. */
+	--iz-gold: #d9c09a;
+	--iz-gold-l: #e8d6b8;
+	--iz-gold-d: #cbb089; /* a selection / hover EDGE in ~20 rules */
+	--iz-violet: #d9c09a;
+	--iz-violet-l: #e8d6b8;
+	--iz-accent: #d9c09a;
+	--iz-accent-d: #d9c09a;
+	--iz-green: #5ee0a0;
+	--iz-green-bg: #13271e;
+	--iz-red: #ff6b7a;
+	--iz-red-bg: #33161b;
+	--iz-amber: #ffb35c;
+	--iz-grad: #c4285f; /* avatars (an icon, so neon): deep neon under white, 5.5:1 */
+	/* the old "selected" fill — calendar start day, range badge, tier chip, chosen
+	   role — every rule puts DARK ink (#1a1726) on it: champagne, 8.6:1 */
+	--iz-grad-gold: #cbb089;
+	--iz-grad-card: #121116;
+	--iz-grad-feature: #121116;
+	--background: #0b0a0d;
+	--foreground: #ebe6df;
+	--card: #121116;
+	--card-foreground: #ebe6df;
+	--popover: #15141a;
+	--popover-foreground: #ebe6df;
+	--muted: #1a181e;
+	--muted-foreground: #bdb6ad;
+	--border: #26232c;
+	--input: #34303b;
+	--primary: #d9c09a;
+	--primary-foreground: #1c160e;
+	--accent: #231f19;
+	--accent-foreground: #ebe6df;
+	--ring: #cbb089;
+	/* styles.css colours EVERY link in <main> with --gold-light (`main a, p a`),
+	   and only admin re-pointed it — so portal links still drew the public site's
+	   lavender #c5adf0 over their own champagne class (review, 20 Nov 2026). */
+	--gold-light: #e8d6b8;
+	--gold: #d9c09a;
+	/* the old violet "ink" tint iz-pill-violet LABELS are painted with: a label is
+	   not something you press, so it is neutral, not champagne */
+	--iz-violet-ink: color-mix(in srgb, #ebe6df 8%, transparent);
+}
+
+/* ── Admin tokens. admin-design.css declares them on BOTH body and the inner
+ * .iz-admin-portal, and the inner one is closer to the content, so both are
+ * named here — (0,2,1) beats its (0,1,0). ─────────────────────────────────── */
+html body[data-admin-design],
+html body[data-admin-design] .iz-admin-portal {
+	--font-sans:
+		"Sora", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--background: #0b0a0d;
+	--foreground: #ebe6df;
+	--card: #121116;
+	--card-foreground: #ebe6df;
+	--popover: #15141a;
+	--popover-foreground: #ebe6df;
+	--primary: #d9c09a;
+	--primary-foreground: #1c160e;
+	--secondary: #1a181e;
+	--secondary-foreground: #ebe6df;
+	--muted: #1a181e;
+	--muted-foreground: #bdb6ad;
+	--accent: #231f19;
+	--accent-foreground: #ebe6df;
+	--border: #26232c;
+	--input: #34303b;
+	--ring: #cbb089;
+	--sidebar: #0b0a0d;
+	--sidebar-foreground: #ebe6df;
+	--sidebar-border: #26232c;
+	--sidebar-accent: #1a181e;
+	--gold: #d9c09a;
+	--gold-light: #e8d6b8;
+	--gold-deep: #cbb089;
+	--lavender: #d9c09a;
+	--lavender-soft: #231f19;
+	--ink: #0b0a0d;
+	--ink-card: #121116;
+	--ink-elevated: #1a181e;
+	--console-bg: #121116;
+	--console-elevated: #1a181e;
+	--console-line: #26232c;
+	--console-strong: #ebe6df;
+	/* The prototype theme's :root lavender iz-* tokens reach admin too (its
+	   --iz-panel2 is #2a2538), and shared controls read them: admin's "Log out"
+	   and outline buttons sat on that violet (review, 20 Nov 2026). Night values. */
+	--iz-bg: #0b0a0d;
+	--iz-panel: #121116;
+	--iz-panel2: #1a181e;
+	--iz-line: #26232c;
+	--iz-line2: #34303b;
+	--iz-txt: #ebe6df;
+	--iz-muted: #bdb6ad;
+	--iz-muted2: #a39c93;
+	--iz-violet: #d9c09a;
+	--iz-violet-l: #e8d6b8;
+	--iz-gold: #d9c09a;
+	--iz-gold-l: #e8d6b8;
+	--iz-violet-ink: color-mix(in srgb, #ebe6df 8%, transparent);
+	--signal-live: #5ee0a0;
+	--signal-live-soft: #13271e;
+	--signal-warn: #ffb35c;
+	--signal-warn-soft: #33240f;
+	--destructive: #ff6b7a;
+	--destructive-foreground: #1a0c12;
+}
+
+/* ── The night room: a faint pink glow top right, a violet one bottom left ── */
+html
+:is(
+	body[data-admin-design],
+	body[data-agency-design],
+	body[data-outlet-design]
+) {
+	background-color: #0b0a0d;
+	background-image:
+		radial-gradient(
+			900px 520px at 100% 0%,
+			rgba(255, 95, 158, 0.1),
+			transparent 62%
+		),
+		radial-gradient(
+			760px 520px at 0% 100%,
+			rgba(122, 107, 255, 0.08),
+			transparent 62%
+		);
+	background-attachment: fixed;
+}
+html .iz-portal:is([data-portal="outlet"], [data-portal="agency"]),
+html body[data-admin-design] .iz-admin-portal {
+	background: transparent;
+}
+
+/* ── Page titles in the gallery serif (one <h1> per page) ───────────────────── */
+html body:is([data-outlet-design], [data-agency-design]) h1.iz-heading,
+html body[data-admin-design] :is(h1.iz-admin-page-title, main h1) {
+	font-family: var(--iz-font-title);
+	font-weight: 500;
+	letter-spacing: 0.01em;
+}
+
+/* ── The one filled action: champagne with dark ink ────────────────────────── */
+html body:is([data-outlet-design], [data-agency-design])
+	:is(.iz-btn-primary, .iz-btn-violet, .iz-btn-gold) {
+	background: var(--iz-neon);
+	border-color: transparent;
+	color: var(--iz-neon-ink);
+	font-weight: 600;
+}
+html
+	body:is([data-outlet-design], [data-agency-design])
+	:is(.iz-btn-primary, .iz-btn-violet, .iz-btn-gold):hover:not(:disabled) {
+	background: var(--iz-neon-hover);
+}
+html body[data-admin-design] [data-slot="button"][data-variant="default"] {
+	background: var(--iz-neon);
+	color: var(--iz-neon-ink);
+	font-weight: 600;
+}
+html
+	body[data-admin-design]
+	[data-slot="button"][data-variant="default"]:hover {
+	background: var(--iz-neon-hover);
+	color: var(--iz-neon-ink);
+}
+
+/* ── Every other button looks like a button (owner, 20 Nov 2026: "some button can
+ * click make sure the UIUX user will know" — "New template" read as an empty bar:
+ * panel on panel with a #26232c hairline). The second-rank buttons — soft, ghost,
+ * admin outline / secondary — are now OUTLINED in champagne: one step up from the
+ * surface, a champagne edge and champagne text (10.7:1). Filled champagne = the one
+ * action; outlined champagne = another thing you can press. On hover the edge goes
+ * full champagne over a faint tint; it never moves. */
+html body:is([data-outlet-design], [data-agency-design])
+	:is(.iz-btn-soft, .iz-btn-ghost),
+html
+	body[data-admin-design]
+	[data-slot="button"]:is(
+		[data-variant="outline"],
+		[data-variant="secondary"]
+	) {
+	background: var(--iz-panel2, #1a181e);
+	border: 1px solid #cbb089;
+	color: #d9c09a;
+	cursor: pointer;
+}
+html
+	body:is([data-outlet-design], [data-agency-design])
+	:is(.iz-btn-soft, .iz-btn-ghost):hover:not(:disabled),
+html
+	body[data-admin-design]
+	[data-slot="button"]:is(
+		[data-variant="outline"],
+		[data-variant="secondary"]
+	):hover:not(:disabled) {
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+	border-color: #cbb089;
+	color: #e8d6b8;
+}
+
+/* ── Selectable controls take the champagne too (owner, 20 Nov 2026: "selectable
+ * button also", on admin's status filter). A select box carries the outlined
+ * champagne edge, so it reads as something you press; inside an open list the
+ * option under the pointer / keyboard is the same soft champagne as a selected tab
+ * (it was the pink-tinted --accent), and the chosen option's tick is champagne.
+ * Then "all selectable all Champagne colour" (the outlet Reports "6 dates" picker,
+ * pink calendar icon): EVERY control that opens a choice — select boxes, date and
+ * filter pop-overs, dropdown menus, anything with aria-haspopup or role=combobox —
+ * in the page body takes the outlined champagne and a champagne icon. The header
+ * and the side menu keep their own look (bell, avatar, language are chrome). */
+html body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		[data-slot="select-trigger"],
+		[data-slot="popover-trigger"],
+		[data-slot="dropdown-menu-trigger"],
+		[role="combobox"],
+		button[aria-haspopup]:not([aria-haspopup="false"]),
+		select:not([multiple])
+	):not(:is(header, aside, nav) *) {
+	border: 1px solid #cbb089;
+	color: #d9c09a;
+	cursor: pointer;
+}
+html
+	body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		[data-slot="select-trigger"],
+		[data-slot="popover-trigger"],
+		[data-slot="dropdown-menu-trigger"],
+		[role="combobox"],
+		button[aria-haspopup]:not([aria-haspopup="false"]),
+		select:not([multiple])
+	):not(:is(header, aside, nav) *)
+	svg {
+	color: #cbb089;
+}
+html
+	body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		[data-slot="select-trigger"],
+		[data-slot="popover-trigger"],
+		[data-slot="dropdown-menu-trigger"],
+		[role="combobox"],
+		button[aria-haspopup]:not([aria-haspopup="false"]),
+		select:not([multiple])
+	):not(:is(header, aside, nav) *):is(
+		:hover:not(:disabled),
+		[aria-expanded="true"],
+		[data-state="open"]
+	) {
+	border-color: #cbb089;
+}
+html
+	body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		[data-slot="select-item"],
+		[data-slot="dropdown-menu-item"],
+		[data-slot="dropdown-menu-checkbox-item"],
+		[data-slot="dropdown-menu-radio-item"],
+		[data-slot="dropdown-menu-sub-trigger"],
+		[data-slot="command-item"]
+	):is(
+		:focus,
+		[data-highlighted],
+		[data-selected="true"],
+		[data-state="open"]
+	) {
+	background: var(--iz-tab-selected-bg);
+	color: var(--iz-tab-selected-ink);
+}
+html
+	body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		[data-slot="select-item"],
+		[data-slot="dropdown-menu-checkbox-item"],
+		[data-slot="dropdown-menu-radio-item"]
+	)
+	:is([data-slot="select-item-indicator"], span)
+	svg {
+	color: #cbb089;
+}
+
+/* ── Menu headings in sentence case (they were set in tracked capitals) ─────── */
+html body:is([data-outlet-design], [data-agency-design]) .iz-outlet-nav-heading,
+html body[data-admin-design] .admin-sidebar-section-header {
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+/* ── Rail counts: a quiet number with a status dot, not a filled pill ────────── */
+html body:is([data-outlet-design], [data-agency-design])
+	.iz-nav-alert:is([data-tone="amber"], [data-tone="red"]),
+html body[data-admin-design] .admin-sidebar-badge {
+	position: relative;
+	padding: 0 2px 0 13px;
+	background: transparent;
+	border-color: transparent;
+	color: var(--iz-txt, #ebe6df);
+	font-size: var(--iz-fs-body);
+	font-weight: 600;
+}
+html
+	body:is([data-outlet-design], [data-agency-design])
+	.iz-nav-alert:is([data-tone="amber"], [data-tone="red"])::before,
+html body[data-admin-design] .admin-sidebar-badge::before {
+	content: "";
+	position: absolute;
+	left: 2px;
+	top: 50%;
+	width: 7px;
+	height: 7px;
+	margin-top: -3.5px;
+	border-radius: 50%;
+	background: var(--iz-amber, #ffb35c);
+}
+html
+	body:is([data-outlet-design], [data-agency-design])
+	.iz-nav-alert[data-tone="red"]::before {
+	background: var(--iz-red, #ff6b7a);
+}
+
+/* ══ STEP 2 — the To do rows (owner: "Yes, start step 2", 20 Nov 2026) ══════════
+ * One list with hairlines instead of tinted boxes with a fading side bar; a neon
+ * tile per KIND of job (keyed on the lucide icon's own class, so the same job is
+ * always the same colour wherever it sits in the list); a red ring on urgent rows
+ * (status by shape as well as colour); title over its reason; the figure in its
+ * status colour; the top row keeps the page's one filled button (DESIGN.md §1/§7).
+ * Same links, words, counts and order — only the drawing changes. */
+html body:is([data-agency-design], [data-outlet-design]) .iz-todo__list {
+	gap: 0;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	> a.iz-alert {
+	display: grid;
+	grid-template-columns: 40px minmax(0, 1fr) auto auto;
+	grid-template-areas: "icon title fig cta" "icon meta fig cta";
+	align-items: center;
+	column-gap: 16px;
+	row-gap: 2px;
+	min-height: 72px;
+	padding: 14px 8px;
+	background: transparent;
+	border: 0;
+	border-top: 1px solid var(--iz-line);
+	border-radius: 0;
+	box-shadow: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	> a.iz-alert:hover {
+	background: var(--iz-panel2);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	> a.iz-alert::before {
+	display: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert__head {
+	display: contents;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert__icon {
+	grid-area: icon;
+	box-sizing: border-box;
+	width: 40px;
+	height: 40px;
+	padding: 10px;
+	border-radius: var(--iz-radius-m, 10px);
+	background: var(--iz-todo-tile);
+	color: var(--iz-todo-tile-ink);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert__title {
+	grid-area: title;
+	align-self: end;
+	color: var(--iz-txt);
+	font-weight: 600;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert__meta {
+	grid-area: meta;
+	align-self: start;
+	color: var(--iz-muted);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert__figure {
+	grid-area: fig;
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--iz-amber);
+	font-size: var(--iz-fs-title);
+	font-weight: 600;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert--red
+	.iz-alert__figure {
+	color: var(--iz-red);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert__chips {
+	grid-area: fig;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert__cta {
+	grid-area: cta;
+	min-height: 40px;
+	padding: 0 14px;
+	border-radius: var(--iz-radius-m, 10px);
+	/* outlined champagne, like every second-rank button (see the top of this file) */
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2);
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	> a.iz-alert:first-child
+	.iz-alert__cta {
+	border-color: transparent;
+	background: var(--iz-neon);
+	color: var(--iz-neon-ink);
+	font-weight: 600;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	> a.iz-alert:first-child:hover
+	.iz-alert__cta {
+	background: var(--iz-neon-hover);
+}
+/* urgent: a ring around the tile — status by shape, not only colour */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-todo__list
+	.iz-alert--red
+	.iz-alert__icon {
+	box-shadow:
+		0 0 0 2px var(--iz-bg),
+		0 0 0 4px var(--iz-red);
+}
+/* Admin's tile, the same size and base as agency / outlet's (before the kinds). */
+html body[data-admin-design] .admin-todo__icon {
+	box-sizing: border-box;
+	width: 40px;
+	height: 40px;
+	padding: 10px;
+	border-radius: 10px;
+	background: var(--iz-todo-tile);
+	color: var(--iz-todo-tile-ink);
+}
+/* one colour per kind of job. The admin selectors name body[data-admin-design]:
+ * at the same strength as the admin base tile below, the base won by coming later
+ * and every admin tile showed the default (found 20 Nov with sample counts). */
+html body .iz-todo__list .iz-alert__icon.lucide-triangle-alert,
+html body[data-admin-design] .admin-todo__icon.lucide-file-question,
+html body[data-admin-design] .admin-todo__icon.lucide-file-question-mark {
+	background: linear-gradient(135deg, #ff5f7e, #ff9a62);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-scale,
+html body[data-admin-design] .admin-todo__icon.lucide-repeat-2 {
+	background: linear-gradient(135deg, #a46bff, #ff5fb1);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-file-text,
+html body[data-admin-design] .admin-todo__icon.lucide-building-2 {
+	background: linear-gradient(135deg, #ffb24c, #ff7a59);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-receipt,
+html body[data-admin-design] .admin-todo__icon.lucide-store {
+	background: linear-gradient(135deg, #43c6ff, #7a6bff);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-clock,
+html body[data-admin-design] .admin-todo__icon.lucide-wrench {
+	background: linear-gradient(135deg, #36e0a3, #1fb2c9);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-tag {
+	background: linear-gradient(135deg, #ffd166, #ff8a4c);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-user-plus {
+	background: linear-gradient(135deg, #ff9ad5, #c084fc);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-calendar-clock {
+	background: linear-gradient(135deg, #7dd3fc, #a78bfa);
+}
+html body .iz-todo__list .iz-alert__icon.lucide-clipboard-check {
+	background: linear-gradient(135deg, #86efac, #22d3ee);
+}
+@media (max-width: 640px) {
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-todo__list
+		> a.iz-alert {
+		grid-template-columns: 40px minmax(0, 1fr);
+		grid-template-areas: "icon title" "icon meta" ". fig" "cta cta";
+		row-gap: 6px;
+	}
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-todo__list
+		.iz-alert__figure,
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-todo__list
+		.iz-alert__chips {
+		justify-self: start;
+	}
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-todo__list
+		.iz-alert__cta {
+		justify-content: center;
+		min-height: 44px;
+	}
+}
+
+/* The sideways-scroll hint on Payroll's tables (approved-portal-design.css) was the
+ * accent at 45%: champagne that strong washed the end of any line running under it
+ * to 2.25:1 (muted text, phone width — the 20 Nov gradient-aware sweep). At 18% the
+ * edge still shows, and every text role under it stays at 4.7:1 or more. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	:is(.iz-approved-voucher-table-scroll, .iz-approved-table-scroll) {
+	--iz-scroll-edge: color-mix(in srgb, #d9c09a 18%, transparent);
+}
+
+/* "View profile" / "View venue details" on Manage PR and Manage Outlet cards are
+ * the card's OPEN cue — a span inside the clickable card, so no button rule ever
+ * reached it and it read as a dead bar (owner, 20 Nov 2026: "this view profile can
+ * click right why no Champagne colour?"). Outlined champagne, full edge on hover. */
+html body:is([data-agency-design], [data-outlet-design]) .iz-agency-card-open {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2);
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(a, button, [role="button"]):hover
+	.iz-agency-card-open {
+	border-color: #cbb089;
+	color: #e8d6b8;
+}
+
+/* The side menu's icons, one neon colour per destination (owner, 20 Nov 2026:
+ * "icon colour ? no static ?" — every rail icon was the same grey). Keyed on the
+ * lucide icon's own class, so a page keeps its colour wherever it is listed and in
+ * every portal. The current page still shows by its champagne tint and bar; sign
+ * out keeps its red; the section chevrons stay quiet. */
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(.lucide-house, .lucide-layout-dashboard) {
+	color: #ff8aa3;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(.lucide-calendar, .lucide-chart-column, .lucide-shield) {
+	color: #5eead4;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(
+		.lucide-user-check,
+		.lucide-sliders-horizontal,
+		.lucide-users-round
+	) {
+	color: #c084fc;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(
+		.lucide-receipt,
+		.lucide-receipt-text,
+		.lucide-file-text,
+		.lucide-building-2
+	) {
+	color: #ffb24c;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(.lucide-history, .lucide-archive) {
+	color: #86efac;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(.lucide-users, .lucide-sparkles, .lucide-megaphone) {
+	color: #f472b6;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(.lucide-store, .lucide-arrow-right-left) {
+	color: #60a5fa;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(.lucide-credit-card, .lucide-handshake) {
+	color: #facc15;
+}
+:is(
+		html
+			body:is([data-agency-design], [data-outlet-design])
+			.iz-portal:is(#iz-tab-wins, [data-portal])
+			.iz-portal-nav-link,
+		html
+			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+			.admin-sidebar-nav-item
+	)
+	svg.lucide:is(.lucide-settings) {
+	color: #a5b4fc;
+}
+
+/* Fills that read an accent token under WHITE text (found 20 Nov 2026 by scanning
+ * every stylesheet once the accent tokens became champagne — white on #d9c09a is
+ * 1.8:1): roster's auto-assign button, Manage PR's header button and the calendar's
+ * range END. They are things you press or pick, so they keep the champagne and
+ * take its dark ink. The calendar rules are !important at source, so these are. */
+html body:is([data-agency-design], [data-outlet-design])
+	:is(
+		.iz-roster-auto-assign,
+		.iz-pr-manage-header__btn--primary,
+		.iz-outlet-report-range-legend-item.is-end
+			.iz-outlet-report-range-legend-badge
+	) {
+	color: #1c160e;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-outlet-report-cal-picker
+	:is(
+		button[data-range-end="true"],
+		.iz-report-range-end,
+		.group\/day:has(.iz-report-range-end) button
+	) {
+	background: #cbb089 !important;
+	color: #1c160e !important;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-outlet-report-cal-picker
+	:is(button[data-range-middle="true"], .iz-report-range-middle) {
+	background: color-mix(in srgb, #cbb089 22%, transparent) !important;
+	color: #e8d6b8 !important;
+}
+
+/* Sections that open and close (owner, 20 Nov 2026: "the collapseble tab see your
+ * design to let user know that can click" — "Daily breakdown", "Rates by PR tier"…
+ * read as plain boxes). The box takes the champagne edge every second-rank control
+ * has, the whole edge lights on hover, and EVERY open/close chevron on a disclosure
+ * is champagne, so "this opens" reads the same everywhere. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-collapsible-section {
+	border-color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-collapsible-section:has(> .iz-collapsible-section__trigger:hover) {
+	border-color: #cbb089;
+}
+/* …and the words inside it are champagne too (owner: "the words inside also
+ * Champagne"), with the chevron in a small outlined circle — a button you can see —
+ * that fills faintly when the header is hovered. The hint line stays quiet. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-collapsible-section__title
+	:is(.iz-title-with-icon__text, *),
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-collapsible-section__title {
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-collapsible-section__chev {
+	display: grid;
+	place-items: center;
+	flex: none;
+	width: 32px;
+	height: 32px;
+	border: 1px solid #cbb089;
+	border-radius: 50%;
+	color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-collapsible-section__trigger:hover
+	.iz-collapsible-section__chev {
+	border-color: #cbb089;
+	background: color-mix(in srgb, #cbb089 14%, transparent);
+}
+html
+	body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	button[aria-expanded]:not(:is(header, aside, nav) *)
+	svg:is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right) {
+	color: #cbb089;
+}
+
+/* Approvals: the request you are looking at is SELECTED — the soft champagne of a
+ * selected tab with a champagne edge, not the old violet (#372d45) (review, 20 Nov). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	:is(
+		.iz-approvals-page .iz-approvals-list-item.on,
+		.iz-approvals-sidebar .iz-approvals-member-row.on
+	) {
+	border-color: #cbb089;
+	background: var(--iz-tab-selected-bg);
+	box-shadow: inset 3px 0 #cbb089;
+}
+/* Admin's page header (review, 20 Nov 2026 — unslop: "uppercase labels with wide
+ * tracking", "glowing pills"; and gold there broke the owner's rule that champagne
+ * means you can press it). The section word above each title — the breadcrumb says
+ * it too — is a quiet sentence-case line; its glowing dot goes; the page icon is
+ * neon, as icons now are. Same word, same place. */
+html body[data-admin-design] .iz-admin-page-eyebrow {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--muted-foreground);
+	font-size: var(--iz-fs-body);
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+}
+html body[data-admin-design] .iz-admin-page-eyebrow > span[aria-hidden] {
+	display: none;
+}
+html body[data-admin-design] .iz-admin-page-icon {
+	background: color-mix(in srgb, #ff5f9e 14%, transparent);
+	color: #ff8aa3;
+}
+
+/* Old violet label pills ("Per-item calc"…): neutral, like any label. */
+html body:is([data-agency-design], [data-outlet-design], [data-admin-design])
+	.iz-pill-violet {
+	box-shadow: inset 0 0 0 1px var(--iz-line2, #34303b);
+	color: var(--iz-txt, #ebe6df);
+}
+/* Admin's "Log out" keeps the red outline agency / outlet's "Sign out" has; the
+ * outline-button rule above must not repaint it champagne. */
+html body[data-admin-design] [data-slot="button"].iz-admin-signout {
+	border-color: #995e6c;
+	background: #2a171c;
+	color: #f0b4ba;
+}
+
+/* "Return" / back buttons inside detail views and sheets (owner, 20 Nov 2026,
+ * on outlet detail's "← Return"): a button, so the outlined champagne. */
+html body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-topbar-back, .iz-post-job-return, .iz-sheet-back) {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2);
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-topbar-back, .iz-post-job-return, .iz-sheet-back):hover {
+	border-color: #cbb089;
+	color: #e8d6b8;
+}
+
+/* ══ Click-through review, 20 Nov 2026 — HIGH findings (48 reviewers opened every safe
+ * control on every page; a second agent tried to refute each finding) ══════════ */
+/* Roster / Live: the auto-assign bar is DISABLED when there is nothing to fill — it
+ * kept the dark ink meant for the champagne fill and read ~1:1 on dark grey. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-roster-auto-assign.iz-roster-auto-assign:disabled {
+	border: 1px solid var(--iz-line);
+	background: transparent;
+	color: var(--iz-muted);
+}
+/* Outlet Subscription's plan rows: an old rule filled every "Switch to …" with the
+ * act colour, so six solid buttons sat on one page. They are outlined; the page keeps
+ * one solid action. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.iz-approved-plan-row
+	button:not(:disabled) {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2);
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.iz-approved-plan-row
+	button:not(:disabled):hover {
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+}
+/* Manage Outlet's "View venue details": agency-management-design.css drew it grey at
+ * a strength the first champagne rule did not reach. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal[data-portal]
+	.iz-agency-card-open {
+	border-color: #cbb089;
+	color: #d9c09a;
+}
+/* Old violet left on outlet cards (events pill, Today tile) and Post Job's event
+ * template cards (#241f30 bodies): neutral surfaces. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.iz-outlet-manage-card__events {
+	border-color: var(--iz-line);
+	background: var(--iz-panel2);
+	color: var(--iz-txt);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.iz-outlet-manage-card__kpi-box--today {
+	border-color: var(--iz-line);
+	background: rgba(0, 0, 0, 0.22);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.iz-event-card {
+	background: var(--iz-panel);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.iz-event-card__placeholder {
+	background: linear-gradient(135deg, var(--iz-panel2), var(--iz-panel));
+}
+/* Payroll's voucher table: money columns broke mid-word ("Wag / es", amounts split). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-approved-voucher-table
+	:is(th.iz-money, td.iz-money) {
+	white-space: nowrap;
+	overflow-wrap: normal;
+	word-break: normal;
+}
+/* Manage PR's comcard pop-up was capped with its Close button clipped below the
+ * fold: it scrolls inside, so Close is always reachable. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-sheet.iz-sheet--comcard {
+	max-height: min(96vh, 760px);
+	overflow-y: auto;
+}
+/* "Recent penalties" is an open/close header, not an alarm — champagne like every
+ * collapsible header; red stays on real breach amounts inside. */
+html body[data-agency-design]
+	.iz-agency-pr-management
+	button[aria-expanded]
+	> b {
+	color: #d9c09a;
+}
+/* Outlet Profile: the avatar letter floated with no circle (its utilities never
+ * reached the portal) — a raised circle and cards, no glow. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	:is(.bg-gradient-primary, .bg-gradient-surface) {
+	border: 1px solid var(--iz-line);
+	background: var(--iz-panel2);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	.shadow-glow {
+	box-shadow: none;
+}
+/* Outlet Workspace: editable rate cells had no box at all, so "highlighted cells are
+ * editable" pointed at nothing. Every editable input in a table gets the champagne
+ * box; read-only cells stay plain. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal
+	table
+	input:not([readonly], :disabled, [type="checkbox"], [type="radio"]) {
+	border: 1px solid #cbb089;
+	border-radius: 8px;
+	padding: 4px 8px;
+}
+/* Admin's PR list: e-mails broke mid-word, leaving "o" / "mo" on their own line. */
+html body[data-admin-design] [data-slot="table-cell"] {
+	overflow-wrap: normal;
+	word-break: normal;
+}
+
+/* Text boxes you type into (search, filters, forms) carry the same champagne edge
+ * as the select boxes beside them (owner, 20 Nov 2026: "make the search also have
+ * the border"); a focused one adds a soft champagne ring. */
+html body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		input:not(
+				[type="checkbox"],
+				[type="radio"],
+				[type="hidden"],
+				[type="range"],
+				[type="file"],
+				[type="color"]
+			),
+		textarea
+	):not(:is(header, aside, nav) *) {
+	border-color: #cbb089;
+}
+html
+	body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		input:not(
+				[type="checkbox"],
+				[type="radio"],
+				[type="hidden"],
+				[type="range"],
+				[type="file"],
+				[type="color"]
+			),
+		textarea
+	):not(:is(header, aside, nav) *):focus-visible {
+	border-color: #cbb089;
+	box-shadow: 0 0 0 3px color-mix(in srgb, #cbb089 22%, transparent);
+	outline: none;
+}
+
+/* Payroll → Receipts with real data (owner, 20 Nov 2026: "you think this section if
+ * have data will be tidy ? i mean the design"). Each DAY had its own two-column
+ * grid, so a day with one receipt filled half the width and left a dead band; now
+ * the columns fit what is there — one receipt spans the row, two sit side by side.
+ * The day chips ("Earlier", "Thu 6 Aug (1)") broke mid-word; they keep whole. */
+@media (min-width: 1280px) {
+	html body[data-agency-design] .iz-receipt-day-grid {
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+	}
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-payroll-facet-label, .iz-payroll-facet-chip) {
+	white-space: nowrap;
+}
+
+/* Section-title icons ("Profile details", "Portfolio gallery"…) are icons, so neon
+ * (the owner's rule), not the grey or champagne they inherited. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-title-with-icon
+	> svg {
+	color: #ff8aa3;
+}
+
+/* Agency → Manage PR → a PR's profile (owner, 20 Nov 2026: "help me to design this
+ * page also"). Same fields, words and order; only the drawing:
+ *  - a label sits BESIDE its value (a fixed label column) instead of at the far
+ *    edge of a wide card, so the eye does not cross the card for each answer;
+ *  - the two cards of a row are the same height, so no dead gap under the shorter;
+ *  - one heading style for every section — the 20px section step, no stray dash
+ *    on one of them and none on the others;
+ *  - an empty state is ONE quiet box, not a bordered card inside a bordered card. */
+html body[data-agency-design] .iz-screen:has(.iz-pr-profile-fields) {
+	& .iz-pr-profile-fields .iz-kv-list .iz-v-sum {
+		grid-template-columns: minmax(96px, 150px) minmax(0, 1fr);
+		justify-content: start;
+		column-gap: 16px;
+	}
+	& .iz-pr-profile-fields .iz-kv-list .iz-v-sum > :last-child {
+		justify-self: start;
+		text-align: left;
+	}
+	& .iz-pr-profile-fields > div {
+		display: flex;
+		flex-direction: column;
+	}
+	& .iz-pr-profile-fields > div > .iz-card {
+		flex: 1;
+	}
+	& :is(.iz-sect-label, .iz-outlet-section-title) {
+		color: var(--iz-txt);
+		font-size: var(--iz-fs-title);
+		font-weight: 600;
+		letter-spacing: 0;
+		text-transform: none;
+	}
+	& .iz-sect-label::before {
+		display: none;
+	}
+	& .iz-outlet-section-card > .iz-card:only-child {
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+	}
+}
+
+/* Leftover violet on controls (20 Nov 2026 button audit, every page × admin /
+ * agency owner / outlet owner): the rail's collapse handle and the calendar's
+ * month arrows are buttons → outlined champagne; Post Job's event-type pills and
+ * roster's "Planning" are UNSELECTED options of a toggle → the quiet surface every
+ * unselected tab has (the chosen one is the soft champagne, portal-tabs.css). */
+html body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-portal-collapse-toggle, .iz-outlet-ops-cal-nav-btn) {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2);
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-portal-collapse-toggle, .iz-outlet-ops-cal-nav-btn):hover {
+	border-color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-post-job-event-type-pill:not(.is-active, [aria-pressed="true"]) {
+	background: var(--iz-panel2);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-roster-toggle
+	> button:not(.on) {
+	color: var(--iz-muted);
+}
+
+/* Subscription "Next billing date" made simple (owner, 20 Nov 2026: "this is ugly
+ * can make simplyfy ?"). Same words, drawn as: the DATE at the section-title step;
+ * the overdue sentence as one red tag; the period and its price on ONE line — the
+ * price line begins with "·" because it was written to follow the period, and on
+ * its own line that dot read as a stray. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-approved-subscription-summary
+	> div:last-child
+	> strong {
+	display: block;
+	margin-top: 4px;
+	color: var(--iz-txt);
+	font-size: var(--iz-fs-title);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-approved-subscription-summary
+	> div:last-child
+	> p[class*="iz-red"] {
+	display: inline-block;
+	margin: 10px 0 4px;
+	padding: 4px 10px;
+	border: 1px solid color-mix(in srgb, #ff6b7a 40%, transparent);
+	border-radius: 8px;
+	background: var(--iz-red-bg, #33161b);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-approved-subscription-summary
+	> div:last-child
+	> p:is(:nth-last-child(2), :last-child):not(:first-child, [class*="iz-red"]) {
+	display: inline;
+	margin: 0;
+}
+
+/* Subscription: the plan's price is the money figure of the summary card — in the
+ * money colour and one step up the ladder (it was 16px body ink under a 20px name). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-approved-subscription-summary
+	> div:first-child
+	> strong {
+	color: var(--iz-money);
+	font-size: var(--iz-fs-title);
+	font-variant-numeric: tabular-nums;
+}
+
+/* Admin's rail collapse button was the old purple (#40334e, violet line); it is
+ * a plain dark control like agency / outlet's. */
+html body[data-admin-design] .admin-sidebar-collapse-toggle {
+	border-color: var(--input);
+	background: var(--secondary);
+}
+
+/* Admin's To do rows: drawn like agency / outlet's — one list with hairlines, the
+ * kind tile, title over its reason, the count as a figure in the waiting colour,
+ * and the same one filled button. Same words, links, counts and order. (Seen 20
+ * Nov with sample counts faked in the browser: they were boxed amber rows with a
+ * pill count, and on a phone the tile floated beside a 238px-tall stack.) */
+html body[data-admin-design] .admin-todo__list {
+	gap: 0;
+}
+html body[data-admin-design] .admin-todo__row {
+	display: grid;
+	grid-template-columns: 40px minmax(0, 1fr) auto auto;
+	grid-template-areas: "icon title fig cta" "icon meta fig cta";
+	align-items: center;
+	column-gap: 16px;
+	row-gap: 2px;
+	min-height: 72px;
+	padding: 14px 8px;
+	background: transparent;
+	border: 0;
+	border-top: 1px solid var(--border);
+	border-radius: 0;
+}
+html body[data-admin-design] .admin-todo__row:hover {
+	border-color: var(--border); /* admin-design turns the whole edge amber */
+	background: var(--secondary);
+}
+html body[data-admin-design] .admin-todo__what {
+	display: contents;
+}
+html body[data-admin-design] .admin-todo__row > .admin-todo__icon {
+	grid-area: icon;
+}
+html body[data-admin-design] .admin-todo__row-title {
+	grid-area: title;
+	align-self: end;
+	font-weight: 600;
+}
+html body[data-admin-design] .admin-todo__meta {
+	grid-area: meta;
+	align-self: start;
+}
+html body[data-admin-design] .admin-todo__count {
+	grid-area: fig;
+	min-width: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--signal-warn);
+	font-size: var(--iz-fs-title);
+	font-weight: 600;
+}
+html body[data-admin-design] .admin-todo__cta {
+	grid-area: cta;
+	min-height: 40px;
+	padding: 0 14px;
+	border-radius: 10px;
+	border: 1px solid #cbb089;
+	background: var(--secondary);
+	color: #d9c09a;
+}
+@media (max-width: 640px) {
+	html body[data-admin-design] .admin-todo__row {
+		grid-template-columns: 40px minmax(0, 1fr);
+		grid-template-areas: "icon title" "icon meta" ". fig" "cta cta";
+		row-gap: 6px;
+	}
+	html body[data-admin-design] .admin-todo__count {
+		justify-self: start;
+	}
+	html body[data-admin-design] .admin-todo__cta {
+		justify-content: center;
+		min-height: 44px;
+	}
+}
+html body[data-admin-design] .admin-todo__row::before {
+	display: none;
+}
+html body[data-admin-design] .admin-todo__row--first .admin-todo__cta {
+	background: var(--iz-neon);
+	border-color: transparent;
+	color: var(--iz-neon-ink);
+}
+
+/* ══ STEP 3 — Today's figures (owner: "Yes, start step 3", 20 Nov 2026) ══════════
+ * Agency Today's strip keeps its three links, labels and numbers. The small tiles
+ * set the label at the top and the number at the bottom; the payout tile is twice
+ * as wide and its number IS the voucher — the amount is printed ONCE, on the slip
+ * (owner: "no show double or duplicated"). The slip is drawn in CSS around the
+ * existing `.n`, so a reader / screen reader meets the same text as before. */
+@media (min-width: 900px) {
+	html
+		body[data-agency-design]
+		.iz-portal-kpi-grid:has(> .iz-portal-kpi-payout) {
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	}
+	html body[data-agency-design] .iz-portal-kpi-grid > .iz-portal-kpi-payout {
+		grid-column: span 2;
+	}
+}
+html body[data-agency-design] .iz-portal-kpi-grid > .iz-portal-kpi {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 132px;
+	box-shadow: none;
+}
+html body[data-agency-design] .iz-portal-kpi-grid > .iz-portal-kpi-payout > .n {
+	position: relative;
+	box-sizing: border-box;
+	align-self: stretch;
+	max-width: 360px;
+	padding: 34px 56px 14px 30px;
+	border-radius: 8px;
+	background-color: #f3ece2;
+	background-image:
+		linear-gradient(#a59b8d, #a59b8d), linear-gradient(#cdc5b8, #cdc5b8);
+	background-size:
+		52% 6px,
+		74% 6px;
+	background-position:
+		30px 12px,
+		30px 23px;
+	background-repeat: no-repeat;
+	color: #1f1914;
+	box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.6);
+}
+/* the perforation down the stub, and the payout seal */
+html body[data-agency-design]
+	.iz-portal-kpi-grid
+	> .iz-portal-kpi-payout
+	> .n::before {
+	content: "";
+	position: absolute;
+	left: 12px;
+	top: 8px;
+	bottom: 8px;
+	border-left: 2px dotted rgba(42, 36, 26, 0.35);
+}
+html
+	body[data-agency-design]
+	.iz-portal-kpi-grid
+	> .iz-portal-kpi-payout
+	> .n::after {
+	content: "";
+	position: absolute;
+	right: 14px;
+	bottom: 12px;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	border: 2px solid #ff6f8f;
+	opacity: 0.85;
+}
+
+/* ══ STEP 4 — the admin dashboard (owner: "Yes, start step 4", 20 Nov 2026) ═════
+ * Same words, links and figures; only the drawing changes. */
+/* The status line: was a gold, 11px, tracked-capitals pill. Now a quiet line in
+ * sentence case at the body size; its dot keeps the live / warn colour. */
+html body[data-admin-design] .admin-system-status {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--muted-foreground);
+	font-size: var(--iz-fs-body);
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+}
+html body[data-admin-design] .admin-system-status > span:first-child {
+	width: 8px;
+	height: 8px;
+	box-shadow: none;
+}
+/* The three review cards read as one panel with hairline columns (unslop: equal
+ * cards side by side read as a template). A cell steps up on hover; it never lifts
+ * inside a joined panel. */
+html body[data-admin-design] .admin-dashboard-kpis {
+	gap: 0;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	background: var(--card);
+}
+html body[data-admin-design] .admin-dashboard-kpis > a {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	transform: none;
+}
+html body[data-admin-design] .admin-dashboard-kpis > a:hover {
+	background: var(--secondary);
+	transform: none;
+}
+html body[data-admin-design] .admin-dashboard-kpis > a + a {
+	border-left: 1px solid var(--border);
+}
+@media (max-width: 767px) {
+	html body[data-admin-design] .admin-dashboard-kpis > a + a {
+		border-left: 0;
+		border-top: 1px solid var(--border);
+	}
+}
+/* "All clear" means nothing is asked of you — settled green, quiet, not pink.
+ * Only the lavender (clear) chip; an amber "waiting" chip keeps its colour. */
+html body[data-admin-design]
+	.admin-dashboard-kpis
+	> a
+	> div:first-child
+	> span
+	+ span.text-lavender {
+	padding-inline: 0;
+	background: transparent;
+	color: var(--signal-live);
+}
+
+/* A count inside a SELECTED tab takes the tab's own ink (now the champagne text on
+ * the soft tint, 7.4:1). Found by eye on agency Payroll when the tab was a neon
+ * gradient and the count stayed off-white (~1.9:1). */
+html body:is([data-agency-design], [data-outlet-design], [data-admin-design])
+	:is([aria-selected="true"], [aria-pressed="true"], [data-state="active"])
+	.iz-nav-alert {
+	color: var(--iz-tab-selected-ink);
+}
+
+/* The champagne edge is ALWAYS full (owner, 20 Nov 2026: "border always show Champagne
+ * not the cursor move then show"), so hover shows as a faint champagne fill instead. */
+html body:is([data-admin-design], [data-agency-design], [data-outlet-design])
+	:is(
+		.iz-topbar-back,
+		.iz-post-job-return,
+		.iz-sheet-back,
+		.iz-portal-collapse-toggle,
+		.iz-outlet-ops-cal-nav-btn,
+		[data-slot="select-trigger"],
+		[data-slot="popover-trigger"],
+		[data-slot="dropdown-menu-trigger"]
+	):hover:not(:disabled) {
+	background-color: color-mix(in srgb, #cbb089 12%, #1a181e);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(a, button, [role="button"]):hover
+	.iz-agency-card-open,
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-collapsible-section:has(> .iz-collapsible-section__trigger:hover) {
+	background-color: color-mix(in srgb, #cbb089 8%, var(--iz-panel, #121116));
+}
+
+/* ══ Click-through review, 20 Nov 2026 — MEDIUM / LOW findings ══════════════════
+ * One rule per CAUSE, each naming the pages it fixes. Colours follow the owner's
+ * rule (DESIGN.md §0): what you click or choose is champagne — outlined, or the
+ * soft tint #3e3732 + #e2cba6 when selected; icons are neon; money with a state is
+ * green / amber / red, without one sky; everything static is neutral. Every
+ * selector carries `:is(#iz-tab-wins, …)` (an id that never exists, so it only
+ * adds weight — the portal-tabs.css pattern), so it outranks the class rules it
+ * replaces in any load order. Words, links, routes and buttons' jobs unchanged. */
+
+/* ── 1. Admin outline buttons that the outline rule missed. Button spreads its
+ * props after data-slot="button", so a Button used asChild under a Dialog / Sheet
+ * trigger or close is re-labelled data-slot="dialog-trigger" / "sheet-close" and
+ * fell back to the grey edge: the two "?" header buttons (every admin page) and
+ * the sheet footers' "Cancel" (Plan Change, Plan Request). */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(
+		[data-slot="dialog-trigger"],
+		[data-slot="dialog-close"],
+		[data-slot="sheet-trigger"],
+		[data-slot="sheet-close"],
+		[data-slot="popover-trigger"]
+	)[data-variant="outline"] {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2, #1a181e);
+	color: #d9c09a;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(
+		[data-slot="dialog-trigger"],
+		[data-slot="dialog-close"],
+		[data-slot="sheet-trigger"],
+		[data-slot="sheet-close"],
+		[data-slot="popover-trigger"]
+	)[data-variant="outline"]:hover:not(:disabled) {
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+	color: #e8d6b8;
+}
+
+/* ── 2. The top bar's other controls (every page, all three portals): admin's
+ * bell and rail collapse handle, agency / outlet's "Icon guide" and bell, and the
+ * outlet rail's collapse toggle were grey-edged — outlined champagne like every
+ * second-rank control. The bell grows to the 44px row height and its count moves
+ * to the corner, so it no longer covers the glyph. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(.iz-admin-header-controls a[href], .admin-sidebar-collapse-toggle),
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	:is(.iz-outlet-icon-button, .iz-topbar-action) {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2, #1a181e);
+	color: #d9c09a;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(.iz-admin-header-controls a[href], .admin-sidebar-collapse-toggle):hover,
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	:is(.iz-outlet-icon-button, .iz-topbar-action):hover {
+	border-color: #cbb089;
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+	color: #e8d6b8;
+}
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-topbar-action {
+	width: 44px;
+	min-width: 44px;
+	height: 44px;
+}
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-topbar-action
+	> svg.lucide-bell {
+	width: 18px;
+	height: 18px;
+}
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-topbar-action
+	> .iz-bell-count {
+	top: -8px;
+	right: -8px;
+	min-width: 22px;
+	height: 20px;
+	padding: 0 5px;
+	box-shadow: 0 0 0 2px var(--iz-bg, #0b0a0d);
+}
+
+/* ── 3. The language switch's chosen language (top bar, all three portals) was a
+ * grey tile: it is the soft champagne tint of every selected option. */
+html body:is(
+		#iz-tab-wins,
+		[data-admin-design],
+		[data-agency-design],
+		[data-outlet-design]
+	)
+	:is(header, .iz-admin-header-controls)
+	fieldset
+	> button[aria-pressed="true"] {
+	background: var(--iz-tab-selected-bg, #3e3732);
+	color: var(--iz-tab-selected-ink, #e2cba6);
+}
+
+/* ── 4. Rail section headers ("Overview", "Workspace"…) open and close their
+ * group, so their words and chevron are champagne (all three portals). */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-section-header,
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-outlet-nav-heading {
+	color: #d9c09a;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-section-header
+	> svg,
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-outlet-nav-heading
+	svg {
+	color: #cbb089;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-section-header:hover,
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-outlet-nav-heading:hover {
+	color: #e2cba6;
+}
+
+/* ── 5. The rail's "you are here" (every page, all three portals) was PURE WHITE
+ * on a faint wash; DESIGN.md §0 says the soft tint with champagne text, beside the
+ * solid champagne bar. Hover on the other items stays off-white, never #fff. The
+ * other menu words were lavender #d0c6de on agency / outlet: warm off-white. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item.admin-sidebar-nav-item-active,
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item.admin-sidebar-nav-item-active:hover {
+	background-color: var(--iz-tab-selected-bg, #3e3732) !important;
+	color: var(--iz-tab-selected-ink, #e2cba6) !important;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link.on {
+	background: var(--iz-tab-selected-bg, #3e3732);
+	color: var(--iz-tab-selected-ink, #e2cba6);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link:not(.on, .iz-portal-sign-out) {
+	color: var(--iz-txt, #ebe6df);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item:not(.admin-sidebar-nav-item-active):hover,
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link:not(.on, .iz-portal-sign-out):hover {
+	color: var(--iz-txt, #ebe6df);
+}
+
+/* ── 6. Old plum surfaces left on the rails: agency / outlet's rail panel was
+ * #14111d (DESIGN.md: the rail sits on the canvas, as admin's does) and admin's
+ * identity card #1c1824 (every page). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar {
+	background: #0b0a0d;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-sidebar-profile {
+	background: var(--secondary, #1a181e);
+}
+
+/* ── 7. Rail icons, one neon per destination (owner: "the icon can be neon"):
+ * the lucide-keyed map above gave violet / periwinkle to Approvals, Workspace,
+ * Settings and the two Members pages, and the same glyph + colour to RBAC / Admin,
+ * Agency / Outlet Members, Plan Request / Plan Payment / Plan, Today / Post Job,
+ * Calendar / Reports. Keyed on the link's own path, so each destination keeps one
+ * colour; a destination of the same name (Approvals, Settings) matches across
+ * portals. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/admin/settings"]
+	svg.lucide:not(.iz-none),
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/service/pr-detach"]
+	svg.lucide:not(.iz-none),
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link:is([href$="/agency/profile"], [href$="/outlet/settings"])
+	svg.lucide {
+	color: #22d3ee;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/user-management/admin"]
+	svg.lucide:not(.iz-none),
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link[href$="/outlet/workspace"]
+	svg.lucide {
+	color: #ff7a59;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/user-management/agency-team"]
+	svg.lucide:not(.iz-none),
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link:is([href$="/agency/pending"], [href$="/outlet/approvals"])
+	svg.lucide {
+	color: #a3e635;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/user-management/outlet-team"]
+	svg.lucide:not(.iz-none) {
+	color: #facc15;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/service/requests"]
+	svg.lucide:not(.iz-none),
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link[href$="/outlet/bookings"]
+	svg.lucide {
+	color: #fb923c;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/service/plan-changes"]
+	svg.lucide:not(.iz-none) {
+	color: #34d399;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/business/plan"]
+	svg.lucide:not(.iz-none) {
+	color: #f472b6;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-sidebar-nav-item[href][href$="/audit-log"]
+	svg.lucide:not(.iz-none),
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-sidebar
+	.iz-portal-nav-link[href$="/outlet/billing"]
+	svg.lucide {
+	color: #60a5fa;
+}
+
+/* ── 8. Admin's breadcrumb leaf (every page) is static text but was champagne —
+ * the click colour on the one crumb that does nothing. Neutral, like agency /
+ * outlet's .iz-portal-crumb-leaf. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	header
+	nav
+	span.text-primary {
+	color: var(--foreground, #ebe6df);
+	font-weight: 600;
+}
+
+/* ── 9. Admin links and row actions drawn as body text: Dashboard's "View all" /
+ * "Review →", the record names on Agencies / Outlets / PRs / Members, the "View"
+ * row action on Payment Vouchers, Plan Request and Legacy Member, and the edit
+ * pencil on Plan. Links take champagne text; row buttons the outlined champagne. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	:is(.iz-admin-cell-link, a.text-lavender, .iz-admin-record-name) {
+	color: #d9c09a;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	:is(.iz-admin-cell-link, a.text-lavender, .iz-admin-record-name):hover {
+	color: #e8d6b8;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	:is(td, .iz-admin-management)
+	[data-slot="button"][data-variant="ghost"] {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2, #1a181e);
+	color: #d9c09a;
+	text-decoration: none;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	:is(td, .iz-admin-management)
+	[data-slot="button"][data-variant="ghost"]:hover:not(:disabled) {
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+	color: #e8d6b8;
+}
+
+/* ── 10. Admin's sheet close "×" (Agency / Outlet Details, Plan Payment, Plan
+ * Request…) was a bare 16px grey glyph at 70% opacity: a visible outlined box. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="sheet-content"]
+	> button.absolute.right-4.top-4 {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	top: 12px;
+	right: 12px;
+	border: 1px solid #cbb089;
+	border-radius: var(--iz-radius-m, 10px);
+	background: var(--iz-panel2, #1a181e);
+	color: #d9c09a;
+	opacity: 1;
+}
+
+/* ── 11. The back-to-top circle (every long page, all three portals) was a SOLID
+ * champagne fill — a second "main action" on every page. It is a utility, so it is
+ * outlined; the scrolling area gains room at the bottom so the last row can scroll
+ * clear of it (it covered PV amounts, Subscription chevrons, Settings' Request). */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-back-to-top,
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-outlet-back-to-top {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel, #121116);
+	color: #d9c09a;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-back-to-top:hover,
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-outlet-back-to-top:hover {
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+	color: #e8d6b8;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-viewport {
+	padding-bottom: 88px;
+}
+
+/* ── 12. Admin's loading veil blurred the WHOLE app — rail, header, filters — on
+ * every fetch, background polls included, while each table already shows its own
+ * spinner; and its "Loading…" chip sat on the bell and avatar. The veil is
+ * clear and the chip sits under the top bar (History, Admin users, PRs…). */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.fixed.inset-0.z-50.pointer-events-none
+	> .absolute.inset-0 {
+	background: transparent;
+	backdrop-filter: none;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.fixed.inset-0.z-50.pointer-events-none
+	> .absolute.right-4.top-4 {
+	top: 80px;
+}
+
+/* ── 13. Static labels drawn in a meaning colour (admin): role / kind chips in
+ * sky ("Outlet") or the old lavender token, now champagne ("Agency", "Direct") on
+ * Current Plan, Plan Change, Legacy Member; Dashboard's type chip in the settled
+ * green beside a real green "Active"; its initials squares; RBAC's group dots
+ * (sky / violet / amber) and champagne count chips; the Legacy Member explainer
+ * tinted sky. All neutral. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="badge"]:is(.text-sky-600, .text-lavender),
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	div:has(> div > a.iz-admin-cell-link)
+	> div:nth-child(2)
+	> span.rounded-full {
+	border: 1px solid var(--border, #26232c);
+	background: transparent;
+	color: var(--foreground, #ebe6df);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	div:has(> div > a.iz-admin-cell-link)
+	> div:first-child
+	> span.text-lavender {
+	background: var(--secondary, #1a181e);
+	color: var(--muted-foreground, #bdb6ad);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-role-group-header
+	span.rounded-full:is(.bg-sky-400, .bg-violet-400, .bg-amber-400) {
+	background: var(--muted-foreground, #bdb6ad);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-role-count {
+	background: var(--secondary, #1a181e);
+	color: var(--foreground, #ebe6df);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	div[class*="border-sky-500/25"] {
+	border-color: var(--border, #26232c);
+	background: var(--card, #121116);
+	color: var(--muted-foreground, #bdb6ad);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	div[class*="border-sky-500/25"]
+	p:first-child {
+	color: var(--foreground, #ebe6df);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	div[class*="border-sky-500/25"]
+	p
+	+ p {
+	color: var(--muted-foreground, #bdb6ad);
+}
+
+/* ── 14. Admin money (DESIGN.md: a price with no state is sky; with a state
+ * green / amber / red). Current Plan's amounts, Plan's prices, the voucher sheet's
+ * line amounts and Plan Request's quote totals were plain off-white; a voucher's
+ * Net takes its row's state (pending / sent amber, signed / paid green, disputed
+ * red); Plan Payment's owed amount is amber while its row says unpaid. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-table
+	tr:not(:has(.admin-finance-review))
+	> td.text-right.tabular-nums,
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-catalogue
+	.admin-finance-table
+	tbody
+	td:nth-child(3):not(.italic),
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-page
+	[data-slot="card-title"].text-2xl:not(
+		[class*="text-amber"],
+		[class*="text-emerald"],
+		[class*="text-rose"]
+	) {
+	color: var(--iz-money, #7dd3fc);
+	font-variant-numeric: tabular-nums;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-table
+	tr:has(.admin-finance-review):has([data-slot="badge"].text-amber-600)
+	> td.text-right.tabular-nums,
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-table
+	tr:has(> td > [data-slot="badge"].text-amber-300)
+	> td:nth-child(4) {
+	color: var(--signal-warn, #ffb35c);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-table
+	tr:has(.admin-finance-review):has([data-slot="badge"].text-emerald-600)
+	> td.text-right.tabular-nums {
+	color: var(--signal-live, #5ee0a0);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-table
+	tr:has(.admin-finance-review):has([data-slot="badge"].text-rose-600)
+	> td.text-right.tabular-nums {
+	color: var(--destructive, #ff6b7a);
+}
+/* the two ambers of one "unpaid" state (lemon amber-300 in the table, the portal
+ * amber in the sheet — Plan Payment) are one amber */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.text-amber-300 {
+	color: var(--signal-warn, #ffb35c);
+}
+
+/* ── 15. Admin finance tables were cramped: every header, pill, button and date
+ * could wrap, and .admin-finance-page's `overflow-wrap: anywhere` split words —
+ * "PV- / 000002", "Pending / review", "Cancel / subscription", "Amount / (RM)",
+ * "11:43 / am" (Current Plan, Plan, Payment Vouchers, Plan Request, Plan Payment).
+ * Headers, pills, figures and times stay whole; longer text breaks only between
+ * words, without leaving one word alone. The cells' side padding drops to the 8px
+ * step so whole headers still fit without a sideways scroll at desktop width
+ * (measured: whole headers + an unbreakable action button pushed Current Plan to
+ * 1181px in a 1051px box, so a long button label may still wrap between its
+ * words). Phones keep their card layout (below 768px). */
+@media (min-width: 768px) {
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-finance-table
+		:is(th, [data-slot="badge"], .tabular-nums, .iz-admin-datetime__time) {
+		white-space: nowrap;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-finance-table
+		:is(th, td) {
+		padding-inline: 8px;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-finance-table
+		td {
+		overflow-wrap: normal;
+		text-wrap: pretty;
+	}
+}
+
+/* ── 16. Admin filter rows: the search box was a solid #34303b slab beside
+ * selects drawn at 30% of it (they read as two families); the date filters were
+ * 36px beside 46px selects; the search box was too narrow for its own placeholder
+ * ("Search outlet or agenc" — where the row has no room left it now ends in "…");
+ * Legacy Member's six equal columns clipped three placeholders: at desktop width
+ * the filters sit three to a row, as they already do below 1280px.
+ * (Current Plan, Plan Change, Plan Payment, Plan Request, Payment Vouchers, Modules,
+ * every user-management list.) */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	input[data-slot="input"] {
+	background: color-mix(in oklab, var(--input, #34303b) 30%, transparent);
+	text-overflow: ellipsis;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	input[type="date"]::-webkit-calendar-picker-indicator {
+	filter: brightness(0) invert(80%) sepia(30%) saturate(420%) hue-rotate(350deg);
+	cursor: pointer;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(.admin-finance-filter-row, .iz-admin-management-filters)
+	[data-slot="popover-trigger"],
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-management-filters
+	> button {
+	min-height: 46px;
+}
+@media (min-width: 640px) {
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-finance-filter-row
+		> .relative:has(> input[data-slot="input"]) {
+		width: 15rem;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.iz-admin-management-filters
+		> .relative:has(> input[data-slot="input"]) {
+		width: 16rem;
+	}
+}
+@media (min-width: 1280px) {
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		main
+		div.grid.xl\:grid-cols-6:has(input[data-slot="input"]) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	/* the filters beside a card title stay on one row instead of stacking at their
+	   narrowest (Agencies, Outlets, PRs, Members) */
+	html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.iz-admin-management-card
+		[data-slot="card-header"]
+		:is(
+			.iz-admin-filters,
+			.iz-admin-management-filters,
+			.iz-admin-management-filters > *
+		) {
+		flex-shrink: 0;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.iz-admin-management-card
+		[data-slot="card-header"]
+		.iz-admin-management-filters {
+		flex-wrap: nowrap;
+	}
+}
+
+/* ── 17. Admin selected states that were not the soft tint: RBAC's sub-tabs (the
+ * selected one was a near-black #231f19 with darker text than the unselected
+ * cream ones), Dashboard's registrations filter (a bright gold gradient — the
+ * loudest thing on the page), Legacy / PR agency pop-over's chosen option. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-rbac-tabs
+	a:is([aria-current="page"], [data-status="active"]),
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	main
+	button[aria-pressed="true"][class*="gradient-royal"] {
+	border-color: transparent;
+	background: var(--iz-tab-selected-bg, #3e3732);
+	background-image: none;
+	color: var(--iz-tab-selected-ink, #e2cba6);
+}
+/* the RBAC tab carries Tailwind's `!text-lavender` (an !important champagne in
+ * @layer utilities). For !important the cascade reverses layer order, so an
+ * un-layered !important LOSES to it: this one lives in the same layer, where the
+ * heavier selector wins (CLAUDE.md, the typography note on `!` classes). */
+@layer utilities {
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-rbac-tabs
+		a:is([aria-current="page"], [data-status="active"]) {
+		color: var(--iz-tab-selected-ink, #e2cba6) !important;
+	}
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-rbac-tabs
+	a:not([aria-current="page"], [data-status="active"]) {
+	color: var(--muted-foreground, #bdb6ad);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="popover-content"]
+	li
+	> button:has(> svg.lucide-check) {
+	background: var(--iz-tab-selected-bg, #3e3732);
+	color: var(--iz-tab-selected-ink, #e2cba6);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="popover-content"]
+	svg.lucide-check {
+	color: #cbb089;
+}
+
+/* ── 18. RBAC: a role row opens the role, but showed only a 50%-grey chevron;
+ * the chevron is champagne and the row tints on hover. The two-column group grid
+ * left 200px holes under the short "Admin" and "Unassigned" cards: the groups now
+ * flow in balanced columns (RBAC, Roles, Permission). */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-role-row
+	> svg:last-child {
+	color: #cbb089;
+	opacity: 1;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-role-row:hover {
+	background: color-mix(in srgb, #cbb089 8%, transparent);
+}
+@media (min-width: 768px) {
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-role-groups {
+		display: block;
+		columns: 2;
+		column-gap: 20px;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-role-groups
+		> .admin-role-group {
+		break-inside: avoid;
+		margin-bottom: 20px;
+	}
+}
+/* Modules: the toolbar wrapped onto three rows in a 400px column beside the title;
+ * it keeps one row, and moves under the title (right-aligned) when both do not fit */
+@media (min-width: 1280px) {
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-rbac-toolbar:has(.admin-module-filters),
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-module-filters
+		.iz-admin-filter-fields:not([hidden]) {
+		flex-wrap: nowrap;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-rbac-toolbar:has(.admin-module-filters)
+		:is(
+			.admin-module-filters,
+			.iz-admin-filter-fields > *,
+			.admin-module-filters ~ button
+		) {
+		flex-shrink: 0;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		div:has(> .admin-rbac-toolbar .admin-module-filters) {
+		flex-wrap: wrap;
+	}
+	html
+		body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+		.admin-rbac-toolbar:has(.admin-module-filters) {
+		margin-left: auto;
+	}
+}
+
+/* ── 19. Admin Dashboard: the three To-do tile icons were one muted champagne —
+ * now the neon of the rail destination each opens; the zero rows of the donut
+ * legends were dimmed to 3.6:1 (the dot keeps the dimming, the words 9.4:1); the
+ * registrations table header and the RBAC Pending / Plan Change sheet captions
+ * lose their tracked capitals (unslop). */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-dashboard-kpis
+	> a
+	span.rounded-xl:has(> svg.lucide-building-2) {
+	background: color-mix(in srgb, #ffb24c 14%, transparent);
+	color: #ffb24c;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-dashboard-kpis
+	> a
+	span.rounded-xl:has(> svg.lucide-store) {
+	background: color-mix(in srgb, #60a5fa 14%, transparent);
+	color: #60a5fa;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-dashboard-kpis
+	> a
+	span.rounded-xl:has(> svg.lucide-handshake) {
+	background: color-mix(in srgb, #fb923c 14%, transparent);
+	color: #fb923c;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-dashboard-chart
+	li.opacity-55 {
+	opacity: 1;
+	color: var(--muted-foreground, #bdb6ad);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-dashboard-chart
+	li.opacity-55
+	> span:first-child {
+	opacity: 0.55;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(main, [data-slot="sheet-content"])
+	.uppercase:is(.tracking-wide, .tracking-wider, .tracking-widest) {
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+/* ── 20. Admin odds and ends. Settings' Environment values were drawn as violet
+ * input boxes in monospace (read-only values: plain text); IDs and module keys
+ * were a fourth typeface (PRs, Modules, Profile); Plan Payment's sheet header sat
+ * in the sheet's corner; the member page's section titles sat on the card edge
+ * (Agency / Outlet Members → a person). */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-settings-environment
+	code {
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--foreground, #ebe6df);
+	font-family: inherit;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	:is(main, [data-slot="sheet-content"], [data-slot="popover-content"])
+	.font-mono {
+	font-family: var(--font-sans);
+	font-variant-numeric: tabular-nums;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-sheet
+	> .admin-invoice-detail {
+	padding: 24px;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-member-detail
+	.iz-admin-detail-section
+	> :first-child {
+	padding: 18px 20px 0;
+}
+
+/* ── 21. Agency / outlet controls still drawn as static boxes — outlined
+ * champagne like every second-rank control: "Manage PR" (Roster, Live), the
+ * roster week arrows (lavender), the date-range pickers (Roster, Live, Manage
+ * Outlet, History), "Select" (Manage PR / Manage Outlet), "More filters", "What you
+ * can do here" (Post Job), "Edit template" (Post Job — it wore a pressed tint ×12),
+ * and the plain iz-chip buttons that act ("Close" on a voucher, "+ Add More"). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		a.iz-roster-pr-link,
+		.iz-roster-week-nav,
+		.iz-roster-planning-date-trigger,
+		.iz-pr-manage-header__btn:not(
+				.iz-pr-manage-header__btn--primary,
+				.iz-pr-manage-header__btn--active
+			),
+		.iz-approved-more-filters > summary,
+		.iz-post-job-help-btn,
+		.iz-event-card__edit,
+		button[class="iz-chip"],
+		button.iz-chip.w-full
+	) {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2, #1a181e);
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		a.iz-roster-pr-link,
+		.iz-roster-week-nav,
+		.iz-roster-planning-date-trigger,
+		.iz-pr-manage-header__btn:not(
+				.iz-pr-manage-header__btn--primary,
+				.iz-pr-manage-header__btn--active
+			),
+		.iz-approved-more-filters > summary,
+		.iz-post-job-help-btn,
+		.iz-event-card__edit,
+		button[class="iz-chip"],
+		button.iz-chip.w-full
+	):hover:not(:disabled) {
+	border-color: #cbb089;
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+	color: #e8d6b8;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-roster-planning-date-trigger,
+		a.iz-roster-pr-link,
+		.iz-roster-week-nav,
+		.iz-approved-more-filters > summary
+	)
+	svg {
+	color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-approved-more-filters[open] > summary,
+		.iz-post-job-help-btn[aria-expanded="true"],
+		.iz-pr-manage-header__btn--active
+	) {
+	border-color: transparent;
+	background: var(--iz-tab-selected-bg, #3e3732);
+	color: var(--iz-tab-selected-ink, #e2cba6);
+}
+
+/* ── 22. Agency / outlet text fields beside champagne selects were grey-edged:
+ * the roster / Manage PR filter bars (Search, Payout, Name), the penalty rule
+ * inputs, the Payroll search. Their placeholders are regular weight. The filter
+ * bar's controls were 14px beside 16px labels (Live). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-roster-filterbar__inputwrap,
+		.iz-roster-filterbar__rangerow,
+		.iz-roster-filterbar__input:not(.iz-roster-filterbar__inputwrap *),
+		.iz-agency-pr-management input[type="number"],
+		.iz-payroll-filter input
+	) {
+	border-color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-roster-filterbar__input, .iz-roster-filterbar .iz-select) {
+	font-size: var(--iz-fs-body);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-field-input, .iz-roster-filterbar__input)::placeholder {
+	color: var(--iz-muted2, #a39c93);
+	font-weight: 400;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	input[type="date"]::-webkit-calendar-picker-indicator,
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	input[type="time"]::-webkit-calendar-picker-indicator {
+	filter: brightness(0) invert(80%) sepia(30%) saturate(420%) hue-rotate(350deg);
+	cursor: pointer;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	input[type="time"] {
+	cursor: pointer;
+}
+
+/* ── 23. Lavender left in the roster scope (Roster, Live): .iz-roster-page
+ * painted every muted line #b8a8cc — the helper lines, day names, the empty-filter
+ * sentence, the KPI labels, the GPS and filter meta. Warm neutral tokens. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-roster-page
+	.iz-muted,
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-roster-page
+	:is(
+		.iz-roster-kpi .l,
+		.iz-roster-gps-outlet-meta,
+		.iz-roster-gps-row-meta,
+		.iz-roster-timetable-filters-title,
+		.iz-roster-timetable-filters-stats,
+		.iz-roster-week-cell--filled .shift
+	) {
+	color: var(--iz-muted, #bdb6ad);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-roster-page
+	:is(.iz-muted2, .iz-roster-week-day-col .dow) {
+	color: var(--iz-muted2, #a39c93);
+}
+
+/* ── 24. Violet left on selected / open states (agency / outlet): the time
+ * picker's chosen hour / minute / PM, an OPEN collapsible's chevron ring (every
+ * collapsible), the History select's chosen option and its open ring; the select
+ * options were 14px under a 16px trigger. */
+html body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	:is(.iz-time-picker-col-btn.is-selected, .iz-hist-select-menu li button.sel) {
+	background: var(--iz-tab-selected-bg, #3e3732);
+	color: var(--iz-tab-selected-ink, #e2cba6);
+	box-shadow: none;
+}
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-hist-select-menu
+	li
+	button {
+	font-size: var(--iz-fs-body);
+}
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-hist-select-trigger:is(.open, :focus-visible) {
+	box-shadow: 0 0 0 3px color-mix(in srgb, #cbb089 18%, transparent);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-collapsible-section.is-open
+	.iz-collapsible-section__chev {
+	border-color: #cbb089;
+	color: #cbb089;
+}
+
+/* ── 25. Disclosures that read as static text or cards (agency / outlet): the
+ * History stat cards that open a breakdown (grey hairline; open = cyan or brown
+ * edge), their "View breakdown" line (grey) and its chevron (did not turn on the
+ * outlet portal), "About these figures" / "AI suggestion" (white with the
+ * browser's triangle), Manage PR's "Attendance and penalty rules" bar, and the
+ * Subscription period rows and PAID / UNPAID filter tiles (no pressed state). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-outlet-shift-log-summary__metric--btn,
+		.iz-agency-pr-management .iz-card:has(> button[aria-expanded]),
+		.iz-card:has(button.iz-between[aria-expanded]),
+		button.iz-card[aria-pressed]
+	) {
+	border-color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-outlet-shift-log-summary__metric--btn,
+		button.iz-card[aria-pressed]
+	):hover:not(:disabled) {
+	border-color: #cbb089;
+	background: color-mix(in srgb, #cbb089 8%, var(--iz-panel, #121116));
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-outlet-shift-log-summary__metric--btn:is(
+				.is-open,
+				[aria-expanded="true"]
+			),
+		button.iz-card[aria-pressed="true"]
+	) {
+	border-color: #cbb089;
+	background: var(--iz-tab-selected-bg, #3e3732);
+	box-shadow: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-card[aria-pressed]
+	p.uppercase {
+	letter-spacing: 0;
+	text-transform: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-hist-breakdown-toggle,
+		.iz-agency-pr-management .iz-card > button[aria-expanded] > b,
+		details:not(.iz-approved-more-filters) > summary
+	) {
+	color: #d9c09a;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-hist-breakdown-toggle .iz-hist-metric-chevron,
+		button.iz-between[aria-expanded] > svg:last-child
+	) {
+	color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	details:not(.iz-approved-more-filters)
+	> summary::marker {
+	color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.is-open, [aria-expanded="true"])
+	> .iz-hist-breakdown-toggle
+	.iz-hist-metric-chevron {
+	transform: rotate(180deg);
+}
+
+/* ── 26. Agency / outlet static text in a meaning colour: Manage Outlet's
+ * "Demand / Supplied" legend and the bold "awaiting PR" (amber), the To do
+ * chips "Drinks / Tips / Services" (amber pills), Manage PR's "22 Active" (green
+ * loose text) and the comcard's height / weight / age (champagne), the section
+ * labels' champagne dash (Profile, Subscription, Settings — headings with an icon
+ * already hide it), the To do heading's champagne icon (an icon: neon), and the
+ * venue eyebrow's fallback "?" (it looked like a help button and did nothing:
+ * Reports, History, Post Job, Calendar). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-manage-card__legend {
+	color: var(--iz-muted2, #a39c93);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-manage-page
+	.iz-card
+	b[class*="iz-amber"] {
+	color: inherit;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-todo__list
+	.iz-alert__chip {
+	border: 1px solid var(--iz-line, #26232c);
+	background: transparent;
+	color: var(--iz-muted, #bdb6ad);
+	font-weight: 400;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-pr-manage-stats__active, .iz-comcard-3d-preview-stats strong) {
+	color: var(--iz-txt, #ebe6df);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-sect-label::before {
+	display: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-todo__title-icon {
+	color: #ff8aa3;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-title-icon--eyebrow:is(
+		.lucide-circle-question-mark,
+		.lucide-circle-help
+	) {
+	display: none;
+}
+
+/* ── 27. Agency / outlet money (DESIGN.md: stateless = sky; settled green;
+ * waiting amber; late red). Manage Outlet's "RM 500/shift", Roster / Live's "Est
+ * payout" and "Est labour cost" are prices with no state; History's totals and
+ * breakdown figures are settled (the breakdown header total was already green, so
+ * one figure showed in two colours); Manage PR's "Paid" figure is paid money, not
+ * champagne; a Payroll voucher's Net takes its row's status. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-outlet-manage-card__rate, .agency-roster-design b.money) {
+	color: var(--iz-money, #7dd3fc);
+	font-variant-numeric: tabular-nums;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-outlet-shift-log-summary__metric--btn
+			.iz-outlet-shift-log-summary__metric-value,
+		.iz-hist-money-breakdown__card-total,
+		.iz-pr-manage-card__metric-value--gold
+	) {
+	color: var(--iz-green, #5ee0a0);
+	font-variant-numeric: tabular-nums;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	tr:has(.iz-pill-amber)
+	> td.iz-money--net {
+	color: var(--iz-amber, #ffb35c);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	tr:has(.iz-pill-green):not(:has(.iz-pill-amber, .iz-pill-red))
+	> td.iz-money--net {
+	color: var(--iz-green, #5ee0a0);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	tr:has(.iz-pill-red)
+	> td.iz-money--net {
+	color: var(--iz-red, #ff6b7a);
+}
+/* one amber for "waiting": the lemon Tailwind amber-300 beside the portal amber
+ * (Subscription's UNPAID tile, due line and header amount vs its "Unpaid" pill) */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.text-amber-300 {
+	color: var(--iz-amber, #ffb35c);
+}
+
+/* ── 28. History's money breakdown (agency + outlet): small 11–14px tracked
+ * capitals coloured cyan and amber on static labels; on the ladder, sentence case,
+ * neutral. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-hist-money-breakdown__metric-label {
+	color: var(--iz-muted, #bdb6ad);
+	font-size: var(--iz-fs-body);
+	letter-spacing: 0;
+	text-transform: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-hist-money-breakdown__card-title,
+		.iz-hist-money-breakdown__card-sub,
+		.iz-hist-money-breakdown__card-total,
+		.iz-hist-money-breakdown__card-total-hint,
+		.iz-hist-money-breakdown__metric-value,
+		.iz-hist-money-breakdown__metric-hint
+	) {
+	font-size: var(--iz-fs-body);
+}
+
+/* ── 29. The opened Payroll voucher (on-screen summary, NOT the printed
+ * .iz-pv-doc) ran at four sizes — 12px labels beside 18px rows — and set
+ * "PAYMENT TO" / "BREAKDOWN" in tracked capitals. One body size, sentence case. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(
+		.iz-pv-summary-lbl,
+		.iz-pv-summary-val,
+		.iz-pv-detail-id,
+		.iz-pv-summary-bank-val,
+		.iz-pv-summary-bank-lbl,
+		.iz-pv-summary-table-h,
+		.iz-pv-summary th,
+		.iz-pv-summary td.iz-money
+	):not(.iz-pv-doc *) {
+	font-size: var(--iz-fs-body);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-pv-summary-bank-lbl, .iz-pv-summary-table-h):not(.iz-pv-doc *) {
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+/* ── 30. Agency / outlet choices that were not champagne: Manage PR's rule
+ * switches were solid settled-green; Subscription's tick-to-pay boxes were native
+ * grey squares; the Subscription "Ask admin for a price" was a second solid fill
+ * with a near-invisible violet-token sparkle (it wrapped to two lines); outlet
+ * Settings' end-partnership bin was grey (a destructive control is red at rest)
+ * while the static building tile beside it was champagne (an icon: neon). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button[aria-pressed].rounded-full.w-11 {
+	background: var(--iz-line2, #34303b);
+	box-shadow: inset 0 0 0 1px #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button[aria-pressed="true"].rounded-full.w-11 {
+	background: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button[aria-pressed="true"].rounded-full.w-11
+	> span {
+	background: #1c160e;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-card
+	input[type="checkbox"] {
+	appearance: none;
+	display: inline-grid;
+	place-content: center;
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	border: 1.5px solid #cbb089;
+	border-radius: 4px;
+	background: transparent;
+	cursor: pointer;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-card
+	input[type="checkbox"]:checked {
+	background:
+		#cbb089
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%231c160e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+		center / 14px no-repeat;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-card
+	input[type="checkbox"]:focus-visible {
+	outline: 2px solid #cbb089;
+	outline-offset: 2px;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button[class*="rgba(139,124,246"] {
+	border-color: #cbb089;
+	background: var(--iz-panel2, #1a181e);
+	color: #d9c09a;
+	white-space: nowrap;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button[class*="rgba(139,124,246"]:hover:not(:disabled) {
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button[class*="rgba(139,124,246"]
+	> svg {
+	color: currentColor;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-muted:has(
+		> svg:is(.lucide-trash-2, .lucide-trash2, .lucide-trash)
+	) {
+	border-color: color-mix(in srgb, #ff6b7a 45%, transparent);
+	color: var(--iz-red, #ff6b7a);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	[class*="text-[var(--iz-gold)]"]:has(> svg.lucide-building-2) {
+	color: #60a5fa;
+}
+
+/* ── 31. Agency / outlet layout. Outlet Calendar's "today" digits spilled out of
+ * an 18px solid disc (a solid fill is the main action's — soft tint); its legend
+ * dot for Past was an old violet — past is neutral (Sealed and Draft: see "Review
+ * leftovers" at the end); Subscription's "Switch to Enterprise" wrapped; Post Job's loading
+ * line was glued to the tabs; Outlet Profile's header sat flush on the rail with
+ * an uppercase eyebrow; the Profile page's "Sign out" was a pill touching
+ * "Outlet settings"; outlet's "Verified" status lost its green (text-success has
+ * no rule in the web app); empty Approvals left one-word orphan lines. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal-day-num--today {
+	box-sizing: border-box;
+	min-width: 28px;
+	height: 28px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--iz-tab-selected-bg, #3e3732);
+	color: var(--iz-tab-selected-ink, #e2cba6);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal {
+	--cal-past: #8a847c;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-plan-row
+	button {
+	white-space: nowrap;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-event-picker__tabs
+	+ p {
+	margin-top: 12px;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-viewport
+	> div
+	> .iz-app-header {
+	padding: 28px 28px 8px;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-viewport
+	> div
+	> .iz-app-header
+	+ div {
+	padding-inline: 28px;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-viewport
+	> div:has(> .iz-app-header)
+	+ div {
+	padding-inline: 28px;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-app-header
+	> p.uppercase {
+	letter-spacing: 0;
+	text-transform: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-viewport
+	> div
+	> .iz-app-header
+	+ div
+	button.rounded-full[class*="border-destructive"] {
+	margin-bottom: 12px;
+	border-radius: var(--iz-radius-m, 10px);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.text-success {
+	color: var(--iz-green, #5ee0a0);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-approvals-list p, .iz-approvals-page p.max-w-xs) {
+	text-wrap: balance;
+}
+
+/* ── 32. Agency / outlet misc. A disabled button kept the pointer (Today's
+ * "Review auto-assignment"); the Today KPI cards are links but had the grey
+ * hairline of a static card (Total PR, Total outlets); the outlet POS add-on's
+ * icon sat on a violet tile; the outlet Subscription / agency Manage PR "View
+ * comcard" covered the second photo's face (it moves to the photo's foot). */
+html body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-btn:disabled {
+	cursor: not-allowed;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	a.iz-portal-kpi {
+	border-color: #cbb089;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	a.iz-portal-kpi:hover {
+	border-color: #cbb089;
+	background: color-mix(in srgb, #cbb089 8%, var(--iz-panel, #121116));
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-pos-addon
+	:is(div, span):has(
+		> svg.lucide-plug,
+		> svg.lucide-plug-2,
+		> svg.lucide-plug-zap
+	) {
+	background: var(--iz-panel2, #1a181e);
+	color: #5eead4;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-gallery-preview {
+	top: auto;
+	bottom: 12px;
+}
+
+/* ── 33. More controls that read as static (all portals): a select box's own
+ * chevron was drawn at 50% opacity (#635649 on admin's RBAC / Outlets filters);
+ * the date pickers' month arrows were bare grey glyphs (Plan Request, Manage
+ * Outlet); "Open team" wrapped in its button (Legacy Member); the member page's
+ * avatar letter was champagne on a static circle; Profile's "Display name" label
+ * was bold off-white beside regular grey labels. */
+html body:is(
+		#iz-tab-wins,
+		[data-admin-design],
+		[data-agency-design],
+		[data-outlet-design]
+	)
+	[data-slot="select-trigger"]
+	svg {
+	opacity: 1;
+}
+html
+	body:is(
+		#iz-tab-wins,
+		[data-admin-design],
+		[data-agency-design],
+		[data-outlet-design]
+	)
+	:is(.rdp-button_previous, .rdp-button_next) {
+	border: 1px solid #cbb089;
+	border-radius: var(--iz-radius-m, 10px);
+	color: #d9c09a;
+	opacity: 1;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-management
+	td
+	[data-slot="button"] {
+	white-space: nowrap;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-detail-hero
+	> span:first-child {
+	color: var(--foreground, #ebe6df);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-profile-fields
+	label {
+	color: var(--muted-foreground, #bdb6ad);
+	font-weight: 400;
+}
+
+/* ── 34. Agency / outlet layout and type, the rest: the roster week grid's day
+ * names, dates and tiers were 11px tracked capitals (Roster); History's filter
+ * row had four different tops and an empty date read "dd-----yyyy" in the value
+ * colour (agency + outlet History); "Not available yet" sat 6–10px under its
+ * title in a full-width strip (Special service); the POS add-on carried a
+ * decorative sparkle (outlet Subscription). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-roster-week-scroll
+	:is(span.dow, span.dom, span.rating) {
+	font-size: var(--iz-fs-body);
+	letter-spacing: 0;
+	text-transform: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-txn-filters {
+	align-items: end;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-txn-filters
+	.iz-hist-select-trigger {
+	min-height: 46px;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	input[type="date"][value=""]::-webkit-datetime-edit {
+	color: var(--iz-muted2, #a39c93);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-screen
+	> header
+	+ .iz-card.text-center {
+	max-width: 40rem;
+	margin-top: 16px;
+	padding: 32px 24px;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-pos-addon
+	svg.lucide-sparkles {
+	display: none;
+}
+
+/* ── 35. Payroll's day / kind filter chips (agency Payroll → Receipts and
+ * Disputes): the SELECTED chip ("All days (2)") kept the old violet fill #372d45
+ * (agency-finance-design.css `.iz-payroll-facet-chip.on`). A selected option is
+ * the soft champagne tint; the unselected chips stay neutral. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-payroll-facet-chip:is(.on, [aria-pressed="true"]) {
+	border-color: transparent;
+	background: var(--iz-tab-selected-bg, #3e3732);
+	color: var(--iz-tab-selected-ink, #e2cba6);
+}
+
+/* ══ Review leftovers, 20 Nov 2026 ═══════════════════════════════════════════════
+ * What the click-through review's first fixer could not reach or reproduce, plus
+ * the owner's two decisions on it. Same rule as above (DESIGN.md §0): what you click
+ * or choose is champagne, the one solid action per page and the rest outlined with a
+ * full #cbb089 edge; icons and charts neon; money with a state green / amber / red,
+ * without one sky; everything static neutral. Every selector carries the
+ * `:is(#iz-tab-wins, …)` weight, so it outranks the class rules it replaces in any
+ * load order. Words, links, routes and buttons' jobs unchanged. */
+
+/* ── L1. Outlet Calendar: the Sealed and Draft states were the old violets
+ * (#d4c4f5 / #a78bfa, prototype-theme.css `--cal-sealed` / `--cal-draft`). Owner's
+ * pick, 20 Nov: NEUTRAL. Sealed is a solid grey state — a filled card, a muted
+ * stripe and words, a muted dot; Draft is a dashed grey outline and a dashed ring in
+ * the legend. Live keeps its green, Confirmed its blue, Past its grey. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal {
+	--cal-sealed: var(--iz-muted, #bdb6ad);
+	--cal-draft: var(--iz-muted2, #a39c93);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal-event--sealed {
+	/* every other card already sits on --iz-panel2, so "solid" is one step up */
+	border-color: var(--iz-line2, #34303b);
+	border-left-color: var(--iz-muted, #bdb6ad);
+	background: var(--iz-line2, #34303b);
+	opacity: 1;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal-event--sealed
+	:is(.iz-outlet-ops-cal-event-time, .iz-outlet-ops-cal-event-title) {
+	color: var(--iz-muted, #bdb6ad);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal-event--draft {
+	border: 1px dashed var(--iz-muted2, #a39c93);
+	background: transparent;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal-legend__swatch.sealed {
+	background: var(--iz-muted, #bdb6ad);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-ops-cal-legend__swatch.draft {
+	box-sizing: border-box;
+	border: 1.5px dashed var(--iz-muted2, #a39c93);
+	background: transparent;
+}
+
+/* ── L2. Outlet Today: "+ Post Job" (header) and the first To do button were two
+ * solid champagne actions on one page. Owner's pick, 20 Nov: the To do's top row
+ * keeps the page's one filled button (DESIGN.md §1/§7) and "+ Post Job" is outlined.
+ * Only while the To do list HAS a row to act on — on an empty list Post Job is the
+ * page's one action again, so the page is never left without its solid button. */
+html body[data-outlet-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal]):has(
+		.iz-todo__list > a.iz-alert:first-child .iz-alert__cta
+	)
+	.iz-approved-header-actions
+	.iz-btn-primary {
+	border: 1px solid #cbb089;
+	background: var(--iz-panel2, #1a181e);
+	color: #d9c09a;
+}
+html
+	body[data-outlet-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal]):has(
+		.iz-todo__list > a.iz-alert:first-child .iz-alert__cta
+	)
+	.iz-approved-header-actions
+	.iz-btn-primary:hover {
+	background: color-mix(in srgb, #cbb089 12%, #1a181e);
+	color: #e8d6b8;
+}
+
+/* ── L3. Agency Today's queue tables (Pending agency review, Disputes, Pending
+ * overtime): every amount waits on someone or is disputed, but was bold lavender
+ * white (#f0eaf8, the old theme's "meta" ink — the other meta cells are static, so
+ * they take the warm off-white). A voucher's Net takes its row's pill; the disputed
+ * "Voucher says" figure is red; overtime awaiting a decision is amber. Each panel is
+ * told apart by the link in its own header (Open Payroll → which tab). */
+html body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-portal-table
+	td.iz-portal-table-meta {
+	color: var(--iz-txt, #ebe6df);
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-queue-panel:has(
+		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
+	)
+	tbody
+	tr
+	> td.iz-portal-table-meta:nth-child(3) {
+	font-variant-numeric: tabular-nums;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-queue-panel:has(
+		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
+	)
+	tbody
+	tr:has(.iz-pill-amber)
+	> td.iz-portal-table-meta:nth-child(3),
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-queue-panel:has(.iz-portal-panel-head a[href*="tab=overtime"])
+	tbody
+	tr
+	> td.iz-portal-table-meta:nth-child(4) {
+	color: var(--iz-amber, #ffb35c);
+	font-variant-numeric: tabular-nums;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-queue-panel:has(
+		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
+	)
+	tbody
+	tr:has(.iz-pill-green):not(:has(.iz-pill-amber, .iz-pill-red))
+	> td.iz-portal-table-meta:nth-child(3) {
+	color: var(--iz-green, #5ee0a0);
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-queue-panel:has(
+		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
+	)
+	tbody
+	tr:has(.iz-pill-red)
+	> td.iz-portal-table-meta:nth-child(3),
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-queue-panel:has(.iz-portal-panel-head a[href*="tab=disputes"])
+	tbody
+	tr
+	> td.iz-portal-table-meta:nth-child(4) {
+	color: var(--iz-red, #ff6b7a);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── L4. Agency History → Paid PVs. A voucher row opens its PDF / Excel / receipt
+ * ("Tap a row…") but wore the grey hairline of a static card: champagne edge, a
+ * hover tint and a champagne chevron. Its Net is paid money (green, like "Total
+ * paid" above it). "Date paid" is a static date — it sat in a green-edged, green
+ * tile under the green Paid pill, the paid signal three times: a quiet line. */
+html body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-agency-voucher-card {
+	position: relative;
+	padding-right: 52px;
+	border-color: #cbb089;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-agency-voucher-card:hover {
+	border-color: #cbb089;
+	background: color-mix(in srgb, #cbb089 8%, var(--iz-panel, #121116));
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-agency-voucher-card::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	right: 18px;
+	width: 18px;
+	height: 18px;
+	margin-top: -9px;
+	background: #cbb089;
+	-webkit-mask:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+	mask:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-agency-voucher-card
+	> .text-right
+	> .iz-ledger {
+	color: var(--iz-green, #5ee0a0);
+	font-variant-numeric: tabular-nums;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-agency-voucher-card
+	.rounded-lg[class*="rgba(52,211,153"] {
+	border-color: var(--iz-line, #26232c);
+	background: transparent;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	button.iz-agency-voucher-card
+	.rounded-lg[class*="rgba(52,211,153"]
+	> p.uppercase {
+	color: var(--iz-muted, #bdb6ad);
+	font-weight: 400;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+/* ── L5. History filter rows with THREE filters (agency Paid PVs; the transaction
+ * log's grid is built for four plus "Clear"): the second and third were pinned to
+ * columns 3 and 4, leaving a ~285px hole after the first. Three filters share three
+ * equal columns. The Paid PVs heading sat centred in its 79px-tall total card, which
+ * left ~100px of dead space under the filters; it now sits at the card's top. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-txn-filters:not(:has(> :nth-child(4))) {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-txn-filters:not(:has(> :nth-child(4)))
+	> * {
+	grid-column: auto;
+	grid-row: auto;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-agency-paid-archive
+	> div:first-child
+	> div {
+	align-items: flex-start;
+}
+/* …and in that row the Date filter's trigger was the one grey-edged control
+ * between two champagne ones: it carries no aria-haspopup, so the selectable rule
+ * at the top of this file missed it. Every history select trigger is outlined. */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-hist-select-trigger.iz-hist-select-trigger {
+	border-color: #cbb089;
+	color: #d9c09a;
+}
+
+/* ── L6. Agency Payroll's two notice cards ("Signed PVs · manual payment",
+ * "Overdue") are static explanations, but one wore a champagne-tinted edge (the
+ * click colour) and the other an amber edge, tint and title (amber means waiting;
+ * a voucher past its payment week is LATE). Both are neutral cards; the word
+ * "Overdue" alone is red. Their `!border-[…]` / `!bg-[…]` are !important inside
+ * @layer utilities, so the override lives there too (see 17). */
+@layer utilities {
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.iz-card.iz-card-flat:is(
+			[class*="!border-[rgba(244,183,64,.4)]"],
+			[class*="!border-[rgba(232,194,122,.3)]"]
+		) {
+		border-color: var(--iz-line, #26232c) !important;
+		background: var(--iz-panel, #121116) !important;
+	}
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-card.iz-card-flat[class*="!border-[rgba(244,183,64,.4)]"]
+	> p:first-child {
+	color: var(--iz-red, #ff6b7a);
+}
+
+/* ── L7. Prices with no state are sky (DESIGN.md §0), and one amount never shows
+ * in two colours. Agency Subscription's rate card (its Current plan above was sky,
+ * the same price below plain — "Renegotiate Price" on the last, Custom, row is
+ * words, not money); a subscription period's opened lines (agency + outlet) follow
+ * their period's own figure — sky not yet due, amber due soon, red overdue; outlet
+ * Workspace's derived RM/HR and OT/HR; admin Plan Change / Plan Request price
+ * columns and Plan Change's before → after plan cards. */
+html body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-plan-row:not(:last-child)
+	> div:nth-child(3),
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-card:has(
+		> div
+			> button[aria-expanded="true"]
+			> span
+			> span.iz-nums[class*="--iz-money"]
+	)
+	> div.mt-2
+	:is(
+		span.shrink-0:not(:has(> .iz-pill-green))
+			> span.iz-sm.font-bold:not(.line-through),
+		div.iz-between > span.iz-sm.font-semibold
+	),
+html
+	body[data-outlet-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	div.min-w-0.justify-center.gap-0\.5:has(> span.tabular-nums.font-semibold)
+	> span {
+	color: var(--iz-money, #7dd3fc);
+	font-variant-numeric: tabular-nums;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-card:has(
+		> div > button[aria-expanded="true"] > span > span.iz-nums.text-amber-300
+	)
+	> div.mt-2
+	:is(
+		span.shrink-0:not(:has(> .iz-pill-green))
+			> span.iz-sm.font-bold:not(.line-through),
+		div.iz-between > span.iz-sm.font-semibold
+	) {
+	color: var(--iz-amber, #ffb35c);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-card:has(
+		> div
+			> button[aria-expanded="true"]
+			> span
+			> span.iz-nums[class*="--iz-red"]
+	)
+	> div.mt-2
+	:is(
+		span.shrink-0:not(:has(> .iz-pill-green))
+			> span.iz-sm.font-bold:not(.line-through),
+		div.iz-between > span.iz-sm.font-semibold
+	) {
+	color: var(--iz-red, #ff6b7a);
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.admin-finance-table
+	td
+	> div.flex-col.leading-tight
+	> span.tabular-nums,
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="sheet-content"]
+	div.flex-1.rounded-md.bg-card
+	> p.text-base.text-muted-foreground {
+	color: var(--iz-money, #7dd3fc);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ── L8. Card rows that did not line up (agency). Manage Outlet's "View venue
+ * details →" bar was width:100% PLUS its 20px side margins, so it ran 19px past
+ * the card's padding and touched the right edge (every card). Manage PR's cards in
+ * one row ended at different heights when a name took two lines, so their Paid /
+ * Att. rows and "View profile" bars sat 28px apart: the cards in a row now share
+ * one height and the figures + bar keep to the bottom. */
+html body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-manage-card
+	> .iz-agency-card-open {
+	align-self: stretch;
+	width: auto;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-pr-manage-grid {
+	align-items: stretch;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-pr-manage-grid
+	> .iz-approved-gallery-item:has(> .iz-pr-manage-card) {
+	display: flex;
+	flex-direction: column;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-pr-manage-grid
+	> .iz-approved-gallery-item
+	> .iz-pr-manage-card {
+	flex: 1 1 auto;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-pr-manage-card
+	> .iz-pr-manage-card__body {
+	flex: 1 1 auto;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-pr-manage-card__body
+	> .iz-pr-manage-card__metrics {
+	margin-top: auto;
+}
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-pr-manage-card__body
+	> :has(+ .iz-pr-manage-card__metrics) {
+	margin-bottom: 20px;
+}
+
+/* ── L9. Manage PR spacing: "Recent penalties" and "Attendance and penalty rules"
+ * sat 44px apart (a 20px card margin on top of the page's 24px gap) against 24px
+ * everywhere else; the opened "More filters" row started 0px under its button. */
+html body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-agency-pr-management
+	> .iz-card
+	+ .iz-card {
+	margin-top: 0;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-approved-more-filters[open]
+	> summary
+	+ * {
+	margin-top: 16px;
+}
+
+/* ── L10. The month / year pop-over calendar (Manage Outlet's date filter,
+ * Roster's planning date, History): "MONTH" / "YEAR" were 12px tracked capitals,
+ * off the 16 · 20 · 24 ladder; the next month's greyed days rendered at 14% opacity
+ * (#2f2e31 on #121116, ~1.4:1, near invisible). Sentence-case captions at the body
+ * step; the other month's days in a quiet grey that still reads (~3:1). */
+html body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-hist-cal-nav-label {
+	color: var(--iz-muted, #bdb6ad);
+	font-size: var(--iz-fs-body);
+	font-weight: 500;
+	letter-spacing: 0;
+	text-transform: none;
+}
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-hist-cal
+	td.rdp-outside {
+	opacity: 1;
+}
+html
+	body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
+	.iz-hist-cal
+	td.rdp-outside
+	button {
+	opacity: 1;
+	color: color-mix(in srgb, #a39c93 55%, transparent);
+}
+
+/* ── L11. Admin layout. Plan's "+ Create Plan" (the page's one action) sat alone on
+ * a second line under the filters with ~420px empty beside them: it shares the
+ * filter row, at its right end. Legacy Member's two card headers spaced title →
+ * description 20px and 0px; a header holding only a title and its description
+ * keeps them together (0px — the 28px title line already leaves air) everywhere.
+ * Outlet / Agency Details' "Approval Status" was a lone 4px left stripe beside the
+ * fully framed "System Information": the same frame as its neighbour. */
+html body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="card-header"]
+	> .space-y-4:has(> .admin-finance-filters + button) {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 16px 12px;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="card-header"]
+	> .space-y-4:has(> .admin-finance-filters + button)
+	> * {
+	margin-block: 0;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="card-header"]
+	> .space-y-4:has(> .admin-finance-filters + button)
+	> :first-child {
+	flex: 1 0 100%;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="card-header"]
+	> .space-y-4
+	> .admin-finance-filters:has(+ button) {
+	flex: 1 1 auto;
+	min-width: 0;
+	width: auto;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	[data-slot="card-header"]
+	> .space-y-4
+	> .admin-finance-filters
+	+ button {
+	flex: none;
+	margin-left: auto;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-management
+	[data-slot="card-header"]:has(
+		> [data-slot="card-title"]:first-child
+			+ [data-slot="card-description"]:last-child
+	) {
+	row-gap: 0;
+}
+html
+	body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
+	.iz-admin-detail-section.border-l-4 {
+	border: 1px solid color-mix(in oklab, var(--lavender-soft) 30%, transparent);
+	padding: 20px;
+}
+
+/* ── L12. Outlet / agency Profile's "Venue" / "Location" rows put the label at the
+ * left and pushed the value to the far right with ml-auto — ~850px apart at desktop,
+ * so the eye lost the row. A label column beside its value, as on the PR profile
+ * (the owner's 20 Nov design for that page, above). */
+html body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.bg-gradient-surface
+	> div.flex.items-center.gap-3:has(> span.ml-auto) {
+	display: grid;
+	grid-template-columns: 16px minmax(96px, 150px) minmax(0, 1fr);
+	column-gap: 12px;
+}
+@media (max-width: 640px) {
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.bg-gradient-surface
+		> div.flex.items-center.gap-3:has(> span.ml-auto) {
+		grid-template-columns: 16px 96px minmax(0, 1fr);
+	}
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.bg-gradient-surface
+	> div.flex.items-center.gap-3
+	> span.ml-auto {
+	margin-left: 0;
+	text-align: left;
+}
+
+/* ── L13. Roster → Planning: the week grid was a 1760px table in a ~1050px box, so
+ * Wed was cut and Thu–Sat (today among them) sat off-screen, with the only sideways
+ * scrollbar at the foot of a ~3,000px-tall grid. Where the box is 1000px or wider
+ * the whole week fits: a narrower name column and tighter cells (a 101px cell keeps
+ * a status such as "NO-SHOW" on one line; a time wraps between its words). Below that it
+ * still scrolls, and the box shows a champagne edge on the side with more days
+ * (the Payroll tables' cue, approved-portal-design.css). */
+html body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-roster-week-scroll {
+	container-type: inline-size;
+	--iz-scroll-edge: color-mix(in srgb, #d9c09a 18%, transparent);
+	background-color: var(--iz-panel, #121116);
+	background-image:
+		linear-gradient(to right, var(--iz-panel, #121116) 30%, transparent),
+		linear-gradient(to left, var(--iz-panel, #121116) 30%, transparent),
+		linear-gradient(to right, var(--iz-scroll-edge), transparent),
+		linear-gradient(to left, var(--iz-scroll-edge), transparent);
+	background-position: left, right, left, right;
+	background-size:
+		40px 100%,
+		40px 100%,
+		16px 100%,
+		16px 100%;
+	background-repeat: no-repeat;
+	background-attachment: local, local, scroll, scroll;
+}
+@container (min-width: 1000px) {
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.iz-roster-week-table {
+		min-width: 0;
+	}
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.iz-roster-week-table
+		:is(.iz-roster-week-col-pr, .iz-roster-week-pr, .iz-roster-week-pr-col) {
+		width: 160px;
+	}
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.iz-roster-week-table
+		.iz-roster-week-pr {
+		padding: 12px;
+	}
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.iz-roster-week-table
+		.iz-roster-week-col-day {
+		width: auto;
+	}
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.iz-roster-week-table
+		.iz-roster-week-td {
+		padding: 4px;
+	}
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		.iz-roster-week-table
+		.iz-roster-week-cell {
+		padding: 8px;
+	}
+}
+
+/* ── L14. History metric tiles (agency + outlet History, all lanes): "TOTAL
+ * RECEIVED" / "TOTAL PAYOUT" were coloured, tracked capitals — a static label
+ * dressed as something you can act on, and the payout's amber read as "waiting".
+ * Owner, 20 Nov: "remember static dont be like too messy colour". The ICON keeps its
+ * neon (it takes the tile's colour through currentColor); the label is a quiet
+ * sentence-case word; the figure is money with no state, so sky. */
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-shift-metric-label__text {
+	color: var(--iz-muted, #bdb6ad);
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-txn-metric
+	.value {
+	color: var(--iz-money, #7dd3fc);
+}
+
+/* ── L15. Outlet Subscription's section titles ("Your plan", "Plans · monthly",
+ * …) were 16px while agency's same page draws them at 20 — one ladder for every
+ * role (owner, 17 Nov: "for the website all roles must follow the same font size"):
+ * a section title is 20. */
+html
+	body[data-outlet-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-outlet-subscription
+	> .iz-sect-label {
+	font-size: var(--iz-fs-title);
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+/* ── L16. Roster Planning: today's day column header still carried the old violet
+ * (`rgba(183,156,232,.14)`, prototype-theme.css). Today is a "you are here" marker,
+ * not something you choose, so it takes the rail's quiet you-are-here tint and ink —
+ * the same signal the menu uses for the page you are on. */
+html
+	body[data-agency-design]
+	.iz-portal:is(#iz-tab-wins, [data-portal])
+	.iz-roster-week-day-col.on {
+	background: var(--iz-rail-here-tint, rgba(203, 176, 137, 0.14));
+	color: var(--iz-rail-here-icon, #e2cba6);
+}
+
+/* ── L17. Paid PV voucher card on a phone: the card stacks into a tall column,
+ * and the "opens" chevron, centred at 50%, floated in the middle of it. On a phone
+ * it sits beside the card's first line, where the eye starts. */
+@media (width < 48rem) {
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		button.iz-agency-voucher-card::after {
+		top: 20px;
+		margin-top: 0;
+	}
+}

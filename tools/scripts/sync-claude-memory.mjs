@@ -113,6 +113,45 @@ function titleFrom(slug) {
 	return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/*
+ * MEMORY.md's budget. A session loads only the FIRST 200 lines of the native
+ * index; everything after is silently invisible — no error, the memory simply
+ * never comes up. 190 leaves room for a few "Newly added" lines between runs.
+ */
+const INDEX_LOAD_LIMIT = 200;
+const INDEX_BUDGET = 190;
+const NEWLY_ADDED = "### Newly added - file these into a section above";
+
+/** A frontmatter description is a paragraph; an index hook is a few words. */
+function shortHook(description) {
+	const hook = (description ?? "")
+		.replace(/\s+/g, " ")
+		.trim()
+		.replace(/^"(.*)"$/, "$1")
+		.replace(/\\"/g, '"');
+	const max = 100;
+	if (hook.length <= max) return hook;
+	const cut = hook.slice(0, max);
+	const space = cut.lastIndexOf(" ");
+	return `${(space > 40 ? cut.slice(0, space) : cut).replace(/[\s,;:(—-]+$/, "")}…`;
+}
+
+/** Report only — never fails the run, because the Stop hook calls this script. */
+function warnIfIndexTooLong(indexPath) {
+	if (!fs.existsSync(indexPath)) return;
+	const lines = fs
+		.readFileSync(indexPath, "utf8")
+		.replace(/\r\n/g, "\n")
+		.replace(/\n+$/, "")
+		.split("\n").length;
+	if (lines <= INDEX_BUDGET) return;
+	console.log(
+		`\nWARNING: MEMORY.md is ${lines} lines (budget ${INDEX_BUDGET}). A session loads only the ` +
+			`first ${INDEX_LOAD_LIMIT}, so every line after that is invisible. File the "Newly added" ` +
+			`entries into sections and pair short related entries on one line with " · ".`,
+	);
+}
+
 function copy(from, to, file) {
 	fs.mkdirSync(to, { recursive: true });
 	fs.copyFileSync(path.join(from, file), path.join(to, file));
@@ -163,6 +202,7 @@ console.log(
 
 if (CHECK_ONLY) {
 	const drift = onlyMirror.length + onlyNative.length + conflicts.length;
+	warnIfIndexTooLong(path.join(NATIVE, INDEX));
 	if (drift === 0) {
 		console.log("\nIn sync.");
 		process.exit(0);
@@ -263,13 +303,27 @@ function rebuildIndex() {
 
 	const missing = [...files].filter((f) => !listed.has(f)).sort();
 	if (missing.length) {
-		while (kept.length && kept[kept.length - 1].trim() === "") kept.pop();
-		kept.push("", "### Newly added - file these into a section above", "");
-		for (const file of missing) {
+		const entries = missing.map((file) => {
 			const fm = frontmatter(path.join(MIRROR, file));
 			const title = titleFrom(fm.name ?? file.replace(/\.md$/, ""));
-			const hook = (fm.description ?? "").replace(/\s+/g, " ").trim();
-			kept.push(`- [${title}](${file})${hook ? ` — ${hook}` : ""}`);
+			const hook = shortHook(fm.description);
+			return `- [${title}](${file})${hook ? ` — ${hook}` : ""}`;
+		});
+		/*
+		 * ONE parking section, however many runs add to it. A fresh heading per run
+		 * is how the native index once carried seven "Newly added" headings, each
+		 * with a whole frontmatter paragraph per line, and passed the 200 lines a
+		 * session loads (20 Nov 2026).
+		 */
+		const at = kept.indexOf(NEWLY_ADDED);
+		if (at >= 0) {
+			let end = at + 1;
+			while (end < kept.length && !/^#{1,6}\s/.test(kept[end])) end += 1;
+			while (end > at + 1 && kept[end - 1].trim() === "") end -= 1;
+			kept.splice(end, 0, ...(end === at + 1 ? ["", ...entries] : entries));
+		} else {
+			while (kept.length && kept[kept.length - 1].trim() === "") kept.pop();
+			kept.push("", NEWLY_ADDED, "", ...entries);
 		}
 	}
 
@@ -289,6 +343,7 @@ function rebuildIndex() {
 			(missing.length ? `, ${missing.length} newly added (file them)` : "") +
 			(dropped ? `, ${dropped} stale line(s) removed` : ""),
 	);
+	warnIfIndexTooLong(path.join(NATIVE, INDEX));
 }
 
 rebuildIndex();

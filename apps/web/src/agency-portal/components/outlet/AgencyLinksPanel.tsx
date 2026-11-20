@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
-import { orgMemberIdStem } from "@/lib/member-code";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { dateLocaleTag } from "@/lib/portal-i18n/date-label";
 import { fill } from "@/lib/portal-i18n/fill";
@@ -271,9 +270,8 @@ export function AgencyLinksPanel({
 									<div className="truncate text-sm font-semibold leading-tight">
 										{link.agencyName}
 									</div>
-									<div className="iz-tiny iz-muted truncate leading-tight">
-										{orgMemberIdStem("agency", link.memberCodePrefix) ?? "—"}
-									</div>
+									{/* No agency ID here (owner, 20 Nov 2026: "no show the agency
+									    ID to outlet, outlet id to agency") — the name is enough. */}
 									{/* The venue is the party left waiting when an agency is
 									    switched off: the partnership still stands, but nobody
 									    there can sign in to answer a request. Saying so here is
@@ -380,8 +378,7 @@ export function AgencyLinksPanel({
 							</option>
 							{addable.map((agency) => (
 								<option key={agency.id} value={agency.id}>
-									{agency.name} ·{" "}
-									{orgMemberIdStem("agency", agency.memberCodePrefix) ?? "—"}
+									{agency.name}
 								</option>
 							))}
 						</select>

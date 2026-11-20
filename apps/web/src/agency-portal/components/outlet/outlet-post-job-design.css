@@ -34,7 +34,7 @@
 	border: 1px solid var(--iz-act-line);
 	border-radius: var(--iz-radius-m, 10px);
 	background: var(--iz-act);
-	color: #fff;
+	color: var(--iz-act-ink, #fff);
 	box-shadow: none;
 }
 .iz-portal[data-portal="outlet"]

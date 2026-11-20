@@ -157,7 +157,7 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 			title: "I can't sign in to the PR app",
 			lines: [
 				"The PR picks the country code, types the mobile number and password, and taps “Sign in”.",
-				"A wrong number and a wrong password get the same answer: “Wrong phone number or password”. Too many wrong tries lock sign-in for some minutes, and the app says how long.",
+				"A number with no account is told “Account not found — please sign up first”; a right number with the wrong password is told “Wrong password”. Too many wrong tries lock sign-in for some minutes, and the app says how long.",
 				"“Forgot password?” lets the PR choose “Phone” or “Email”, enter the 6-digit code, and set a new password of at least 6 characters.",
 			],
 		},
@@ -165,7 +165,7 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 			title: "PR App 登录不了怎么办？",
 			lines: [
 				"PR 选择国家区号，输入手机号码和密码，再点「登录」。",
-				"号码错或密码错都会显示同一句：「手机号码或密码错误」。错太多次会暂时锁定登录几分钟，App 会显示要等多久。",
+				"没有账户的号码会显示「找不到该账户——请先注册」；号码正确但密码错误会显示「密码错误」。错太多次会暂时锁定登录几分钟，App 会显示要等多久。",
 				"点「忘记密码？」，选「手机号」或「电子邮箱」，输入 6 位验证码，再设定至少 6 位的新密码。",
 			],
 		},
@@ -4097,7 +4097,7 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 		en: {
 			title: "Why can't I sign in?",
 			lines: [
-				"“Wrong email or password” (“Wrong phone number or password” in the app): check both, or reset with “Forgot password?” — a reset also lifts a sign-in lock.",
+				"“Account not found”: there is no account for that email or number — sign up as an Outlet or PR Agency (PRs sign up in the app). “Wrong password”: the account exists — check the password or reset it with “Forgot password?”; a reset also lifts a sign-in lock.",
 				"“This account is inactive.” means the login is switched off; a message that your organisation is inactive means InnocenZ switched it off — contact InnocenZ.",
 				"“You cannot access this web portal”: the account has no web portal — PRs use the app.",
 				"“Waiting for approval”: the organisation you asked to join hasn't approved you yet; sign in again once it has.",
@@ -4106,7 +4106,7 @@ export const CHAT_REFERENCE: ReferenceSection[] = [
 		zh: {
 			title: "为什么登录不了？",
 			lines: [
-				"「邮箱或密码错误」（App 中为「手机号码或密码错误」）：请核对两者，或用「忘记密码？」重设 — 重设也会解除登录锁定。",
+				"「找不到该账户」：该邮箱或号码没有账户 — 请注册为门店或 PR 经纪公司（PR 在 App 注册）。「密码错误」：账户存在 — 请核对密码，或用「忘记密码？」重设；重设也会解除登录锁定。",
 				"「该账户已停用。」表示该登录已被停用；提示你的机构已停用，表示 InnocenZ 已停用该机构 — 请联系 InnocenZ。",
 				"「您无法访问此网页门户」：该账号没有网页门户 — PR 请使用 App。",
 				"「等待审批」：你申请加入的机构尚未批准你；批准后重新登录即可。",

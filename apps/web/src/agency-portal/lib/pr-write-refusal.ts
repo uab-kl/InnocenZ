@@ -46,6 +46,14 @@ export const PR_WRITE_SENTENCES: Record<string, Label> = {
 	// `PR_MOBILE_REQUIRED` in backend pr-write-rules.ts — change both together.
 	"A mobile number is required to add a new PR — it is how the PR claims the account at sign-up":
 		(t) => t.managePr.mobileRequired,
+	// `POST /pr/:id/detach-request` — backend pr-detach-rules.ts. Change both together.
+	"A detach request for this PR is already waiting for the InnocenZ admin": (
+		t,
+	) => t.managePr.detachAlreadyRequested,
+	"This PR has been with your agency for a year or more — Detach removes them directly, no admin request needed":
+		(t) => t.managePr.detachNoRequestNeeded,
+	"This PR is no longer on your agency roster": (t) =>
+		t.managePr.detachNotOnRoster,
 };
 
 /** Sentences that say nothing the caller's own fallback does not say better. */
