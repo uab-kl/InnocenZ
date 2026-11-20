@@ -3734,3 +3734,16 @@ html
 	background: var(--iz-rail-here-tint, rgba(203, 176, 137, 0.14));
 	color: var(--iz-rail-here-icon, #e2cba6);
 }
+
+/* ── L17. Paid PV voucher card on a phone: the card stacks into a tall column,
+ * and the "opens" chevron, centred at 50%, floated in the middle of it. On a phone
+ * it sits beside the card's first line, where the eye starts. */
+@media (width < 48rem) {
+	html
+		body[data-agency-design]
+		.iz-portal:is(#iz-tab-wins, [data-portal])
+		button.iz-agency-voucher-card::after {
+		top: 20px;
+		margin-top: 0;
+	}
+}

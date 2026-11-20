@@ -176,7 +176,7 @@ export function PrsTable({
 
 			<CardContent>
 				<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-					<Table className="iz-admin-management-table">
+					<Table className="iz-admin-management-table iz-admin-table--cards-below-xl">
 						<TableHeader>
 							{/*
 							  `table-layout: fixed` split the width evenly, and an even
@@ -190,14 +190,14 @@ export function PrsTable({
 							<TableRow>
 								{/* 22% from 90rem keeps "IC · 900101-14-5678" on one line;
 								    below that it wraps anyway, so Contact gets the room. */}
-								<TableHead className="xl:w-[19%] min-[90rem]:w-[22%]">
+								<TableHead className="lg:w-[19%] min-[90rem]:w-[22%]">
 									{t.admin.colDisplayName} / {t.adminPr.legalName}
 								</TableHead>
 								<TableHead>{t.adminUsers.colContact}</TableHead>
-								<TableHead className="xl:w-[18%]">
+								<TableHead className="lg:w-[18%]">
 									{t.adminPr.agencies}
 								</TableHead>
-								<TableHead className="xl:w-[20%]">
+								<TableHead className="lg:w-[20%]">
 									{t.admin.colStatus} / {t.admin.colCreated}
 								</TableHead>
 								<TableHead>{t.admin.colActions}</TableHead>

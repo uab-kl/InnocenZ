@@ -3065,3 +3065,37 @@ body:has(.login-page.auth-night)
     padding-top: 6.5rem;
   }
 }
+
+/* The site-wide WhatsApp button floats over the bottom 65px of the screen
+   (56px + 9px offset), and on a phone it sat on "Sign up as Outlet or PR Agency".
+   Reserve that strip (plus a 16px gap) at the foot of every night-look page so
+   the last link can always scroll clear of it. */
+@media (width < 48rem) {
+  .login-page.auth-night {
+    padding-bottom: calc(56px + 9px + 16px);
+  }
+}
+
+/* The WhatsApp button sits above everything (z 99998) so it is never lost under
+   page content — but that also put it ON TOP of open pop-ups (z 50): on a phone it
+   covered an option in sign-up's State list. While a list, menu or dialog is open
+   it steps aside, on every page that shows it; it comes back when the pop-up
+   closes. */
+body:has(
+    [data-slot="popover-content"],
+    [data-slot="select-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="dialog-content"],
+    [role="dialog"][data-state="open"]
+  )
+  .whatsapp-fab {
+  visibility: hidden;
+}
+
+/* Sign-in / sign-up pop-up lists (State, ID type, …) drew their options with
+   Tailwind's text-sm — 14.9px here, under the signed-out 16px floor. */
+body:has(.login-page.auth-night)
+  [data-slot="popover-content"]
+  :is(.text-sm, .text-xs, input, button) {
+  font-size: 1rem;
+}

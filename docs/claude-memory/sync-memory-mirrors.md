@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 88bfe12d-2821-45af-978c-7103c199f157
-  modified: 2026-09-22T04:16:36.156Z
+  modified: 2026-11-20T14:45:00.000Z
 ---
 
 ⚠️ **DO NOT RUN THE SYNC UNASKED (owner, 22 Sep 2026).** Seeing 3 changed files appear under
@@ -53,6 +53,18 @@ have. The rules it encodes:
 2. **Union, never overwrite wholesale.** Native-only files go to the repo; repo-only files come back to native. `MEMORY.md` is regenerated as the union of everything, never copied from one side.
 3. **On a conflict, the file that names real code wins** — check the claim against the repo before choosing.
 4. Keep the "InnocenZ project memory" section in repo `CLAUDE.md` current (condensed rules only — CLAUDE.md loads every session). Commit on `jk`; the user pushes/merges to `main` so `git pull` on the other device receives it.
+
+⚠️ **MEMORY.md has a 200-line budget, and a standing conflict silently blows it (20 Nov 2026).** Only
+the first 200 lines of the native `MEMORY.md` load into a session; everything after is invisible
+(no error). What the script actually does with the index: it rebuilds the REPO's `MEMORY.md` (keeps
+every heading and every line with a live link, drops dead ones, parks unlisted files under "Newly
+added"), then COPIES it over the native one — so a line written only into the native index is
+replaced. And it exits on a two-sided conflict BEFORE that rebuild, so while 15 conflicts stood
+(found 20 Nov) the native index never got the repo's compacted one and sat at 240 lines while the
+repo's was 164. Keep it ≤ ~190: one line per entry, short hooks, short related entries paired on one
+line with " · "; file every "Newly added" entry into a section the same day; and resolve conflicts
+(hand-merge, then re-run) rather than leaving the script stuck. The script now prints a WARNING
+when the index passes 190 lines.
 
 **Why both directions (2026-08-13, learned the hard way):** the two stores had silently drifted **13 files apart** — 8 memories existed only in native (`confirm-every-action`, `day-status-lifecycle`, `deploy-blockers`, `dispute-rule`, `mobile-flexible-ui`, `payee-name-format`, `r2-buckets`, `tier-is-per-membership`) and 5 only in the repo (`account-and-phone-rules`, `org-scope-guards`, `rbac-portal-cru`, `receipt-lifecycle`, `run-the-pr-app`), while each `MEMORY.md` indexed only its own half. A one-way copy would have destroyed one side. Two same-named files had also diverged, and in **both** cases the repo copy was the correct one (native still said `features/pr/`, the real path is `features/pr-personnel/`).
 

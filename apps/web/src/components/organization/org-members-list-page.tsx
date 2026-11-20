@@ -407,7 +407,7 @@ export function OrgMembersListPage({
 
 				<CardContent>
 					<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table className="iz-admin-management-table">
+						<Table className="iz-admin-management-table iz-admin-table--cards-below-xl">
 							<TableHeader>
 								{/*
 								  `table-layout: fixed` split the width evenly, and an even
@@ -419,10 +419,10 @@ export function OrgMembersListPage({
 								  ends in "…" (EmailLine) rather than breaking.
 								*/}
 								<TableRow>
-									<TableHead className="xl:w-[18%]">
+									<TableHead className="lg:w-[18%]">
 										{t.admin.colName} / {t.adminOrg.memberCodeLabel}
 									</TableHead>
-									<TableHead className="xl:w-[18%]">
+									<TableHead className="lg:w-[18%]">
 										{isAgency ? t.adminOrg.agencyName : t.adminOrg.venue} /{" "}
 										{/* Kept whole so a narrow header breaks at the "/",
 										    not inside "Sub-role". */}
@@ -431,7 +431,7 @@ export function OrgMembersListPage({
 										</span>
 									</TableHead>
 									<TableHead>{t.adminUsers.colContact}</TableHead>
-									<TableHead className="xl:w-[21%]">
+									<TableHead className="lg:w-[21%]">
 										{t.admin.colStatus} / {t.admin.colCreated}
 									</TableHead>
 									<TableHead>{t.admin.colActions}</TableHead>

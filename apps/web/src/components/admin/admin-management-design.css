@@ -341,3 +341,54 @@ body[data-admin-design] .iz-admin-member-detail li {
 		padding: 20px 16px;
 	}
 }
+
+/* The three dense lists — PR, Agency / Outlet Members, Legacy Member — carry five
+   columns of IDs, IC numbers and phone numbers. Between 768px and 1279px the
+   table had ~700px for them, and every member ID and phone number broke in two
+   ("INNALAGY / 0001", "+6012795 / 7536") whatever the column split. In that range
+   they use the phone's labelled two-column cards instead, so every number stays
+   whole; from 1280 they are the table again. Same cells, labels and order. */
+@media (min-width: 768px) and (max-width: 1279px) {
+	body[data-admin-design] .iz-admin-table--cards-below-xl,
+	body[data-admin-design] .iz-admin-table--cards-below-xl tbody {
+		display: block;
+		width: 100%;
+		min-width: 0;
+	}
+	body[data-admin-design] .iz-admin-table--cards-below-xl thead {
+		display: none;
+	}
+	body[data-admin-design] .iz-admin-table--cards-below-xl tbody tr {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-auto-flow: row dense;
+		gap: 16px;
+		padding: 20px 16px;
+	}
+	body[data-admin-design] .iz-admin-table--cards-below-xl td {
+		display: block;
+		padding: 0;
+		min-width: 0;
+		max-width: 100%;
+		border: 0;
+	}
+	body[data-admin-design] .iz-admin-table--cards-below-xl td:first-child,
+	body[data-admin-design] .iz-admin-table--cards-below-xl td:last-child,
+	body[data-admin-design] .iz-admin-table--cards-below-xl td[colspan],
+	body[data-admin-design] .iz-admin-table--cards-below-xl td:has([title*="@"]) {
+		grid-column: 1 / -1;
+	}
+	body[data-admin-design]
+		.iz-admin-table--cards-below-xl
+		td[data-label]::before {
+		content: attr(data-label);
+		display: block;
+		margin-bottom: 8px;
+		color: var(--muted-foreground);
+		font-size: var(--iz-fs-tiny, 0.875rem);
+	}
+	body[data-admin-design] .iz-admin-table--cards-below-xl td[colspan] {
+		height: auto;
+		min-height: 96px;
+	}
+}

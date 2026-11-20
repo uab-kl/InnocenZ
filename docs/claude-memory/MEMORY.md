@@ -18,6 +18,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [Status colour](innocenz-status-colour-code.md) — green settled, amber waiting, red disputed
 - [Portal colour rule](portal-colour-rule.md) — STANDING: champagne=press, neon=icons/charts, money=state/sky, static=neutral
 - [Buttons](innocenz-portal-button-colours.md) — superseded by the colour rule above (history)
+- [Show less](show-less-only-what-matters.md) — STANDING: show only what the reader must act on; never a fact twice
 - [Mobile UI](innocenz-mobile-flexible-ui.md) — flex to any phone; safe-area insets
 - [Payee](innocenz-payee-name-format.md) — "(Nick) Full Name" via formatPayeeLabel
 - [Confirm actions](innocenz-confirm-every-action.md) — show the server's success sentence
@@ -94,7 +95,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [Agency reads](agency-read-paths-ungated.md) — PR token read IC rosters
 - [Router sweep](ungated-router-sweep.md) — 25 routers' gates audited
 - [Hash leak](user-list-hash-leak.md) — FIXED: GET /user sent hashes
-- [Outlet privacy](outlet-privacy-decision-wired-to-one-route.md) — per ACCOUNT, not console
+- [Outlet privacy](outlet-privacy-decision-wired-to-one-route.md) — failed 3×; the per-console fix is NOT in code (20 Nov)
 - [Foreign tier](outlet-read-a-foreign-agencys-tier.md) — scope the fact, not rows
 - [Oldest row](oldest-membership-was-the-agency.md) — FIXED: isn't the agency
 - [IC fields](ic-authority-is-field-scoped.md) — IC wins for dob, not gender
@@ -138,7 +139,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [Vite build](vite-build-was-a-development-build.md) — prod flag from NODE_ENV · [Biome](biome-scope-and-mobile-style.md) — apps/web only
 - [Shared checkout](shared-checkout-git-state-moves.md) — git state moves; CRLF · [Truncate](truncate-on-open-destroys-the-file.md) — encode, temp, replace
 - [Remote sessions](read-remote-claude-session-history.md) — fetch via Chrome
-- [Shared ports](dev-ports-shared-with-other-projects.md) — another project on 3000/7777/8081: refuse, never kill or reuse
+- [Shared ports](dev-ports-shared-with-other-projects.md) — another project on 3000/7777/8081: refuse it; kill only this checkout's processes
 ### The codebase, screen by screen
 - [PR wiring](pr-mobile-backend-wiring.md) — /mine pattern; all wired · [PR app](innocenz-pr-mobile-app.md) — apps/mobile = PR app
 - [PR signup](pr-signup-mobile.md) — 6-step mobile wizard · [Admin backlog](innocenz-admin-backlog.md) — per-tab auth pinning
@@ -148,7 +149,7 @@ Rules: `CLAUDE.md`. One line per file; the file holds the detail.
 - [Row clamp](auto-assign-100-row-clamp.md) — FIXED: pageSize cut 7 queries · [Dedupe](dedupe-survivor-became-an-address.md) — FIXED: DISTINCT ON lost an agency
 - [Demo slices](outlet-panel-reads-demo-slices.md) — outlet Today read DEMO · [Post Job next](outlet-post-job-next.md) — write vs request call
 - [Post Job](outlet-post-job-today-calendar.md) — DONE; Today vs Calendar · [Post Job menu](post-job-read-demo-menu-not-backend.md) — read demo, not backend
-- [Link marks hubs current](tanstack-link-prefix-active.md) — router stamps aria-current by prefix; hubs need exact
+- [Link marks hubs current](tanstack-link-prefix-active.md) — aria-current by prefix; hubs need exact · [CSS load order](css-override-load-order-trap.md) — Vite reorders; outrank, never rely on order
 - [Outlet reads](outlet-shift-read-access.md) — History wired · [Outlet swap](outlet-swap-feature-build.md) — BUILT end-to-end
 - [PR card](pr-card-att-paid-live.md) — Att./Paid from real rows · [Roster wiring](roster-backend-wiring.md) — PR→shift→assignment→PV
 - [Roster Live](roster-live-tab-and-pr-mobile-scoping.md) — reads the backend · [Workspace](workspace-rating-verified-merged.md) — + Ratings, merged

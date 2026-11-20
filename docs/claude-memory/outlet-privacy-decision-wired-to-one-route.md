@@ -1,11 +1,11 @@
 ---
 name: outlet-privacy-decision-wired-to-one-route
-description: "Outlet PR-privacy redaction failed 3 times — wired to one route (3 Sep), and decided per ACCOUNT not per console (7 Oct: dual-role venue console got IC/DOB/GPS). Carries the two-sided proof"
+description: "Outlet PR-privacy redaction failed 3 times — wired to /user only (3 Sep: /pr shipped icNo + dob, /shift-assignment cancel fees + GPS; fixed), then decided per ACCOUNT not per console (7 Oct: dual-role venue console got IC/DOB/GPS — that fix is NOT in this checkout, re-checked 20 Nov). Carries the two-sided proof"
 metadata: 
   node_type: memory
   type: project
   originSessionId: 121dc04c-c50c-4d26-84cc-8792fe6d88e7
-  modified: 2026-09-03T02:38:38.659Z
+  modified: 2026-11-20T14:45:00.000Z
 ---
 
 **🟢 FIXED the same day — see "The fix" at the end for what shipped and how it was proven.**
@@ -102,6 +102,17 @@ How it was proven: `_probe-dual-console-redaction.ts --local` mounts the CHECKOU
 runs whatever started it, so it cannot prove an uncommitted fix); `_probe-outlet-privacy-sweep.ts`
 now mints (`PROBE_MINT_EMAIL`) and sends console headers, so a dual-role person can be swept as the
 venue — 55 routes, nothing else of this class.
+
+⚠️ **Re-checked 20 Nov 2026 against this checkout (`jk`): the 7 Oct fix is NOT in the code.**
+`middlewares/redact-identity-docs.ts` still decides per ACCOUNT (`req.redactIdentityDocs =
+!privileged && isOutlet`, no `x-org-kind` read); `pr.controller.ts` `list` gives a venue-scope
+caller (`isOutletCaller`) the bare `prs` arm, redacted only when that flag is set; `activeOrgForPath`
+and `_probe-dual-console-redaction.ts` exist nowhere — not in the tree and not in `git log --all -S`;
+`_probe-outlet-privacy-sweep.ts` has no `PROBE_MINT_EMAIL` and sends no console headers. So for a
+dual-role account the venue console still gets IC/DOB on `/pr` and fines/GPS on `/shift-assignment`.
+Treat the third failure as OPEN here until that fix is committed (it was probably left uncommitted
+on the other device — check there before rebuilding it). The 3 Sep fix above still holds
+(`util/outlet-redaction.ts`, the four routes wired).
 
 Related: [[pr-spend-excluded-commission]] (the deduction rule that prompted this),
 [[org-scope-guard-family]], [[outlet-read-a-foreign-agencys-tier]], [[agency-read-paths-ungated]].

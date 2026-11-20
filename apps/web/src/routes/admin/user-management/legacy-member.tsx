@@ -1184,7 +1184,7 @@ function LegacyMemberPage() {
 				</CardHeader>
 				<CardContent>
 					<div className="iz-admin-management-scroll overflow-x-auto rounded-lg border border-(--lavender-soft)/30">
-						<Table className="iz-admin-management-table">
+						<Table className="iz-admin-management-table iz-admin-table--cards-below-xl">
 							<TableHeader>
 								{/*
 								  `table-layout: fixed` split the width evenly, and an even
@@ -1194,14 +1194,14 @@ function LegacyMemberPage() {
 								  Narrower, a long address ends in "…" (EmailLine) instead.
 								*/}
 								<TableRow>
-									<TableHead className="xl:w-[18%]">
+									<TableHead className="lg:w-[18%]">
 										{t.admin.colName} / {t.adminUsers.colCodeId}
 									</TableHead>
 									<TableHead>{t.adminUsers.colContact}</TableHead>
-									<TableHead className="xl:w-[18%]">
+									<TableHead className="lg:w-[18%]">
 										{t.admin.colStatus}
 									</TableHead>
-									<TableHead className="xl:w-[21%]">
+									<TableHead className="lg:w-[21%]">
 										{t.adminUsers.colUpdated}
 									</TableHead>
 									<TableHead>{t.admin.colActions}</TableHead>

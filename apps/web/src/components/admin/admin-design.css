@@ -1280,3 +1280,53 @@ body[data-admin-design] [data-sonner-toast][data-removed="true"] {
 	opacity: 0 !important;
 	transition: none !important;
 }
+
+/* Dashboard · Latest registrations. Laid out by the SECTION's own width, not the
+   window's: at 1280 the dashboard puts it in a 555px column, where five columns
+   wrapped the type chip onto 2 lines and the date onto 4, and a phone gave every
+   cell a line of its own. Below 56rem of section it is a two-line card — name
+   and Review on the first line, type · date · status on the second; from 56rem
+   it is the table, header and rows on the SAME fixed columns so they line up.
+   Same five cells, same words, same order in the markup. */
+body[data-admin-design] .iz-admin-registrations {
+	container-type: inline-size;
+}
+body[data-admin-design] .iz-admin-reg-head {
+	display: none;
+}
+body[data-admin-design] .iz-admin-reg-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	column-gap: 16px;
+	row-gap: 8px;
+}
+body[data-admin-design] .iz-admin-reg-name {
+	order: 1;
+	/* leaves just the Review link beside it, so type / date / status wrap below */
+	flex: 1 1 calc(100% - 9rem);
+}
+body[data-admin-design] .iz-admin-reg-action {
+	order: 2;
+	flex: 0 0 auto;
+	margin-left: auto;
+	text-align: right;
+}
+body[data-admin-design]
+	.iz-admin-reg-row
+	> :is(.iz-admin-reg-type, .iz-admin-reg-date, .iz-admin-reg-status) {
+	order: 3;
+	white-space: nowrap;
+}
+@container (min-width: 56rem) {
+	body[data-admin-design] :is(.iz-admin-reg-head, .iz-admin-reg-row) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 12.5rem 11.5rem 8rem 96px;
+		align-items: center;
+		column-gap: 12px;
+	}
+	body[data-admin-design] .iz-admin-reg-row > * {
+		order: 0;
+		margin-left: 0;
+	}
+}
