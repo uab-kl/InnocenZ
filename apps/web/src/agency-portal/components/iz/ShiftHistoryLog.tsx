@@ -673,7 +673,7 @@ export function ShiftHistoryLog({
 						<div>
 							<button
 								type="button"
-								className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
+								className="iz-chip iz-sheet-return mb-2 !px-2 !py-1 !text-[10px]"
 								onClick={
 									portal === "outlet" || !detailPrVenue
 										? closePrDetail
@@ -869,7 +869,7 @@ export function ShiftHistoryLog({
 						<div>
 							<button
 								type="button"
-								className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
+								className="iz-chip iz-sheet-return mb-2 !px-2 !py-1 !text-[10px]"
 								onClick={() => setDetailVenue(null)}
 							>
 								← {t.common.back}
@@ -1095,7 +1095,7 @@ export function OutletPrShiftHistorySheet({
 				<div>
 					<button
 						type="button"
-						className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
+						className="iz-chip iz-sheet-return mb-2 !px-2 !py-1 !text-[10px]"
 						onClick={onClose}
 					>
 						← {t.common.back}
