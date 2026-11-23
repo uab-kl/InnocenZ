@@ -252,7 +252,9 @@ and `TEST_SCRIPT.md` **§11 What's new** — into
   collapsible headers, back/Return, focus, ticks, coloured borders) = **champagne** — the
   one action solid `#cbb089` with dark ink, every other control outlined, a selection the
   soft tint `#3e3732`. Icons and charts = **neon**. Money with a state = green / amber /
-  red (the code above); money with none (a price, a total) = sky `--iz-money`. **Everything
+  red (the code above); money with none (a price, a total) = sky `--iz-money` — except that
+  where RECEIVED and PAYOUT stand side by side (History), payout / take-home is **violet**
+  `--iz-money-out` (owner, 23 Nov 2026: "the received and payout different colour"). **Everything
   static — text, cards, labels, unselected options — stays neutral; never colour it.** Ask
   "can you press it?" before giving anything colour. Lives in `styles/afterglow.css`;
   DESIGN.md §0 has the table; verify with a computed-colour audit of every control.

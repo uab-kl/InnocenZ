@@ -120,6 +120,7 @@ RM make more obvious colour"*:
 | **Icons and charts** — rail icons (one neon per destination), To do tiles (one per kind), admin page icons, the Reports chart (gains neon green, losses neon red) | **Neon** |
 | Money **with a state** | green settled · amber waiting · red late (the status code) |
 | Money **without** one — a price, a total not yet due | **Sky** `#7dd3fc` (`--iz-money`), which carries no status meaning |
+| **Payout / take-home** beside Received (History boxes, tiles, a shift's figure, breakdown totals; its icon too) | **Violet** `#c4b5fd` (`--iz-money-out`) — owner, 23 Nov 2026: "the received and payout different colour". Means nothing else; Received stays sky |
 | Labels, chips, unselected options | Neutral |
 
 The accent tokens (`--iz-gold`, `--iz-violet`, `--iz-accent`, `--primary`, `--ring`,

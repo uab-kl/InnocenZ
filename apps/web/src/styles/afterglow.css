@@ -4431,3 +4431,64 @@ html body[data-agency-design]
 		text-align: start;
 	}
 }
+
+/* ── L19. RECEIVED and PAYOUT told apart by colour (owner, 23 Nov 2026:
+ * "differentiate and the received and payout different colour" — on History both
+ * boxes were green and both tiles sky, so the eye could not tell money in from
+ * money out). Received = sky, the portals' money colour; payout / take-home /
+ * wages = VIOLET, chosen because it means nothing else here: green settled, amber
+ * waiting, red disputed, champagne clickable. Every place the pair appears — the
+ * big boxes, the per-outlet / per-PR tiles, a shift's own figure, the outlet
+ * portal's cards and an opened breakdown's total — and the payout ICON turns
+ * violet with its figure, so each tile's icon and amount carry one colour (the
+ * received icon is already cyan beside the sky figure). Line items inside a
+ * breakdown keep their own colours (a deduction stays red). */
+html body:is([data-agency-design], [data-outlet-design]) {
+	--iz-money-out: #c4b5fd;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
+	:is(
+		.iz-txn-metric.earned .value,
+		.iz-txn-metric.payout .value,
+		.iz-outlet-shift-log-summary__metric.iz-outlet-shift-log-summary__metric--payout
+			.iz-outlet-shift-log-summary__metric-value,
+		.iz-outlet-shift-log-card__metric.iz-outlet-shift-log-card__metric--payout
+			.iz-outlet-shift-log-card__metric-value,
+		.iz-outlet-hist-metric.iz-outlet-hist-metric--payout
+			.iz-outlet-hist-metric__value,
+		.iz-hist-money-breakdown.iz-hist-money-breakdown--payout
+			.iz-hist-money-breakdown__card-total,
+		.iz-hist-shift-payout
+	) {
+	color: var(--iz-money-out);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
+	:is(
+		.iz-outlet-shift-log-summary__metric.iz-outlet-shift-log-summary__metric--received
+			.iz-outlet-shift-log-summary__metric-value,
+		.iz-outlet-shift-log-card__metric.iz-outlet-shift-log-card__metric--received
+			.iz-outlet-shift-log-card__metric-value,
+		.iz-outlet-hist-metric.iz-outlet-hist-metric--received
+			.iz-outlet-hist-metric__value,
+		.iz-hist-money-breakdown.iz-hist-money-breakdown--received
+			.iz-hist-money-breakdown__card-total
+	) {
+	color: var(--iz-money, #7dd3fc);
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-shift-metric-label--payout, .iz-shift-metric-label--earned) {
+	color: var(--iz-money-out);
+}

@@ -691,11 +691,17 @@ export function ShiftHistoryLog({
 											venue: venueLabel,
 										})}
 							</p>
-							<h3>
-								{portal === "outlet"
-									? detailOutletName || detailPr.prName
-									: (detailPrVenue ?? detailPr.prName)}
-							</h3>
+							{portal === "agency" && detailPrVenue ? (
+								<OutletNameWithLogo venue={detailPrVenue}>
+									<h3>{detailPrVenue}</h3>
+								</OutletNameWithLogo>
+							) : (
+								<h3>
+									{portal === "outlet"
+										? detailOutletName || detailPr.prName
+										: (detailPrVenue ?? detailPr.prName)}
+								</h3>
+							)}
 						</div>
 						<button
 							type="button"
@@ -827,10 +833,18 @@ export function ShiftHistoryLog({
 											flat
 											className="!mb-0 w-full text-left transition-colors hover:border-[var(--iz-gold-d)]"
 										>
-											<div className="iz-between items-start gap-2">
-												<p className="iz-heading text-sm font-bold">
-													{rollup.venue}
-												</p>
+											<div className="iz-between items-center gap-2">
+												{portal === "agency" ? (
+													<OutletNameWithLogo venue={rollup.venue}>
+														<p className="iz-heading text-sm font-bold">
+															{rollup.venue}
+														</p>
+													</OutletNameWithLogo>
+												) : (
+													<p className="iz-heading text-sm font-bold">
+														{rollup.venue}
+													</p>
+												)}
 												<span className="iz-tiny iz-muted2 flex items-center gap-1">
 													{fill(
 														rollup.shiftCount === 1
@@ -881,7 +895,13 @@ export function ShiftHistoryLog({
 										})
 									: t.izPv.prBreakdown}
 							</p>
-							<h3>{detailOutletRollup.venue}</h3>
+							{portal === "agency" ? (
+								<OutletNameWithLogo venue={detailOutletRollup.venue}>
+									<h3>{detailOutletRollup.venue}</h3>
+								</OutletNameWithLogo>
+							) : (
+								<h3>{detailOutletRollup.venue}</h3>
+							)}
 						</div>
 						<button
 							type="button"
@@ -958,6 +978,33 @@ export function ShiftHistoryLog({
 	);
 }
 
+/**
+ * An outlet's name with its logo in front (owner, 23 Nov 2026: "for the outlet
+ * logo, to make user know win which outlet") — the same tile the By-outlet cards
+ * use. AGENCY ONLY: the lookup reads the agency's outlet list (the shared
+ * `["agency","outlets",…]` query, so no request of its own), so the outlet portal,
+ * which shares this file, never mounts it. No logo → the map pin, never a guess.
+ */
+function OutletNameWithLogo({
+	venue,
+	children,
+}: {
+	venue: string;
+	children: ReactNode;
+}) {
+	const logoFor = useAgencyOutletLogos();
+	return (
+		<div className="flex min-w-0 items-center gap-2.5">
+			<OutletLogoTile
+				logo={logoFor(venue)}
+				className="iz-roster-demand-outlet-logo"
+				iconClassName="h-5 w-5"
+			/>
+			{children}
+		</div>
+	);
+}
+
 function ShiftHistoryShiftCard({
 	row,
 	portal = "agency",
@@ -990,7 +1037,7 @@ function ShiftHistoryShiftCard({
 					</p>
 				</div>
 				<div className="text-right">
-					<div className="iz-heading text-sm font-bold text-[var(--iz-gold-l)]">
+					<div className="iz-heading iz-hist-shift-payout text-sm font-bold text-[var(--iz-gold-l)]">
 						{formatRM(breakdown.totalPayout)}
 					</div>
 					<ShiftHoursLine
