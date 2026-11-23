@@ -81,7 +81,21 @@ export function ManagePrGridCard({
 					!active && "iz-pr-manage-card--inactive",
 					flags.suspendStreak && active && "iz-pr-manage-card--warn-border",
 				)}
-				onClick={onActivate}
+				onClick={(e) => {
+					// The comcard PICTURE opens the comcard, like its button (owner,
+					// 23 Nov 2026: "if the user click comcard … it will jump view
+					// comcard also"). Anywhere else — and Enter / Space, whose target
+					// is the card itself — still opens the profile; select mode
+					// still just picks.
+					if (
+						!selectMode &&
+						(e.target as HTMLElement).closest?.(".iz-pr-manage-card__visual")
+					) {
+						setComcardOpen(true);
+						return;
+					}
+					onActivate();
+				}}
 				aria-pressed={selectMode ? picked : undefined}
 			>
 				{selectMode && (

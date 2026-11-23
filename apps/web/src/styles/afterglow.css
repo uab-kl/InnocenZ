@@ -18,6 +18,19 @@
  * selected tab. Everything else — links, icons, charts, glow — stays NEON ("only the
  * button A · Champagne colour · the graph, icon can be neon and more colourful").
  * Sizes stay on the owner's 16 / 20 / 24 ladder (the --iz-fs-* tokens are untouched).
+ *
+ * ⚠️ SCOPE — the page AND its pop-ups (23 Nov 2026). Page rules are written
+ *   `:is(.iz-portal, .iz-sheet-wrap):is(#iz-tab-wins, [data-portal], .iz-sheet-wrap)`,
+ * never `.iz-portal:is(#iz-tab-wins, [data-portal])` alone: IzSheet portals to <body>,
+ * OUTSIDE .iz-portal, so a rule scoped to the portal alone never reaches a sheet. That
+ * is how every pop-up kept the pre-Afterglow look — grey "← Return" and ×, capital
+ * cyan / amber "RECEIVED" / "PAYOUT", white amounts — beside a page already in
+ * champagne and sky (owner, 23 Nov: "received and payout colour different"; "why
+ * that inside still no yet champangne colour for the button clickable * make sure all
+ * clickable"). Same specificity (1,1,0) as before; plain `.iz-portal` likewise became
+ * `:is(.iz-portal, .iz-sheet-wrap)`. Page-only, on purpose: the two Outlet-Today
+ * `:has()` header rules (they test for the page's own To do list) and the side menu's
+ * rules such as L18 (no sheet contains the menu).
  */
 
 /* ── Shared by all three portals (body scope, so pop-ups see it too) ───────── */
@@ -625,7 +638,7 @@ html body .iz-todo__list .iz-alert__icon.lucide-clipboard-check {
  * to 2.25:1 (muted text, phone width — the 20 Nov gradient-aware sweep). At 18% the
  * edge still shows, and every text role under it stays at 4.7:1 or more. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	:is(.iz-approved-voucher-table-scroll, .iz-approved-table-scroll) {
 	--iz-scroll-edge: color-mix(in srgb, #d9c09a 18%, transparent);
 }
@@ -655,7 +668,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -667,7 +684,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -679,7 +700,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -695,7 +720,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -712,7 +741,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -724,7 +757,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -736,7 +773,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -748,7 +789,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -760,7 +805,11 @@ html
 :is(
 		html
 			body:is([data-agency-design], [data-outlet-design])
-			.iz-portal:is(#iz-tab-wins, [data-portal])
+			:is(.iz-portal, .iz-sheet-wrap):is(
+				#iz-tab-wins,
+				[data-portal],
+				.iz-sheet-wrap
+			)
 			.iz-portal-nav-link,
 		html
 			body[data-admin-design]:is(#iz-tab-wins, [data-admin-design])
@@ -857,7 +906,7 @@ html
 /* Approvals: the request you are looking at is SELECTED — the soft champagne of a
  * selected tab with a champagne edge, not the old violet (#372d45) (review, 20 Nov). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	:is(
 		.iz-approvals-page .iz-approvals-list-item.on,
 		.iz-approvals-sidebar .iz-approvals-member-row.on
@@ -904,16 +953,31 @@ html body[data-admin-design] [data-slot="button"].iz-admin-signout {
 }
 
 /* "Return" / back buttons inside detail views and sheets (owner, 20 Nov 2026,
- * on outlet detail's "← Return"): a button, so the outlined champagne. */
+ * on outlet detail's "← Return"): a button, so the outlined champagne.
+ * The sheets' text "← Return" chip (.iz-sheet-return) and their × (.iz-sheet-close)
+ * joined on 23 Nov 2026 — owner: "why that inside still no yet champangne colour for
+ * the button clickable * make sure all clickable". */
 html body:is([data-agency-design], [data-outlet-design])
-	:is(.iz-topbar-back, .iz-post-job-return, .iz-sheet-back) {
+	:is(
+		.iz-topbar-back,
+		.iz-post-job-return,
+		.iz-sheet-back,
+		.iz-sheet-return,
+		.iz-sheet-close
+	) {
 	border: 1px solid #cbb089;
 	background: var(--iz-panel2);
 	color: #d9c09a;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	:is(.iz-topbar-back, .iz-post-job-return, .iz-sheet-back):hover {
+	:is(
+		.iz-topbar-back,
+		.iz-post-job-return,
+		.iz-sheet-back,
+		.iz-sheet-return,
+		.iz-sheet-close
+	):hover {
 	border-color: #cbb089;
 	color: #e8d6b8;
 }
@@ -932,7 +996,7 @@ html body:is([data-agency-design], [data-outlet-design])
  * act colour, so six solid buttons sat on one page. They are outlined; the page keeps
  * one solid action. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	.iz-approved-plan-row
 	button:not(:disabled) {
 	border: 1px solid #cbb089;
@@ -941,7 +1005,7 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	.iz-approved-plan-row
 	button:not(:disabled):hover {
 	background: color-mix(in srgb, #cbb089 12%, #1a181e);
@@ -949,7 +1013,7 @@ html
 /* Manage Outlet's "View venue details": agency-management-design.css drew it grey at
  * a strength the first champagne rule did not reach. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal[data-portal]
+	:is(.iz-portal[data-portal], .iz-sheet-wrap)
 	.iz-agency-card-open {
 	border-color: #cbb089;
 	color: #d9c09a;
@@ -957,7 +1021,7 @@ html body:is([data-agency-design], [data-outlet-design])
 /* Old violet left on outlet cards (events pill, Today tile) and Post Job's event
  * template cards (#241f30 bodies): neutral surfaces. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	.iz-outlet-manage-card__events {
 	border-color: var(--iz-line);
 	background: var(--iz-panel2);
@@ -965,20 +1029,20 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	.iz-outlet-manage-card__kpi-box--today {
 	border-color: var(--iz-line);
 	background: rgba(0, 0, 0, 0.22);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	.iz-event-card {
 	background: var(--iz-panel);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	.iz-event-card__placeholder {
 	background: linear-gradient(135deg, var(--iz-panel2), var(--iz-panel));
 }
@@ -1008,14 +1072,14 @@ html body[data-agency-design]
 /* Outlet Profile: the avatar letter floated with no circle (its utilities never
  * reached the portal) — a raised circle and cards, no glow. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	:is(.bg-gradient-primary, .bg-gradient-surface) {
 	border: 1px solid var(--iz-line);
 	background: var(--iz-panel2);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	.shadow-glow {
 	box-shadow: none;
 }
@@ -1023,7 +1087,7 @@ html
  * editable" pointed at nothing. Every editable input in a table gets the champagne
  * box; read-only cells stay plain. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal
+	:is(.iz-portal, .iz-sheet-wrap)
 	table
 	input:not([readonly], :disabled, [type="checkbox"], [type="radio"]) {
 	border: 1px solid #cbb089;
@@ -1451,6 +1515,8 @@ html body:is([data-admin-design], [data-agency-design], [data-outlet-design])
 		.iz-topbar-back,
 		.iz-post-job-return,
 		.iz-sheet-back,
+		.iz-sheet-return,
+		.iz-sheet-close,
 		.iz-portal-collapse-toggle,
 		.iz-outlet-ops-cal-nav-btn,
 		[data-slot="select-trigger"],
@@ -1615,7 +1681,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link.on {
 	background: var(--iz-tab-selected-bg, #3e3732);
@@ -1623,7 +1693,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link:not(.on, .iz-portal-sign-out) {
 	color: var(--iz-txt, #ebe6df);
@@ -1633,7 +1707,11 @@ html
 	.admin-sidebar-nav-item:not(.admin-sidebar-nav-item-active):hover,
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link:not(.on, .iz-portal-sign-out):hover {
 	color: var(--iz-txt, #ebe6df);
@@ -1643,7 +1721,11 @@ html
  * #14111d (DESIGN.md: the rail sits on the canvas, as admin's does) and admin's
  * identity card #1c1824 (every page). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar {
 	background: #0b0a0d;
 }
@@ -1669,7 +1751,11 @@ html
 	svg.lucide:not(.iz-none),
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link:is([href$="/agency/profile"], [href$="/outlet/settings"])
 	svg.lucide {
@@ -1681,7 +1767,11 @@ html
 	svg.lucide:not(.iz-none),
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link[href$="/outlet/workspace"]
 	svg.lucide {
@@ -1693,7 +1783,11 @@ html
 	svg.lucide:not(.iz-none),
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link:is([href$="/agency/pending"], [href$="/outlet/approvals"])
 	svg.lucide {
@@ -1711,7 +1805,11 @@ html
 	svg.lucide:not(.iz-none),
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link[href$="/outlet/bookings"]
 	svg.lucide {
@@ -1735,7 +1833,11 @@ html
 	svg.lucide:not(.iz-none),
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-sidebar
 	.iz-portal-nav-link[href$="/outlet/billing"]
 	svg.lucide {
@@ -1831,7 +1933,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-viewport {
 	padding-bottom: 88px;
 }
@@ -2286,7 +2392,11 @@ html
  * can do here" (Post Job), "Edit template" (Post Job — it wore a pressed tint ×12),
  * and the plain iz-chip buttons that act ("Close" on a voucher, "+ Add More"). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		a.iz-roster-pr-link,
 		.iz-roster-week-nav,
@@ -2307,7 +2417,11 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		a.iz-roster-pr-link,
 		.iz-roster-week-nav,
@@ -2328,7 +2442,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-roster-planning-date-trigger,
 		a.iz-roster-pr-link,
@@ -2340,7 +2458,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-approved-more-filters[open] > summary,
 		.iz-post-job-help-btn[aria-expanded="true"],
@@ -2356,7 +2478,11 @@ html
  * inputs, the Payroll search. Their placeholders are regular weight. The filter
  * bar's controls were 14px beside 16px labels (Live). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-roster-filterbar__inputwrap,
 		.iz-roster-filterbar__rangerow,
@@ -2368,31 +2494,51 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(.iz-roster-filterbar__input, .iz-roster-filterbar .iz-select) {
 	font-size: var(--iz-fs-body);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(.iz-field-input, .iz-roster-filterbar__input)::placeholder {
 	color: var(--iz-muted2, #a39c93);
 	font-weight: 400;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	input[type="date"]::-webkit-calendar-picker-indicator,
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	input[type="time"]::-webkit-calendar-picker-indicator {
 	filter: brightness(0) invert(80%) sepia(30%) saturate(420%) hue-rotate(350deg);
 	cursor: pointer;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	input[type="time"] {
 	cursor: pointer;
 }
@@ -2401,12 +2547,20 @@ html
  * painted every muted line #b8a8cc — the helper lines, day names, the empty-filter
  * sentence, the KPI labels, the GPS and filter meta. Warm neutral tokens. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-roster-page
 	.iz-muted,
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-roster-page
 	:is(
 		.iz-roster-kpi .l,
@@ -2420,7 +2574,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-roster-page
 	:is(.iz-muted2, .iz-roster-week-day-col .dow) {
 	color: var(--iz-muted2, #a39c93);
@@ -2450,7 +2608,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-collapsible-section.is-open
 	.iz-collapsible-section__chev {
 	border-color: #cbb089;
@@ -2464,7 +2626,11 @@ html
  * browser's triangle), Manage PR's "Attendance and penalty rules" bar, and the
  * Subscription period rows and PAID / UNPAID filter tiles (no pressed state). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-outlet-shift-log-summary__metric--btn,
 		.iz-agency-pr-management .iz-card:has(> button[aria-expanded]),
@@ -2475,7 +2641,11 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-outlet-shift-log-summary__metric--btn,
 		button.iz-card[aria-pressed]
@@ -2485,7 +2655,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-outlet-shift-log-summary__metric--btn:is(
 				.is-open,
@@ -2499,7 +2673,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-card[aria-pressed]
 	p.uppercase {
 	letter-spacing: 0;
@@ -2507,7 +2685,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-hist-breakdown-toggle,
 		.iz-agency-pr-management .iz-card > button[aria-expanded] > b,
@@ -2517,7 +2699,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-hist-breakdown-toggle .iz-hist-metric-chevron,
 		button.iz-between[aria-expanded] > svg:last-child
@@ -2526,14 +2712,22 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	details:not(.iz-approved-more-filters)
 	> summary::marker {
 	color: #cbb089;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(.is-open, [aria-expanded="true"])
 	> .iz-hist-breakdown-toggle
 	.iz-hist-metric-chevron {
@@ -2549,13 +2743,21 @@ html
  * venue eyebrow's fallback "?" (it looked like a help button and did nothing:
  * Reports, History, Post Job, Calendar). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-manage-card__legend {
 	color: var(--iz-muted2, #a39c93);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-manage-page
 	.iz-card
 	b[class*="iz-amber"] {
@@ -2563,7 +2765,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-todo__list
 	.iz-alert__chip {
 	border: 1px solid var(--iz-line, #26232c);
@@ -2573,25 +2779,41 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(.iz-pr-manage-stats__active, .iz-comcard-3d-preview-stats strong) {
 	color: var(--iz-txt, #ebe6df);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-sect-label::before {
 	display: none;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-todo__title-icon {
 	color: #ff8aa3;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-title-icon--eyebrow:is(
 		.lucide-circle-question-mark,
 		.lucide-circle-help
@@ -2606,14 +2828,22 @@ html
  * one figure showed in two colours); Manage PR's "Paid" figure is paid money, not
  * champagne; a Payroll voucher's Net takes its row's status. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(.iz-outlet-manage-card__rate, .agency-roster-design b.money) {
 	color: var(--iz-money, #7dd3fc);
 	font-variant-numeric: tabular-nums;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-outlet-shift-log-summary__metric--btn
 			.iz-outlet-shift-log-summary__metric-value,
@@ -2625,21 +2855,33 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	tr:has(.iz-pill-amber)
 	> td.iz-money--net {
 	color: var(--iz-amber, #ffb35c);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	tr:has(.iz-pill-green):not(:has(.iz-pill-amber, .iz-pill-red))
 	> td.iz-money--net {
 	color: var(--iz-green, #5ee0a0);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	tr:has(.iz-pill-red)
 	> td.iz-money--net {
 	color: var(--iz-red, #ff6b7a);
@@ -2647,7 +2889,11 @@ html
 /* one amber for "waiting": the lemon Tailwind amber-300 beside the portal amber
  * (Subscription's UNPAID tile, due line and header amount vs its "Unpaid" pill) */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.text-amber-300 {
 	color: var(--iz-amber, #ffb35c);
 }
@@ -2656,7 +2902,11 @@ html body:is([data-agency-design], [data-outlet-design])
  * capitals coloured cyan and amber on static labels; on the ladder, sentence case,
  * neutral. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-hist-money-breakdown__metric-label {
 	color: var(--iz-muted, #bdb6ad);
 	font-size: var(--iz-fs-body);
@@ -2665,7 +2915,11 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-hist-money-breakdown__card-title,
 		.iz-hist-money-breakdown__card-sub,
@@ -2681,7 +2935,11 @@ html
  * .iz-pv-doc) ran at four sizes — 12px labels beside 18px rows — and set
  * "PAYMENT TO" / "BREAKDOWN" in tracked capitals. One body size, sentence case. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(
 		.iz-pv-summary-lbl,
 		.iz-pv-summary-val,
@@ -2696,7 +2954,11 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(.iz-pv-summary-bank-lbl, .iz-pv-summary-table-h):not(.iz-pv-doc *) {
 	letter-spacing: 0;
 	text-transform: none;
@@ -2709,27 +2971,43 @@ html
  * Settings' end-partnership bin was grey (a destructive control is red at rest)
  * while the static building tile beside it was champagne (an icon: neon). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button[aria-pressed].rounded-full.w-11 {
 	background: var(--iz-line2, #34303b);
 	box-shadow: inset 0 0 0 1px #cbb089;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button[aria-pressed="true"].rounded-full.w-11 {
 	background: #cbb089;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button[aria-pressed="true"].rounded-full.w-11
 	> span {
 	background: #1c160e;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-card
 	input[type="checkbox"] {
 	appearance: none;
@@ -2745,7 +3023,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-card
 	input[type="checkbox"]:checked {
 	background:
@@ -2755,7 +3037,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-card
 	input[type="checkbox"]:focus-visible {
 	outline: 2px solid #cbb089;
@@ -2763,7 +3049,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button[class*="rgba(139,124,246"] {
 	border-color: #cbb089;
 	background: var(--iz-panel2, #1a181e);
@@ -2772,20 +3062,32 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button[class*="rgba(139,124,246"]:hover:not(:disabled) {
 	background: color-mix(in srgb, #cbb089 12%, #1a181e);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button[class*="rgba(139,124,246"]
 	> svg {
 	color: currentColor;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-muted:has(
 		> svg:is(.lucide-trash-2, .lucide-trash2, .lucide-trash)
 	) {
@@ -2794,7 +3096,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	[class*="text-[var(--iz-gold)]"]:has(> svg.lucide-building-2) {
 	color: #60a5fa;
 }
@@ -2808,7 +3114,11 @@ html
  * "Outlet settings"; outlet's "Verified" status lost its green (text-success has
  * no rule in the web app); empty Approvals left one-word orphan lines. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal-day-num--today {
 	box-sizing: border-box;
 	min-width: 28px;
@@ -2820,27 +3130,43 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal {
 	--cal-past: #8a847c;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-plan-row
 	button {
 	white-space: nowrap;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-event-picker__tabs
 	+ p {
 	margin-top: 12px;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-viewport
 	> div
 	> .iz-app-header {
@@ -2848,7 +3174,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-viewport
 	> div
 	> .iz-app-header
@@ -2857,7 +3187,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-viewport
 	> div:has(> .iz-app-header)
 	+ div {
@@ -2865,7 +3199,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-app-header
 	> p.uppercase {
 	letter-spacing: 0;
@@ -2873,7 +3211,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-viewport
 	> div
 	> .iz-app-header
@@ -2884,13 +3226,21 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.text-success {
 	color: var(--iz-green, #5ee0a0);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	:is(.iz-approvals-list p, .iz-approvals-page p.max-w-xs) {
 	text-wrap: balance;
 }
@@ -2906,20 +3256,32 @@ html body:is(#iz-tab-wins, [data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	a.iz-portal-kpi {
 	border-color: #cbb089;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	a.iz-portal-kpi:hover {
 	border-color: #cbb089;
 	background: color-mix(in srgb, #cbb089 8%, var(--iz-panel, #121116));
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-pos-addon
 	:is(div, span):has(
 		> svg.lucide-plug,
@@ -2929,12 +3291,41 @@ html
 	background: var(--iz-panel2, #1a181e);
 	color: #5eead4;
 }
-html
-	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+/* "View profile" and "View comcard" SHARE the card's last row, half each
+   (owner, 23 Nov 2026: "fix this one button view profile, next button view
+   comcard"). The comcard button must live outside the card's own <button>
+   (no button inside a button), so it is placed over the row: moved to the
+   bottom it sat ON the full-width View profile bar. Now the bar takes the left
+   half and this the right half — same width, same height (12px 14px padding,
+   1.5 line, 1px border), aligned to the card body's 20px sides and 24px foot. */
+html body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-gallery-preview {
 	top: auto;
-	bottom: 12px;
+	right: 20px;
+	bottom: 24px;
+	box-sizing: border-box;
+	width: calc((100% - 40px - 12px) / 2);
+	min-height: 0;
+	padding: 12px 14px;
+	line-height: 1.5;
+	justify-content: center;
+}
+html
+	body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
+	.iz-approved-gallery-item:has(> .iz-approved-gallery-preview)
+	.iz-agency-card-open {
+	box-sizing: border-box;
+	width: calc((100% - 12px) / 2);
 }
 
 /* ── 33. More controls that read as static (all portals): a select box's own
@@ -2994,7 +3385,11 @@ html
  * title in a full-width strip (Special service); the POS add-on carried a
  * decorative sparkle (outlet Subscription). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-roster-week-scroll
 	:is(span.dow, span.dom, span.rating) {
 	font-size: var(--iz-fs-body);
@@ -3003,26 +3398,42 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-txn-filters {
 	align-items: end;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-txn-filters
 	.iz-hist-select-trigger {
 	min-height: 46px;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	input[type="date"][value=""]::-webkit-datetime-edit {
 	color: var(--iz-muted2, #a39c93);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-screen
 	> header
 	+ .iz-card.text-center {
@@ -3032,7 +3443,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-pos-addon
 	svg.lucide-sparkles {
 	display: none;
@@ -3043,7 +3458,11 @@ html
  * (agency-finance-design.css `.iz-payroll-facet-chip.on`). A selected option is
  * the soft champagne tint; the unselected chips stay neutral. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-payroll-facet-chip:is(.on, [aria-pressed="true"]) {
 	border-color: transparent;
 	background: var(--iz-tab-selected-bg, #3e3732);
@@ -3065,14 +3484,22 @@ html body:is([data-agency-design], [data-outlet-design])
  * stripe and words, a muted dot; Draft is a dashed grey outline and a dashed ring in
  * the legend. Live keeps its green, Confirmed its blue, Past its grey. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal {
 	--cal-sealed: var(--iz-muted, #bdb6ad);
 	--cal-draft: var(--iz-muted2, #a39c93);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal-event--sealed {
 	/* every other card already sits on --iz-panel2, so "solid" is one step up */
 	border-color: var(--iz-line2, #34303b);
@@ -3082,27 +3509,43 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal-event--sealed
 	:is(.iz-outlet-ops-cal-event-time, .iz-outlet-ops-cal-event-title) {
 	color: var(--iz-muted, #bdb6ad);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal-event--draft {
 	border: 1px dashed var(--iz-muted2, #a39c93);
 	background: transparent;
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal-legend__swatch.sealed {
 	background: var(--iz-muted, #bdb6ad);
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-ops-cal-legend__swatch.draft {
 	box-sizing: border-box;
 	border: 1.5px dashed var(--iz-muted2, #a39c93);
@@ -3142,14 +3585,22 @@ html
  * "Voucher says" figure is red; overtime awaiting a decision is amber. Each panel is
  * told apart by the link in its own header (Open Payroll → which tab). */
 html body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-portal-table
 	td.iz-portal-table-meta {
 	color: var(--iz-txt, #ebe6df);
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-queue-panel:has(
 		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
 	)
@@ -3160,7 +3611,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-queue-panel:has(
 		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
 	)
@@ -3169,7 +3624,11 @@ html
 	> td.iz-portal-table-meta:nth-child(3),
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-queue-panel:has(.iz-portal-panel-head a[href*="tab=overtime"])
 	tbody
 	tr
@@ -3179,7 +3638,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-queue-panel:has(
 		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
 	)
@@ -3190,7 +3653,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-queue-panel:has(
 		.iz-portal-panel-head a[href*="status=PENDING_REVIEW"]
 	)
@@ -3199,7 +3666,11 @@ html
 	> td.iz-portal-table-meta:nth-child(3),
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-queue-panel:has(.iz-portal-panel-head a[href*="tab=disputes"])
 	tbody
 	tr
@@ -3214,7 +3685,11 @@ html
  * paid" above it). "Date paid" is a static date — it sat in a green-edged, green
  * tile under the green Paid pill, the paid signal three times: a quiet line. */
 html body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-agency-voucher-card {
 	position: relative;
 	padding-right: 52px;
@@ -3222,14 +3697,22 @@ html body[data-agency-design]
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-agency-voucher-card:hover {
 	border-color: #cbb089;
 	background: color-mix(in srgb, #cbb089 8%, var(--iz-panel, #121116));
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-agency-voucher-card::after {
 	content: "";
 	position: absolute;
@@ -3248,7 +3731,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-agency-voucher-card
 	> .text-right
 	> .iz-ledger {
@@ -3257,7 +3744,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-agency-voucher-card
 	.rounded-lg[class*="rgba(52,211,153"] {
 	border-color: var(--iz-line, #26232c);
@@ -3265,7 +3756,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	button.iz-agency-voucher-card
 	.rounded-lg[class*="rgba(52,211,153"]
 	> p.uppercase {
@@ -3281,13 +3776,21 @@ html
  * equal columns. The Paid PVs heading sat centred in its 79px-tall total card, which
  * left ~100px of dead space under the filters; it now sits at the card's top. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-txn-filters:not(:has(> :nth-child(4))) {
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-txn-filters:not(:has(> :nth-child(4)))
 	> * {
 	grid-column: auto;
@@ -3295,7 +3798,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-agency-paid-archive
 	> div:first-child
 	> div {
@@ -3305,7 +3812,11 @@ html
  * between two champagne ones: it carries no aria-haspopup, so the selectable rule
  * at the top of this file missed it. Every history select trigger is outlined. */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-hist-select-trigger.iz-hist-select-trigger {
 	border-color: #cbb089;
 	color: #d9c09a;
@@ -3320,7 +3831,11 @@ html body:is([data-agency-design], [data-outlet-design])
 @layer utilities {
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.iz-card.iz-card-flat:is(
 			[class*="!border-[rgba(244,183,64,.4)]"],
 			[class*="!border-[rgba(232,194,122,.3)]"]
@@ -3331,7 +3846,11 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-card.iz-card-flat[class*="!border-[rgba(244,183,64,.4)]"]
 	> p:first-child {
 	color: var(--iz-red, #ff6b7a);
@@ -3345,12 +3864,20 @@ html
  * Workspace's derived RM/HR and OT/HR; admin Plan Change / Plan Request price
  * columns and Plan Change's before → after plan cards. */
 html body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-plan-row:not(:last-child)
 	> div:nth-child(3),
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-card:has(
 		> div
 			> button[aria-expanded="true"]
@@ -3365,7 +3892,11 @@ html
 	),
 html
 	body[data-outlet-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	div.min-w-0.justify-center.gap-0\.5:has(> span.tabular-nums.font-semibold)
 	> span {
 	color: var(--iz-money, #7dd3fc);
@@ -3373,7 +3904,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-card:has(
 		> div > button[aria-expanded="true"] > span > span.iz-nums.text-amber-300
 	)
@@ -3387,7 +3922,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-card:has(
 		> div
 			> button[aria-expanded="true"]
@@ -3424,7 +3963,11 @@ html
  * Att. rows and "View profile" bars sat 28px apart: the cards in a row now share
  * one height and the figures + bar keep to the bottom. */
 html body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-manage-card
 	> .iz-agency-card-open {
 	align-self: stretch;
@@ -3432,13 +3975,21 @@ html body[data-agency-design]
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-pr-manage-grid {
 	align-items: stretch;
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-pr-manage-grid
 	> .iz-approved-gallery-item:has(> .iz-pr-manage-card) {
 	display: flex;
@@ -3446,7 +3997,11 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-pr-manage-grid
 	> .iz-approved-gallery-item
 	> .iz-pr-manage-card {
@@ -3454,21 +4009,33 @@ html
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-pr-manage-card
 	> .iz-pr-manage-card__body {
 	flex: 1 1 auto;
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-pr-manage-card__body
 	> .iz-pr-manage-card__metrics {
 	margin-top: auto;
 }
 html
 	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-pr-manage-card__body
 	> :has(+ .iz-pr-manage-card__metrics) {
 	margin-bottom: 20px;
@@ -3478,7 +4045,11 @@ html
  * sat 44px apart (a 20px card margin on top of the page's 24px gap) against 24px
  * everywhere else; the opened "More filters" row started 0px under its button. */
 html body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-agency-pr-management
 	> .iz-card
 	+ .iz-card {
@@ -3486,7 +4057,11 @@ html body[data-agency-design]
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-approved-more-filters[open]
 	> summary
 	+ * {
@@ -3589,7 +4164,11 @@ html
  * so the eye lost the row. A label column beside its value, as on the PR profile
  * (the owner's 20 Nov design for that page, above). */
 html body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.bg-gradient-surface
 	> div.flex.items-center.gap-3:has(> span.ml-auto) {
 	display: grid;
@@ -3599,7 +4178,11 @@ html body:is([data-agency-design], [data-outlet-design])
 @media (max-width: 640px) {
 	html
 		body:is([data-agency-design], [data-outlet-design])
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.bg-gradient-surface
 		> div.flex.items-center.gap-3:has(> span.ml-auto) {
 		grid-template-columns: 16px 96px minmax(0, 1fr);
@@ -3607,7 +4190,11 @@ html body:is([data-agency-design], [data-outlet-design])
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.bg-gradient-surface
 	> div.flex.items-center.gap-3
 	> span.ml-auto {
@@ -3623,7 +4210,11 @@ html
  * still scrolls, and the box shows a champagne edge on the side with more days
  * (the Payroll tables' cue, approved-portal-design.css). */
 html body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-roster-week-scroll {
 	container-type: inline-size;
 	--iz-scroll-edge: color-mix(in srgb, #d9c09a 18%, transparent);
@@ -3645,41 +4236,65 @@ html body[data-agency-design]
 @container (min-width: 1000px) {
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.iz-roster-week-table {
 		min-width: 0;
 	}
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.iz-roster-week-table
 		:is(.iz-roster-week-col-pr, .iz-roster-week-pr, .iz-roster-week-pr-col) {
 		width: 160px;
 	}
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.iz-roster-week-table
 		.iz-roster-week-pr {
 		padding: 12px;
 	}
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.iz-roster-week-table
 		.iz-roster-week-col-day {
 		width: auto;
 	}
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.iz-roster-week-table
 		.iz-roster-week-td {
 		padding: 4px;
 	}
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		.iz-roster-week-table
 		.iz-roster-week-cell {
 		padding: 8px;
@@ -3692,9 +4307,12 @@ html body[data-agency-design]
  * Owner, 20 Nov: "remember static dont be like too messy colour". The ICON keeps its
  * neon (it takes the tile's colour through currentColor); the label is a quiet
  * sentence-case word; the figure is money with no state, so sky. */
-html
-	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+html body:is([data-agency-design], [data-outlet-design])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-shift-metric-label__text {
 	color: var(--iz-muted, #bdb6ad);
 	font-weight: 600;
@@ -3703,7 +4321,11 @@ html
 }
 html
 	body:is([data-agency-design], [data-outlet-design])
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-txn-metric
 	.value {
 	color: var(--iz-money, #7dd3fc);
@@ -3713,9 +4335,12 @@ html
  * …) were 16px while agency's same page draws them at 20 — one ladder for every
  * role (owner, 17 Nov: "for the website all roles must follow the same font size"):
  * a section title is 20. */
-html
-	body[data-outlet-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+html body[data-outlet-design]
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-outlet-subscription
 	> .iz-sect-label {
 	font-size: var(--iz-fs-title);
@@ -3727,9 +4352,12 @@ html
  * (`rgba(183,156,232,.14)`, prototype-theme.css). Today is a "you are here" marker,
  * not something you choose, so it takes the rail's quiet you-are-here tint and ink —
  * the same signal the menu uses for the page you are on. */
-html
-	body[data-agency-design]
-	.iz-portal:is(#iz-tab-wins, [data-portal])
+html body[data-agency-design]
+	:is(.iz-portal, .iz-sheet-wrap):is(
+		#iz-tab-wins,
+		[data-portal],
+		.iz-sheet-wrap
+	)
 	.iz-roster-week-day-col.on {
 	background: var(--iz-rail-here-tint, rgba(203, 176, 137, 0.14));
 	color: var(--iz-rail-here-icon, #e2cba6);
@@ -3741,9 +4369,65 @@ html
 @media (width < 48rem) {
 	html
 		body[data-agency-design]
-		.iz-portal:is(#iz-tab-wins, [data-portal])
+		:is(.iz-portal, .iz-sheet-wrap):is(
+			#iz-tab-wins,
+			[data-portal],
+			.iz-sheet-wrap
+		)
 		button.iz-agency-voucher-card::after {
 		top: 20px;
 		margin-top: 0;
+	}
+}
+
+/* ── L18. Tablet width (768–1023px): the menu is WIDE, so it keeps its words
+ * (owner, 23 Nov 2026: "when small screen make sure all can see , fix it" — the
+ * Today page at ~990px showed the menu with icons only and Payroll's "12" cut to a
+ * red blob). prototype-theme.css turns this band into a 72px icon rail: it hides
+ * every menu label (and Sign out's), centres the icons and the org card, and
+ * agency-app-overrides.css shrinks each count to a 10px corner box. But
+ * approved-portal-design.css keeps the agency / outlet menu 266px wide at every
+ * width above the phone — so the band drew a full-width menu with no words and a
+ * clipped count. Undone here for the WIDE menu only: the « button
+ * (data-collapsed) still gives the icon rail, with its corner dots, on demand.
+ * Desktop values restored: row 10px 12px with a 10px gap, the count's quiet
+ * number + status dot (the rail-count rule above), the org card left-aligned. */
+@media (min-width: 768px) and (max-width: 1023px) {
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-portal:is(#iz-tab-wins, [data-portal]):not([data-collapsed="true"])
+		.iz-portal-nav-link
+		> span:not(.iz-nav-alert) {
+		display: inline;
+	}
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-portal:is(#iz-tab-wins, [data-portal]):not([data-collapsed="true"])
+		.iz-portal-nav-link {
+		justify-content: flex-start;
+		gap: 10px;
+		padding: 10px 12px;
+	}
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-portal:is(#iz-tab-wins, [data-portal]):not([data-collapsed="true"])
+		.iz-portal-nav-link
+		.iz-nav-alert {
+		position: relative;
+		top: auto;
+		right: auto;
+		width: auto;
+		min-width: 20px;
+		height: 20px;
+		margin-left: auto;
+		padding: 0 2px 0 13px;
+		font-size: var(--iz-fs-body);
+		overflow: visible;
+	}
+	html
+		body:is([data-agency-design], [data-outlet-design])
+		.iz-portal:is(#iz-tab-wins, [data-portal]):not([data-collapsed="true"])
+		.iz-portal-sidebar-brand {
+		text-align: start;
 	}
 }

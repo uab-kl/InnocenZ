@@ -113,7 +113,19 @@ export function ManageOutletGridCard({
 					`iz-outlet-manage-card--${theme}`,
 					picked && "iz-outlet-manage-card--picked",
 				)}
-				onClick={onActivate}
+				onClick={(e) => {
+					// The venue's PICTURE opens the large photo; anywhere else (and
+					// Enter / Space) opens the venue details; select mode just picks.
+					if (
+						logo &&
+						!selectMode &&
+						(e.target as HTMLElement).closest?.(".iz-approved-venue-photo")
+					) {
+						setPhotoOpen(true);
+						return;
+					}
+					onActivate();
+				}}
 				aria-pressed={selectMode ? picked : undefined}
 			>
 				{selectMode && (
@@ -205,15 +217,10 @@ export function ManageOutletGridCard({
 					</span>
 				)}
 			</button>
-			{logo && !selectMode && (
-				<button
-					type="button"
-					className="iz-btn iz-btn-soft iz-approved-gallery-preview"
-					onClick={() => setPhotoOpen(true)}
-				>
-					{t.approvedDesign.viewVenue}
-				</button>
-			)}
+			{/* No separate "View venue" button (owner, 23 Nov 2026: "remove the view
+			    venue button") — it sat on top of "View venue details". The large
+			    photo still opens: a click on the venue's picture does it (the card's
+			    onClick above, like the PR card's comcard). */}
 			<IzSheet open={photoOpen} onClose={() => setPhotoOpen(false)}>
 				<h2 className="iz-section-title">{summary.outlet}</h2>
 				<OutletLogoTile logo={logo} className="iz-approved-venue-photo-full" />

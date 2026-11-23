@@ -408,7 +408,7 @@ function RejectSheet({
 				<div>
 					<button
 						type="button"
-						className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
+						className="iz-chip iz-sheet-return mb-2 !px-2 !py-1 !text-[10px]"
 						onClick={onClose}
 					>
 						← {t.common.back}
@@ -512,7 +512,7 @@ function DocPreviewSheet({
 				<div>
 					<button
 						type="button"
-						className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
+						className="iz-chip iz-sheet-return mb-2 !px-2 !py-1 !text-[10px]"
 						onClick={onClose}
 					>
 						← {t.common.back}
@@ -2422,7 +2422,7 @@ function AgencyPending() {
 						<div>
 							<button
 								type="button"
-								className="iz-chip mb-2 !px-2 !py-1 !text-[10px]"
+								className="iz-chip iz-sheet-return mb-2 !px-2 !py-1 !text-[10px]"
 								onClick={() => setAddOpen(false)}
 							>
 								← {t.common.back}
